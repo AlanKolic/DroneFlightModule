@@ -1,7 +1,7 @@
 # Drone Flight Module — Architecture
 
 A minimal prototype of a drone flight loop, built for frequently changing hardware, control
-schemes and services. Visuals are a primitive cube in an empty scene; the focus is
+schemes and services. Visuals are primitive cubes in an empty scene; the focus is
 extensibility, boundary separation and testability.
 
 ## Guiding rules
@@ -14,61 +14,69 @@ extensibility, boundary separation and testability.
 - **Composition roots are the only place that knows concrete types.** Everything else takes
   its dependencies through plain constructors, with no `[Inject]` attributes outside
   MonoBehaviours.
-- **Extend by adding, not editing.** A new input source, authorization provider, gate
-  condition or telemetry sink is a new class plus one registration line in a composition root.
+- **Extend by adding, not editing.** A new input source, authorization provider, assignment
+  policy, gate condition or telemetry sink is a new class plus one registration line in a
+  composition root.
 
 ## Assembly layers
 
 ```mermaid
 flowchart TB
     subgraph Roots["Composition roots and UI (Unity)"]
-        Comp["Composition<br/>LifetimeScope, wiring"]
-        UI["UI<br/>Dashboard, child scope"]
+        Comp["Composition<br/>fleet scope, drone scopes"]
+        UI["UI<br/>Fleet dashboard, child scope"]
         Mobile["Mobile app<br/>Sticks, connect screen"]
     end
     subgraph Adapters["Unity adapters"]
         Unity["Unity<br/>Keyboard, runner, view, UDP"]
     end
     subgraph Services["Services (pure C#)"]
+        Coord["Coordination"]
         Auth["Authorization"]
+        Pilots["Pilots"]
         Tele["Telemetry"]
         Host["Remote.Host"]
         Proto["Remote.Protocol"]
     end
     Core["Core (zero dependencies)<br/>Loop, gates, supervisor, router"]
 
-    Comp --> Unity & Auth & Tele & Host
-    UI --> Tele & Auth
+    Comp --> Unity & Coord & Tele & Host
+    UI --> Tele & Coord
     Mobile --> Proto
-    Unity --> Core
-    Unity --> Proto
+    Unity --> Core & Proto
+    Coord --> Auth & Pilots & Core
     Auth --> Core
+    Pilots --> Core
     Tele --> Core
-    Host --> Core & Proto
+    Host --> Coord & Proto
 ```
 
 | Assembly | References | Purpose |
 |---|---|---|
-| `DroneFlightModule.Core` | nothing | Math, state, terrain, altitude sensor, input contract, router, gates, supervisor, controller, integrator, `FlightLoop` |
-| `DroneFlightModule.Authorization` | Core | Per-drone authorization service, revocable grants, providers |
+| `DroneFlightModule.Core` | nothing | Math, state, `DroneId`, `PilotId`, terrain, altitude sensor, input contract, router, gates, supervisor, controller, integrator, `FlightLoop` |
+| `DroneFlightModule.Pilots` | Core | Pilot profiles and priorities, pilot registry, pilot stats |
+| `DroneFlightModule.Authorization` | Core | Providers, revocable grants, per-drone grant holder and gate |
+| `DroneFlightModule.Coordination` | Core, Pilots, Authorization | `FlightCoordinator`, pilot sessions, drone registry, assignment policy, stats recording |
 | `DroneFlightModule.Telemetry` | Core | Recorder sampling `FlightLoop.Ticked`, `ITelemetrySink` implementations |
 | `DroneFlightModule.Remote.Protocol` | nothing | Messages, binary codec, `ITransport`, loopback transport |
-| `DroneFlightModule.Remote.Host` | Core, Remote.Protocol | `RemoteInputProvider`, link-loss timeout, flight requests (network telemetry sink later) |
+| `DroneFlightModule.Remote.Host` | Core, Coordination, Remote.Protocol | Remote pilot sessions, `RemoteInputProvider`, link-loss timeout (network telemetry sink later) |
 | `DroneFlightModule.Unity` | Core, Remote.Protocol, Input System | Keyboard provider, `FlightLoopRunner`, cube view, UDP transport |
-| `DroneFlightModule.Composition` | Core, Unity, Authorization, Telemetry, Remote.Host, VContainer | Simulator `LifetimeScope` and installers |
-| `DroneFlightModule.UI` | Core, Authorization, Telemetry, VContainer | Dashboard (IMGUI) in its own child scope |
+| `DroneFlightModule.Composition` | everything except UI, plus VContainer | Fleet `LifetimeScope`, one child scope per drone, installers |
+| `DroneFlightModule.UI` | Core, Coordination, Pilots, Telemetry, VContainer | Fleet dashboard (IMGUI) in its own child scope |
 | `*.Tests` (one per assembly) | Its target + NUnit | Edit-mode tests |
 
-Nothing references `UI`. Its child scope pulls the recorder and authorization service from the
-parent scope, so deleting the UI folder leaves only a missing-script warning.
+Nothing references `UI`. Its child scope pulls what it reads from the parent scope, so
+deleting the UI folder leaves only a missing-script warning.
 
 ## One fixed tick
+
+Each drone has its own `FlightLoop`, ticked independently.
 
 ```mermaid
 flowchart TB
     Tick["Fixed tick<br/>FlightLoopRunner calls Tick(dt)"] --> Sense["Sensors<br/>altitude reading from truth"]
-    Sense --> Gate{"Flight gate<br/>authorized and pilot present?"}
-    Gate -- allowed --> Pilot["Pilot input<br/>InputRouter, active pilot"]
+    Sense --> Gate{"Flight gate<br/>assigned pilot in control?"}
+    Gate -- allowed --> Pilot["Pilot input<br/>InputRouter, assigned session"]
     Gate -- not allowed --> Sup["Flight supervisor<br/>hold 10 s, then descend"]
     Pilot --> Ctrl["Force controller<br/>input to force and yaw torque"]
     Sup --> Ctrl
@@ -141,59 +149,115 @@ stateDiagram-v2
 - The countdown runs on **simulation time** (it decrements by `dt`), so it pauses with the
   simulation and tests can check it without waiting.
 - If the gate closes while grounded, there is no countdown. The drone simply can't take off.
+- A takeover by a higher-priority pilot never closes the gate (see below), so it never starts
+  the countdown.
 - Countdown length, sink rate and gain are config values. Config validation requires max
   thrust to exceed the drone's weight.
 - `FlightFrame` carries the mode and the remaining countdown for telemetry and UI.
+
+## Pilots
+
+A small registry that defines who can fly and with what priority. Everything else asks it
+instead of carrying pilot data around.
+
+- **`PilotProfile { PilotId, DisplayName, Priority }`**. A higher number means higher priority.
+- **`IPilotRegistry { bool TryGet(PilotId, out PilotProfile) }`**, with `InMemoryPilotRegistry`
+  loaded from config first. A file- or server-backed registry later is a new implementation.
+- **The guest profile is built in** and always has the lowest priority. It is used only by the
+  local keyboard session (see authorization below).
+- **Unknown pilots are denied** before any provider is asked.
+- **`PilotStats { Flights, FlightTime, Takeovers, TimesPreempted, LastFlight }`**, kept in an
+  `IPilotStatsStore` (in-memory first). The coordinator's events update it: assigned, released,
+  took over, preempted. Flight time is accumulated in simulation time.
 
 ## Flight gate and authorization
 
 ```mermaid
 flowchart TB
-    Kb["Keyboard<br/>local pilot"] --> Router["Input router<br/>active pilot id"]
-    Phone["Phone app<br/>remote pilot via UDP"] --> Host["Remote host<br/>link, flight requests"]
-    Host -- registers provider --> Router
-    Host -- RequestFlight --> AuthSvc["Auth service<br/>per drone, revocable"]
-    Router --> PilotGate["Pilot gate<br/>pilot in control?"]
-    Router -. pilot changed: drop grant .-> AuthSvc
-    AuthSvc --> Guest["Guest provider<br/>instant grant"]
-    AuthSvc --> SimServer["Simulated server provider<br/>latency, revocation"]
-    PilotGate --> AllOf["All-of gate<br/>every condition must pass"]
-    AuthSvc --> AllOf
-    AllOf --> Loop["Flight loop<br/>pilot or failsafe"]
+    Kb["Keyboard session<br/>local origin"] --> Coord["Flight coordinator<br/>registry, provider, policy"]
+    Phone["Phone app"] --> Host["Remote host<br/>remote session"]
+    Host --> Coord
+    Coord --> Guest["Guest provider<br/>local origin only"]
+    Coord --> SimServer["Simulated server provider<br/>latency, revocation"]
+    Coord -- assign / revoke --> Holder["Drone grant holder<br/>one per drone"]
+    Coord -- switch input --> Router["Input router<br/>one per drone"]
+    Holder --> Gate["Flight gate<br/>active pilot holds valid grant"]
+    Router --> Gate
+    Gate --> Loop["Flight loop<br/>pilot or failsafe"]
 ```
 
 **Core contracts**
 - `IFlightGate { bool IsFlightAllowed { get; } }`. `FlightLoop` reads only this.
-- `AllOfFlightGate` combines gates. Future conditions (battery, geofence, coordinator hold)
-  are new gates added in the composition root.
-- `PilotInControlGate` passes while the router has an active source with a pilot.
-- `InputRouter.Register(id, provider, pilotId)`, `Activate(id)`, `ActivePilotId`,
-  `ActiveChanged`. Reads zero input when nothing is active.
+- `AllOfFlightGate` combines gates. Future conditions (battery, geofence) are new gates added
+  in the composition root.
+- `PilotInControlGate` passes while the router has an active input source that reports a
+  connected pilot. A phone whose link drops stops reporting one.
+- `InputRouter`, one per drone, routes to the input provider of the session assigned to that
+  drone. `ActivePilotId` and `ActiveChanged`. It reads zero input when nothing is assigned.
 
 **Authorization assembly**
-- `IAuthorizationProvider { string Id; Task<AuthorizationResult> AuthorizeAsync(AuthorizationRequest, CancellationToken) }`
-- `AuthorizationRequest { DroneId, PilotId }`, so a future coordinator can decide per drone.
-- A successful result carries an `AuthorizationGrant` whose `Revoked` token the provider can
-  cancel at any time. The service watches it and closes the gate.
-- `FlightAuthorizationService : IFlightGate, IDisposable`, one per drone, with states
-  Unauthorized → Pending → Authorized / Denied.
-  - A new request cancels the pending one, and stale results are ignored.
-  - A pilot change drops the current grant.
-  - `Dispose()` cancels anything in flight.
-- **Providers:** `LocalGuestAuthorizationProvider` grants immediately.
-  `SimulatedServerAuthorizationProvider` has configurable latency, an approve/deny policy and
-  simulated revocation.
-- **Guest mode is not a bypass.** It goes through `FlightAuthorizationService` like every other
-  provider: same request (`DroneId`, `PilotId`), same states (Pending, then Authorized), and the
-  same revocable grant. A pilot change drops a guest grant too. The only difference is that its
-  `AuthorizeAsync` completes immediately. Nothing anywhere checks "is this guest mode?".
+- `IAuthorizationProvider { string Id; Task<AuthorizationResult> AuthorizeAsync(AuthorizationRequest, CancellationToken) }`.
+  A provider answers one question: is this pilot allowed to fly at all?
+- `AuthorizationRequest { PilotId, Origin }`, where `Origin` is `Local` or `Remote`.
+- A successful result carries an `AuthorizationGrant { PilotId, Revoked }`. The provider can
+  cancel the `Revoked` token at any time.
+- `DroneGrantHolder : IFlightGate`, one per drone, holds the grant of the pilot assigned to that
+  drone. It passes only while the grant is valid and its `PilotId` matches the router's
+  `ActivePilotId`, so a grant for one pilot never lets another pilot fly.
+- **Providers:**
+  - `LocalGuestAuthorizationProvider` grants immediately, but only for `Origin.Local`. Any
+    remote request is denied. Guest mode is reserved for the local machine and keyboard.
+  - `SimulatedServerAuthorizationProvider` has configurable latency, an approve/deny policy per
+    pilot and simulated revocation. It is not guest mode. Phones always use it, and the local
+    keyboard can use it to sign in as a registered pilot.
+- **Guest mode is not a bypass.** It goes through the same coordinator pipeline, with the same
+  request, the same revocable grant and the same gate as any other provider. The only
+  difference is that its `AuthorizeAsync` completes immediately. Nothing checks "is this guest
+  mode?"; the origin rule is the guest provider's own decision.
 - **Adding a third provider** means a new class and one registration line. No flight code,
-  service or existing provider changes.
+  coordinator or existing provider changes.
 
-**Toward a flight coordinator.** A coordinator is just another provider that receives
-`AuthorizationRequest`s and decides per drone. The contracts above (`DroneId` in requests,
-per-drone services, revocable grants) are the only preparation. The coordinator itself,
-multiple drones in the scene and request queuing are out of scope for now.
+## Flight coordinator
+
+One coordinator per simulator manages every drone and every pilot session. It decides which
+drone a pilot gets, and whether that means taking a drone from someone else.
+
+- **`PilotSession { PilotId, Origin, ProviderId, IInputProvider }`** is created when a pilot
+  connects (keyboard or phone). Input belongs to the pilot, not to the drone, so a session can
+  be moved between drones without registering anything again.
+- **Drone registry:** each drone's id, its grant holder, its router and a read-only view of its
+  state (grounded, mode).
+- **`RequestFlightAsync(session, DroneId? preferred, CancellationToken)`** runs this pipeline:
+  1. Look up the pilot's profile in the registry. Unknown pilots are denied.
+  2. Ask the session's provider to authorize the pilot.
+  3. Ask the assignment policy for a decision, using a fresh snapshot of the fleet taken after
+     authorization completes.
+  4. Carry out the decision: assign, take over or deny.
+- A new request from the same session cancels its pending one.
+- **Results:** `Assigned { DroneId }`, `TookOver { DroneId, FromPilot }` or
+  `Denied { Reason }`. Reasons include `UnknownPilot`, `NotAuthorized` and `NoDroneAvailable`.
+- **Events:** `Assigned`, `Released`, `TookOver` and `Preempted`. Pilot stats, telemetry, the
+  dashboard and the remote host subscribe to them.
+
+**`IAssignmentPolicy`**, first implementation `PriorityAssignmentPolicy`:
+1. **A specific drone is requested and it's free:** assign it.
+2. **Any drone is requested:** pick a free one, preferring grounded drones.
+3. **No free drone:** find the drone whose holder has the lowest priority. If the requesting
+   pilot's priority is strictly higher, take that drone over.
+4. **Otherwise deny** with `NoDroneAvailable`. Equal priority never takes over, and there is no
+   queue for now.
+
+**Takeover hands control over directly:**
+- The new grant is installed and the router switched to the new session in a single step on
+  the main thread, between two ticks. The gate never sees a moment without a valid pilot, so the
+  drone doesn't enter Holding and doesn't dip.
+- The pilot who lost the drone gets `Preempted { DroneId, ByPilot }`.
+
+**Releasing a drone:**
+- The pilot releases it (a key, or a button in the app), or the session disconnects.
+- The provider revokes the pilot's grant. All drones held by that pilot are released.
+- In every case the drone's grant is cleared. If it's airborne, the normal hold-then-descend
+  failsafe follows.
 
 ## Async rules (plain `Task`, no UniTask)
 
@@ -207,43 +271,78 @@ break the Core boundary. All async code uses `Task` and `CancellationToken`.
   mode otherwise.
 - MonoBehaviours pass `destroyCancellationToken` and don't touch `this` after an await without
   checking it.
-- No `ConfigureAwait(false)` in Core or Authorization, so continuations return to Unity's main
-  thread and events are handled there.
+- No `ConfigureAwait(false)` in Core, Authorization or Coordination. Continuations return to
+  Unity's main thread, which is what makes a takeover happen between two ticks.
 - No `async void` except at the Unity edge (input or button handlers). There it is wrapped in
   try/catch: cancellation is expected, anything else is logged.
 - Latency comes from an injected delay (defaulting to `Task.Delay`), so tests control time.
 - Socket receive loops never call Unity code. They write into a thread-safe latest-value slot
   that `FixedTick` reads.
 
+## Fleet in Unity
+
+- The fleet `LifetimeScope` holds the coordinator, the pilot registry, the providers and the
+  stats store.
+- One child scope per drone, created from a fleet config (drone id, spawn position, frame
+  config). It holds that drone's loop, router, supervisor, sensor, grant holder and cube.
+- The scene has 2–3 drones and a ground plane.
+- The keyboard is a local session: guest by default, with a debug key to sign in as a registered
+  high-priority pilot through the simulated server.
+- **Keys:**
+  - request any drone
+  - request drone 1–3
+  - release
+  - simulate server revocation
+  - switch the keyboard between guest and registered pilot
+
 ## Telemetry and dashboard
 
-- `TelemetryRecorder` subscribes to `FlightLoop.Ticked`, samples at a configurable rate, keeps
-  the latest snapshot and a ring buffer, and forwards to `ITelemetrySink`s (in-memory first,
-  network later).
-- The dashboard (IMGUI) shows position, velocity, measured altitude (AGL, with the true height
-  alongside for debugging), heading, the active input source,
-  authorization state, flight mode and countdown. It only reads.
-- **Deletion check:** delete the UI folder, confirm Unity compiles, the drone flies, and all
+- `TelemetryRecorder` (one per drone) subscribes to `FlightLoop.Ticked`, samples at a
+  configurable rate, keeps the latest snapshot and a ring buffer, and forwards to
+  `ITelemetrySink`s (in-memory first, network later).
+- The fleet dashboard (IMGUI) shows, for each drone:
+  - the assigned pilot and their priority
+  - flight mode and countdown
+  - measured altitude (AGL, with the true height alongside for debugging)
+  - position, velocity and heading
+
+  It also shows a pilot list with stats, and the last coordinator events, such as takeovers and
+  denials. It only reads.
+- **Deletion check:** delete the UI folder, confirm Unity compiles, the drones fly, and all
   remaining tests pass.
 
 ## Mobile remote control
 
 - **Protocol** (shared, pure C#):
   - `Hello { PilotId, ProtocolVersion }`
+  - `RequestFlight { DroneId? }` (empty means any drone)
+  - `FlightAssigned { DroneId }`
+  - `FlightDenied { Reason }`
+  - `Preempted { DroneId, ByPilot }`
+  - `ReleaseFlight`
   - `ControlPacket { Seq, Move, Yaw }` at about 30 Hz
-  - `RequestFlight`
   - `TelemetryPacket` at about 10 Hz (reserved; added with telemetry to the phone later)
   - `Heartbeat`
   - A binary codec, and a version check during the handshake.
 - **Transport:** `ITransport`, with a loopback version for tests and UDP (`System.Net.Sockets`)
-  for real use. The handshake and `RequestFlight` are acknowledged and retried. Control packets
-  use latest-wins, and out-of-order sequence numbers are dropped.
-- **Host:** `RemoteInputProvider` is registered in the router under the phone's pilot id. With
-  no packet for about 0.5 s it reports no pilot, which triggers the normal hold-then-descend
-  failsafe.
+  for real use.
+  - Every message except control packets is acknowledged and retried.
+  - Control packets use latest-wins, and out-of-order sequence numbers are dropped.
+- **Host:**
+  - On `Hello`, the host creates a remote `PilotSession` that uses the simulated server
+    provider, with a `RemoteInputProvider` as its input.
+  - It forwards `RequestFlight` and `ReleaseFlight` to the coordinator, and sends the
+    coordinator's results and `Preempted` events back to the phone.
+  - With no packet for about 0.5 s, the input reports no connected pilot. The pilot gate closes
+    and the normal hold-then-descend failsafe follows.
 - **App:** the same Unity project with a separate scene and a Build Profile each for iOS and
   Android, and its own small composition root. It ships without the flight-logic assemblies.
-- **First version is controls only:** connect screen, sticks and a "Request flight" button.
+- **First version is controls only:**
+  - connect screen
+  - sticks
+  - "Request flight" and "Release" buttons
+  - the assigned drone, and a message when denied or preempted
+
   Telemetry to the phone comes later as a new sink and a readout, with no changes to Core or
   the existing telemetry code.
 - **Platform notes:** iOS needs `NSLocalNetworkUsageDescription`, and Android needs `INTERNET`.
@@ -253,15 +352,31 @@ break the Core boundary. All async code uses `Task` and `CancellationToken`.
 
 - **Core:** unit tests for the controller, integrator, router, gates and supervisor. Also
   closed-loop tests driven by a scripted input provider and a plain `Tick` loop, for example
-  "falls with no input", "descends after exactly 10 s", "switching pilot drops authorization".
-- **Sensor and landing:** reading invalid above max range, reading held between samples, slow
-  descent touches down below 0.3 m/s, sensor failure mid-descent still lands.
-- **Authorization:** guest mode passes through the same states as other providers,
-  controllable delay, cancellation mid-request, stale results ignored,
-  revocation closes the gate, `Dispose()` cancels.
+  "falls with no input" and "descends after exactly 10 s".
+- **Sensor and landing:**
+  - the reading is invalid above max range
+  - the reading is held between samples
+  - a slow descent touches down below 0.3 m/s
+  - a sensor failure mid-descent still lands
+- **Pilots:** registry lookup, guest profile has the lowest priority, stats updated from
+  coordinator events.
+- **Authorization:**
+  - guest denies remote requests
+  - a grant for one pilot doesn't open the gate for another
+  - revocation closes the gate
+  - controllable delay, cancellation mid-request and `Dispose()`
+- **Coordinator** (multi-drone, headless):
+  - a free drone is assigned, and "any" prefers grounded drones
+  - an unknown pilot is denied
+  - equal priority is denied when no drone is free
+  - a higher priority takes over, the gate stays open on every tick and the mode stays Piloted
+  - a provider revocation releases every drone that pilot holds
+  - a new request cancels the pending one
 - **Telemetry:** sampling rate, ring buffer, sink fan-out.
-- **Remote:** full loopback path from client to `FlightLoop`, including a link drop that leads
-  to hold and then descent.
+- **Remote:**
+  - the full loopback path from the client through the coordinator to `FlightLoop`
+  - a link drop that leads to hold and then descent
+  - `Preempted` delivered to the phone
 - **Device only:** the UDP transport and the touch UI.
 
 ## Commit plan
@@ -270,29 +385,34 @@ Each commit is small, logically separate and includes its own tests.
 
 1. **Project setup:** Unity project, VContainer, assembly definitions, git root move, this
    document.
-2. **Core flight model:** `Vec3`, `DroneState` (with `IsGrounded`), `DroneId`, `ControlInput`,
-   `IInputProvider`, `DroneConfig`, `ITerrain` and `FlatTerrain`, force controller, integration
-   with terrain contact, `FlightLoop` with `Ticked`.
+2. **Core flight model:** `Vec3`, `DroneState` (with `IsGrounded`), `DroneId`, `PilotId`,
+   `ControlInput`, `IInputProvider`, `DroneConfig`, `ITerrain` and `FlatTerrain`, force
+   controller, integration with terrain contact, `FlightLoop` with `Ticked`.
 3. **Altitude sensor:** `IAltitudeSensor`, `AltitudeReading`, `RangefinderAltitudeSensor` (max
    range, update rate, no noise), sampled each tick and carried in `FlightFrame`.
-4. **Input routing:** `InputRouter` with pilot identity.
+4. **Input routing:** `InputRouter` with pilot identity and connected-pilot reporting.
 5. **Unity runtime:** keyboard provider, `FlightLoopRunner`, cube view, ground plane visual,
-   `LifetimeScope`, scene.
-6. **Gating and failsafe:** in Core, `IFlightGate`, `AllOfFlightGate`, `PilotInControlGate`
-   and `FlightSupervisor` (hold, descent with flare from the altitude reading, fallback for an
-   invalid reading, touchdown from the contact flag). The Authorization assembly with the
-   service, revocable grant, and the guest and simulated server providers, both going through
-   the service.
-7. **Authorization in Unity:** keys to request authorization, switch provider and simulate
-   revocation, with destroy and exit cancellation.
-8. **Telemetry:** assembly, recorder, in-memory sink.
-9. **Dashboard:** UI assembly, child scope, deletion check.
-10. **Remote protocol:** messages, codec, `ITransport`, loopback.
-11. **Remote host:** `RemoteInputProvider`, link-loss timeout, `RequestFlight`, end-to-end
-    loopback test.
-12. **UDP transport:** threading and cancellation, wired into the simulator scene.
-13. **Mobile app:** scene, composition root, connect screen, sticks, iOS and Android Build
-    Profiles.
+   `LifetimeScope`, scene. One drone, flying without a gate.
+6. **Gating and failsafe:** `IFlightGate`, `AllOfFlightGate`, `PilotInControlGate` and
+   `FlightSupervisor` (hold, descent with flare from the altitude reading, fallback for an
+   invalid reading, touchdown from the contact flag).
+7. **Pilots:** `PilotProfile`, `IPilotRegistry` and in-memory registry, built-in guest profile,
+   `PilotStats` and stats store.
+8. **Authorization:** providers (guest for local only, simulated server), revocable grant,
+   `DroneGrantHolder` gate.
+9. **Flight coordinator:** `PilotSession`, drone registry, request pipeline,
+   `IAssignmentPolicy` and `PriorityAssignmentPolicy`, direct takeover, release, events and
+   stats recording.
+10. **Fleet in Unity:** fleet scope and one child scope per drone, 2–3 cubes, keyboard session,
+    keys, destroy and exit cancellation.
+11. **Telemetry:** assembly, recorder per drone, in-memory sink.
+12. **Dashboard:** UI assembly, child scope, fleet view, deletion check.
+13. **Remote protocol:** messages, codec, `ITransport`, loopback.
+14. **Remote host:** remote sessions, `RemoteInputProvider`, link-loss timeout, coordinator
+    requests and results, end-to-end loopback test.
+15. **UDP transport:** threading and cancellation, wired into the simulator scene.
+16. **Mobile app:** scene, composition root, connect screen, sticks, request and release, iOS
+    and Android Build Profiles.
 
 Later: **telemetry to the phone** (network sink, `TelemetryPacket`, readout).
 
@@ -303,4 +423,10 @@ Later: **telemetry to the phone** (network sink, `TelemetryPacket`, readout).
 - **Phone telemetry:** not in the first version; controls only.
 - **Altitude sensor:** a rangefinder only, measuring height above ground.
 - **Sensor noise:** zero for now. Noise can be added later as a decorator.
-- **Guest mode:** goes through the authorization service like any other provider.
+- **Guest mode:** reserved for the local machine and keyboard. It goes through the same
+  pipeline as any other provider. The simulated server is not guest mode.
+- **Flight coordinator:** handles multiple drones, takeovers by higher-priority pilots and
+  handovers without triggering the failsafe.
+- **Pilot data:** a pilot registry defines profiles and priorities and tracks stats. Priority
+  comes from the registry, not from providers.
+- **Equal priority with no free drone:** denied. There is no queue for now.
