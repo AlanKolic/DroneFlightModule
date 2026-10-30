@@ -430,3 +430,5 @@ Later: **telemetry to the phone** (network sink, `TelemetryPacket`, readout).
 - **Pilot data:** a pilot registry defines profiles and priorities and tracks stats. Priority
   comes from the registry, not from providers.
 - **Equal priority with no free drone:** denied. There is no queue for now.
+- **Takeover:** control is handed over instantly, even mid-flight. The drone doesn't need to
+  land or hold first.
