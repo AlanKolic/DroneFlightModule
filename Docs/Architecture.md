@@ -49,7 +49,7 @@ flowchart TB
 
 | Assembly | References | Purpose |
 |---|---|---|
-| `DroneFlightModule.Core` | nothing | Math, state, input contract, router, gates, supervisor, controller, integrator, `FlightLoop` |
+| `DroneFlightModule.Core` | nothing | Math, state, terrain, altitude sensor, input contract, router, gates, supervisor, controller, integrator, `FlightLoop` |
 | `DroneFlightModule.Authorization` | Core | Per-drone authorization service, revocable grants, providers |
 | `DroneFlightModule.Telemetry` | Core | Recorder sampling `FlightLoop.Ticked`, `ITelemetrySink` implementations |
 | `DroneFlightModule.Remote.Protocol` | nothing | Messages, binary codec, `ITransport`, loopback transport |
@@ -66,14 +66,15 @@ parent scope, so deleting the UI folder leaves only a missing-script warning.
 
 ```mermaid
 flowchart TB
-    Tick["Fixed tick<br/>FlightLoopRunner calls Tick(dt)"] --> Gate{"Flight gate<br/>authorized and pilot present?"}
+    Tick["Fixed tick<br/>FlightLoopRunner calls Tick(dt)"] --> Sense["Sensors<br/>altitude reading from truth"]
+    Sense --> Gate{"Flight gate<br/>authorized and pilot present?"}
     Gate -- allowed --> Pilot["Pilot input<br/>InputRouter, active pilot"]
     Gate -- not allowed --> Sup["Flight supervisor<br/>hold 10 s, then descend"]
     Pilot --> Ctrl["Force controller<br/>input to force and yaw torque"]
     Sup --> Ctrl
     Ctrl --> Integ["Integrator<br/>gravity, drag, ground contact"]
     Integ --> Ticked["Ticked event<br/>FlightFrame snapshot"]
-    Integ -. new state feeds next tick .-> Gate
+    Integ -. new state feeds next tick .-> Sense
     Ticked --> Tele["Telemetry recorder<br/>dashboard, phone sink"]
     Integ -. read each frame .-> View["Cube view"]
 ```
@@ -86,8 +87,31 @@ flowchart TB
   force and maps yaw input to a torque about the vertical axis. There is no gravity
   compensation, so the drone must be pushed up.
 - **Integration:** semi-implicit Euler over position, velocity, yaw and yaw rate, with gravity,
-  linear and angular drag, and a ground plane that clamps height and cancels downward velocity.
+  linear and angular drag, and ground contact against `ITerrain`. Contact clamps height, cancels
+  downward velocity and sets `DroneState.IsGrounded`.
+- **Sensors** are sampled from the true state at the start of each tick. The reading goes into
+  `FlightFrame`.
 - **Observers** (telemetry, view) only read. They never feed back into the loop.
+
+## Terrain and altitude sensor
+
+Simulation truth and what the drone measures are kept apart. Physics reads the true ground
+directly. Flight logic (supervisor, telemetry, dashboard) only sees sensor readings.
+
+- **`ITerrain { float HeightAt(float x, float z) }`** is the only definition of where the ground
+  is. The integrator and the sensor both query it, so they always agree. `FlatTerrain` (a
+  constant height) is the first implementation. Uneven ground later, such as a heightmap or a
+  Unity raycast adapter, is a new implementation with no changes to flight logic.
+- **`DroneState.IsGrounded`** is a true contact flag set by the integrator, like a landing-gear
+  switch. The supervisor uses it to detect touchdown.
+- **`IAltitudeSensor { AltitudeReading Read(in DroneState truth, double time) }`**, where
+  `AltitudeReading { Agl, IsValid, Timestamp }` and AGL means height above ground level.
+- **`RangefinderAltitudeSensor`** measures height above the terrain directly below the drone.
+  - It has a configurable max range (for example 10 m), above which the reading is invalid.
+  - It has a configurable update rate, and between samples returns the last reading.
+  - It has no noise. Noise can be added later as a decorator (`NoisyAltitudeSensor` wrapping any
+    `IAltitudeSensor`) with a seeded random source, without changing the rangefinder.
+- In Unity, the scene shows a plane primitive at the terrain height. It is a visual only.
 
 ## Flight modes
 
@@ -99,13 +123,21 @@ stateDiagram-v2
     Holding --> Piloted: gate reopens (countdown resets)
     Holding --> Descending: 10 s countdown reaches 0
     Descending --> Piloted: gate reopens
-    Descending --> Grounded: touches ground (motors off)
+    Descending --> Grounded: contact flag set (motors off)
 ```
 
 - `FlightSupervisor` (Core) owns the mode, the countdown and the hover/descent input.
 - **Holding** hovers in place: a proportional controller targets zero vertical speed, and
   lateral and yaw input are zero. Pilot input is ignored.
-- **Descending** uses the same controller with a target sink rate (about 1 m/s).
+- **Descending** uses the same controller with a target sink rate: about 1 m/s higher up,
+  slowing as the measured altitude drops below a flare height (for example 2 m), so the drone
+  touches down gently.
+- **Invalid altitude reading** (out of range or failed): the drone keeps descending at a constant
+  safe rate. Touchdown is still detected by the contact flag, so a broken sensor can't keep the
+  drone in the air.
+- **Touchdown:** when `IsGrounded` becomes true, the motors cut and the mode becomes Grounded.
+- **Vertical speed** comes from the true velocity for now, as a placeholder until there is a
+  velocity or IMU sensor.
 - The countdown runs on **simulation time** (it decrements by `dt`), so it pauses with the
   simulation and tests can check it without waiting.
 - If the gate closes while grounded, there is no countdown. The drone simply can't take off.
@@ -151,6 +183,10 @@ flowchart TB
 - **Providers:** `LocalGuestAuthorizationProvider` grants immediately.
   `SimulatedServerAuthorizationProvider` has configurable latency, an approve/deny policy and
   simulated revocation.
+- **Guest mode is not a bypass.** It goes through `FlightAuthorizationService` like every other
+  provider: same request (`DroneId`, `PilotId`), same states (Pending, then Authorized), and the
+  same revocable grant. A pilot change drops a guest grant too. The only difference is that its
+  `AuthorizeAsync` completes immediately. Nothing anywhere checks "is this guest mode?".
 - **Adding a third provider** means a new class and one registration line. No flight code,
   service or existing provider changes.
 
@@ -184,7 +220,8 @@ break the Core boundary. All async code uses `Task` and `CancellationToken`.
 - `TelemetryRecorder` subscribes to `FlightLoop.Ticked`, samples at a configurable rate, keeps
   the latest snapshot and a ring buffer, and forwards to `ITelemetrySink`s (in-memory first,
   network later).
-- The dashboard (IMGUI) shows position, velocity, altitude, heading, the active input source,
+- The dashboard (IMGUI) shows position, velocity, measured altitude (AGL, with the true height
+  alongside for debugging), heading, the active input source,
   authorization state, flight mode and countdown. It only reads.
 - **Deletion check:** delete the UI folder, confirm Unity compiles, the drone flies, and all
   remaining tests pass.
@@ -217,7 +254,10 @@ break the Core boundary. All async code uses `Task` and `CancellationToken`.
 - **Core:** unit tests for the controller, integrator, router, gates and supervisor. Also
   closed-loop tests driven by a scripted input provider and a plain `Tick` loop, for example
   "falls with no input", "descends after exactly 10 s", "switching pilot drops authorization".
-- **Authorization:** controllable delay, cancellation mid-request, stale results ignored,
+- **Sensor and landing:** reading invalid above max range, reading held between samples, slow
+  descent touches down below 0.3 m/s, sensor failure mid-descent still lands.
+- **Authorization:** guest mode passes through the same states as other providers,
+  controllable delay, cancellation mid-request, stale results ignored,
   revocation closes the gate, `Dispose()` cancels.
 - **Telemetry:** sampling rate, ring buffer, sink fan-out.
 - **Remote:** full loopback path from client to `FlightLoop`, including a link drop that leads
@@ -230,22 +270,28 @@ Each commit is small, logically separate and includes its own tests.
 
 1. **Project setup:** Unity project, VContainer, assembly definitions, git root move, this
    document.
-2. **Core flight model:** `Vec3`, `DroneState`, `DroneId`, `ControlInput`, `IInputProvider`,
-   `DroneConfig`, force controller, integration with ground contact, `FlightLoop` with `Ticked`.
-3. **Input routing:** `InputRouter` with pilot identity.
-4. **Unity runtime:** keyboard provider, `FlightLoopRunner`, cube view, `LifetimeScope`, scene.
-5. **Gating and failsafe:** in Core, `IFlightGate`, `AllOfFlightGate`, `PilotInControlGate`
-   and `FlightSupervisor`. The Authorization assembly with the service, revocable grant and
-   both providers.
-6. **Authorization in Unity:** keys to request authorization, switch provider and simulate
+2. **Core flight model:** `Vec3`, `DroneState` (with `IsGrounded`), `DroneId`, `ControlInput`,
+   `IInputProvider`, `DroneConfig`, `ITerrain` and `FlatTerrain`, force controller, integration
+   with terrain contact, `FlightLoop` with `Ticked`.
+3. **Altitude sensor:** `IAltitudeSensor`, `AltitudeReading`, `RangefinderAltitudeSensor` (max
+   range, update rate, no noise), sampled each tick and carried in `FlightFrame`.
+4. **Input routing:** `InputRouter` with pilot identity.
+5. **Unity runtime:** keyboard provider, `FlightLoopRunner`, cube view, ground plane visual,
+   `LifetimeScope`, scene.
+6. **Gating and failsafe:** in Core, `IFlightGate`, `AllOfFlightGate`, `PilotInControlGate`
+   and `FlightSupervisor` (hold, descent with flare from the altitude reading, fallback for an
+   invalid reading, touchdown from the contact flag). The Authorization assembly with the
+   service, revocable grant, and the guest and simulated server providers, both going through
+   the service.
+7. **Authorization in Unity:** keys to request authorization, switch provider and simulate
    revocation, with destroy and exit cancellation.
-7. **Telemetry:** assembly, recorder, in-memory sink.
-8. **Dashboard:** UI assembly, child scope, deletion check.
-9. **Remote protocol:** messages, codec, `ITransport`, loopback.
-10. **Remote host:** `RemoteInputProvider`, link-loss timeout, `RequestFlight`, end-to-end
+8. **Telemetry:** assembly, recorder, in-memory sink.
+9. **Dashboard:** UI assembly, child scope, deletion check.
+10. **Remote protocol:** messages, codec, `ITransport`, loopback.
+11. **Remote host:** `RemoteInputProvider`, link-loss timeout, `RequestFlight`, end-to-end
     loopback test.
-11. **UDP transport:** threading and cancellation, wired into the simulator scene.
-12. **Mobile app:** scene, composition root, connect screen, sticks, iOS and Android Build
+12. **UDP transport:** threading and cancellation, wired into the simulator scene.
+13. **Mobile app:** scene, composition root, connect screen, sticks, iOS and Android Build
     Profiles.
 
 Later: **telemetry to the phone** (network sink, `TelemetryPacket`, readout).
@@ -255,3 +301,6 @@ Later: **telemetry to the phone** (network sink, `TelemetryPacket`, readout).
 - **Mobile app:** a Unity build from this project.
 - **Mobile platforms:** iOS and Android, both supported from the first version.
 - **Phone telemetry:** not in the first version; controls only.
+- **Altitude sensor:** a rangefinder only, measuring height above ground.
+- **Sensor noise:** zero for now. Noise can be added later as a decorator.
+- **Guest mode:** goes through the authorization service like any other provider.
