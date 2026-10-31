@@ -192,8 +192,11 @@ flowchart TB
   in the composition root.
 - `PilotInControlGate` passes while the router has an active input source that reports a
   connected pilot. A phone whose link drops stops reporting one.
+- `IInputProvider { bool IsConnected; ControlInput Read() }`. `IsConnected` is how a source
+  reports whether its pilot can still reach it.
 - `InputRouter`, one per drone, routes to the input provider of the session assigned to that
-  drone. `ActivePilotId` and `ActiveChanged`. It reads zero input when nothing is assigned.
+  drone. `Assign(pilotId, source)`, `Clear()`, `ActivePilotId` and `ActiveChanged`. It reads
+  zero input when nothing is assigned or the source is disconnected.
 
 **Authorization assembly**
 - `IAuthorizationProvider { string Id; Task<AuthorizationResult> AuthorizeAsync(AuthorizationRequest, CancellationToken) }`.
@@ -413,6 +416,12 @@ Each commit is small, logically separate and includes its own tests.
 15. **UDP transport:** threading and cancellation, wired into the simulator scene.
 16. **Mobile app:** scene, composition root, connect screen, sticks, request and release, iOS
     and Android Build Profiles.
+17. **Config assets:** ScriptableObjects in the Unity layer for the default values: drone frame
+    (`DroneConfig`), rangefinder, supervisor timings, fleet layout, simulated server latency and
+    the pilot roster. Each asset only holds serialized fields and maps them to the plain Core
+    type, so Core keeps its constructors and validation and never sees Unity. The composition
+    scopes take the assets as serialized fields and register the mapped Core objects in place of
+    the hard-coded defaults. Tests check that the shipped assets map to valid Core config.
 
 Later: **telemetry to the phone** (network sink, `TelemetryPacket`, readout).
 
@@ -432,3 +441,6 @@ Later: **telemetry to the phone** (network sink, `TelemetryPacket`, readout).
 - **Equal priority with no free drone:** denied. There is no queue for now.
 - **Takeover:** control is handed over instantly, even mid-flight. The drone doesn't need to
   land or hold first.
+- **Default config values:** hard-coded defaults in Core (such as `DroneConfig.Default`) until
+  the last step, then ScriptableObject assets in Unity. Tests and headless runs keep using the
+  Core defaults.

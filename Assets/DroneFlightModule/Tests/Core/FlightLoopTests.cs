@@ -18,13 +18,16 @@ namespace DroneFlightModule.Core.Tests
             input = new ScriptedInputProvider();
         }
 
-        private FlightLoop CreateLoop(DroneState initial, float gravity = DroneIntegrator.StandardGravity)
+        private FlightLoop CreateLoop(
+            DroneState initial,
+            float gravity = DroneIntegrator.StandardGravity,
+            IInputProvider inputProvider = null)
         {
             var config = DroneConfig.Default;
             var terrain = new FlatTerrain();
             return new FlightLoop(
                 TestDrone,
-                input,
+                inputProvider ?? input,
                 new ForceFlightController(config),
                 new DroneIntegrator(config, terrain, gravity),
                 new RangefinderAltitudeSensor(terrain, maxRange: 20f, updateRate: 1f / DeltaTime),
@@ -144,6 +147,21 @@ namespace DroneFlightModule.Core.Tests
 
             Assert.That(frames[0].Command.Force, Is.EqualTo(Vec3.Zero));
             Assert.That(frames[1].Command.Force.Y, Is.EqualTo(DroneConfig.Default.MaxThrust));
+        }
+
+        [Test]
+        public void ThroughRouter_OnlyAssignedPilotCanTakeOff()
+        {
+            var router = new InputRouter();
+            var loop = CreateLoop(DroneState.At(Vec3.Zero), inputProvider: router);
+            input.Current = new ControlInput(Vec3.Up, 0f);
+
+            Run(loop, 0.5f);
+            Assert.That(loop.State.IsGrounded, Is.True);
+
+            router.Assign(new PilotId("pilot1"), input);
+            Run(loop, 0.5f);
+            Assert.That(loop.State.IsGrounded, Is.False);
         }
 
         [Test]
