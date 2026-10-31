@@ -8,15 +8,17 @@ namespace DroneFlightModule.Core
     /// </summary>
     public sealed class FlightLoop
     {
-        private readonly IInputProvider _input;
-        private readonly IFlightController _controller;
-        private readonly DroneIntegrator _integrator;
+        private readonly IInputProvider input;
+        private readonly IFlightController controller;
+        private readonly DroneIntegrator integrator;
+        private readonly IAltitudeSensor altitudeSensor;
 
         public FlightLoop(
             DroneId droneId,
             IInputProvider input,
             IFlightController controller,
             DroneIntegrator integrator,
+            IAltitudeSensor altitudeSensor,
             DroneState initialState)
         {
             if (droneId.IsEmpty)
@@ -24,9 +26,10 @@ namespace DroneFlightModule.Core
                 throw new ArgumentException("Drone id is required.", nameof(droneId));
             }
             DroneId = droneId;
-            _input = input ?? throw new ArgumentNullException(nameof(input));
-            _controller = controller ?? throw new ArgumentNullException(nameof(controller));
-            _integrator = integrator ?? throw new ArgumentNullException(nameof(integrator));
+            this.input = input ?? throw new ArgumentNullException(nameof(input));
+            this.controller = controller ?? throw new ArgumentNullException(nameof(controller));
+            this.integrator = integrator ?? throw new ArgumentNullException(nameof(integrator));
+            this.altitudeSensor = altitudeSensor ?? throw new ArgumentNullException(nameof(altitudeSensor));
             State = initialState;
         }
 
@@ -35,19 +38,20 @@ namespace DroneFlightModule.Core
         public double Time { get; private set; }
         public event Action<FlightFrame> Ticked;
 
-        public void Tick(float dt)
+        public void Tick(float deltaTime)
         {
-            if (!(dt > 0f) || float.IsInfinity(dt))
+            if (!(deltaTime > 0f) || float.IsInfinity(deltaTime))
             {
-                throw new ArgumentOutOfRangeException(nameof(dt), dt, "Tick duration must be positive and finite.");    
+                throw new ArgumentOutOfRangeException(nameof(deltaTime), deltaTime, "Tick duration must be positive and finite.");    
             }
 
-            var input = _input.Read();
-            var command = _controller.Compute(input, State);
-            State = _integrator.Step(State, command, dt);
-            Time += dt;
+            var altitude = altitudeSensor.Read(State, Time);
+            var currentInput = input.Read();
+            var command = controller.Compute(currentInput, State);
+            State = integrator.Step(State, command, deltaTime);
+            Time += deltaTime;
 
-            Ticked?.Invoke(new FlightFrame(DroneId, Time, input, command, State));
+            Ticked?.Invoke(new FlightFrame(DroneId, Time, currentInput, command, State, altitude));
         }
     }
 }

@@ -74,7 +74,7 @@ Each drone has its own `FlightLoop`, ticked independently.
 
 ```mermaid
 flowchart TB
-    Tick["Fixed tick<br/>FlightLoopRunner calls Tick(dt)"] --> Sense["Sensors<br/>altitude reading from truth"]
+    Tick["Fixed tick<br/>FlightLoopRunner calls Tick(deltaTime)"] --> Sense["Sensors<br/>altitude reading from truth"]
     Sense --> Gate{"Flight gate<br/>assigned pilot in control?"}
     Gate -- allowed --> Pilot["Pilot input<br/>InputRouter, assigned session"]
     Gate -- not allowed --> Sup["Flight supervisor<br/>hold 10 s, then descend"]
@@ -87,7 +87,7 @@ flowchart TB
     Integ -. read each frame .-> View["Cube view"]
 ```
 
-- **Time** comes only from `Tick(dt)`. Unity calls it from VContainer's `IFixedTickable`
+- **Time** comes only from `Tick(deltaTime)`. Unity calls it from VContainer's `IFixedTickable`
   (`Time.fixedDeltaTime`); tests and headless sims call it from a plain loop.
 - **Input** is a `ControlInput`: local-frame move vector (X strafe, Y climb, Z forward) and yaw,
   each clamped to [-1, 1].
@@ -113,7 +113,7 @@ directly. Flight logic (supervisor, telemetry, dashboard) only sees sensor readi
 - **`DroneState.IsGrounded`** is a true contact flag set by the integrator, like a landing-gear
   switch. The supervisor uses it to detect touchdown.
 - **`IAltitudeSensor { AltitudeReading Read(in DroneState truth, double time) }`**, where
-  `AltitudeReading { Agl, IsValid, Timestamp }` and AGL means height above ground level.
+  `AltitudeReading { HeightAboveGround, IsValid, Timestamp }`.
 - **`RangefinderAltitudeSensor`** measures height above the terrain directly below the drone.
   - It has a configurable max range (for example 10 m), above which the reading is invalid.
   - It has a configurable update rate, and between samples returns the last reading.
@@ -146,7 +146,7 @@ stateDiagram-v2
 - **Touchdown:** when `IsGrounded` becomes true, the motors cut and the mode becomes Grounded.
 - **Vertical speed** comes from the true velocity for now, as a placeholder until there is a
   velocity or IMU sensor.
-- The countdown runs on **simulation time** (it decrements by `dt`), so it pauses with the
+- The countdown runs on **simulation time** (it decrements by `deltaTime`), so it pauses with the
   simulation and tests can check it without waiting.
 - If the gate closes while grounded, there is no countdown. The drone simply can't take off.
 - A takeover by a higher-priority pilot never closes the gate (see below), so it never starts
@@ -303,7 +303,7 @@ break the Core boundary. All async code uses `Task` and `CancellationToken`.
 - The fleet dashboard (IMGUI) shows, for each drone:
   - the assigned pilot and their priority
   - flight mode and countdown
-  - measured altitude (AGL, with the true height alongside for debugging)
+  - measured height above ground (with the true height alongside for debugging)
   - position, velocity and heading
 
   It also shows a pilot list with stats, and the last coordinator events, such as takeovers and

@@ -20,13 +20,10 @@ namespace DroneFlightModule.Core
             IsGrounded = isGrounded;
         }
 
-        /// <summary>
-        /// A drone at rest. It counts as grounded only after the first tick resolves contact.
-        /// </summary>
         public static DroneState At(Vec3 position, float yaw = 0f) =>
             new DroneState(position, Vec3.Zero, yaw, 0f, false);
 
         public override string ToString() =>
-            $"pos {Position} vel {Velocity} yaw {Yaw:0.###} yawRate {YawRate:0.###} grounded {IsGrounded}";
+            $"position {Position} velocity {Velocity} yaw {Yaw:0.###} yawRate {YawRate:0.###} grounded {IsGrounded}";
     }
 }

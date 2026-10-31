@@ -21,7 +21,7 @@ namespace DroneFlightModule.Core
         public bool IsEmpty => Value == null;
 
         public bool Equals(DroneId other) => string.Equals(Value, other.Value, StringComparison.Ordinal);
-        public override bool Equals(object obj) => obj is DroneId other && Equals(other);
+        public override bool Equals(object value) => value is DroneId other && Equals(other);
         public override int GetHashCode() => Value == null ? 0 : StringComparer.Ordinal.GetHashCode(Value);
         public static bool operator ==(DroneId a, DroneId b) => a.Equals(b);
         public static bool operator !=(DroneId a, DroneId b) => !a.Equals(b);

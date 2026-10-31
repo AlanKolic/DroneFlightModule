@@ -8,22 +8,22 @@ namespace DroneFlightModule.Core
     /// </summary>
     public sealed class ForceFlightController : IFlightController
     {
-        private readonly DroneConfig _config;
+        private readonly DroneConfig config;
 
         public ForceFlightController(DroneConfig config)
         {
-            _config = config ?? throw new ArgumentNullException(nameof(config));
+            this.config = config ?? throw new ArgumentNullException(nameof(config));
         }
 
         public ForceCommand Compute(in ControlInput input, in DroneState state)
         {
-            float thrust = MathF.Max(0f, input.Move.Y) * _config.MaxThrust;
+            float thrust = MathF.Max(0f, input.Move.Y) * config.MaxThrust;
             var localForce = new Vec3(
-                input.Move.X * _config.MaxLateralForce,
+                input.Move.X * config.MaxLateralForce,
                 thrust,
-                input.Move.Z * _config.MaxLateralForce);
+                input.Move.Z * config.MaxLateralForce);
 
-            return new ForceCommand(localForce.RotateYaw(state.Yaw), input.Yaw * _config.MaxYawTorque);
+            return new ForceCommand(localForce.RotateYaw(state.Yaw), input.Yaw * config.MaxYawTorque);
         }
     }
 }
