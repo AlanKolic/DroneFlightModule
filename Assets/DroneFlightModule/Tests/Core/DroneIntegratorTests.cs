@@ -5,7 +5,7 @@ namespace DroneFlightModule.Core.Tests
 {
     public class DroneIntegratorTests
     {
-        private const float Dt = TestConfigs.Dt;
+        private const float DeltaTime = TestConfigs.DeltaTime;
 
         [Test]
         public void FreeFall_GainsSpeedAtGravity()
@@ -15,7 +15,7 @@ namespace DroneFlightModule.Core.Tests
 
             for (int i = 0; i < 50; i++)
             {
-                state = integrator.Step(state, ForceCommand.None, Dt);
+                state = integrator.Step(state, ForceCommand.None, DeltaTime);
             }
 
             Assert.That(state.Velocity.Y, Is.EqualTo(-DroneIntegrator.StandardGravity).Within(1e-3f));
@@ -31,7 +31,7 @@ namespace DroneFlightModule.Core.Tests
 
             for (int i = 0; i < 10; i++)
             {
-                state = integrator.Step(state, ForceCommand.None, Dt);
+                state = integrator.Step(state, ForceCommand.None, DeltaTime);
             }
 
             Assert.That(state.IsGrounded, Is.True);
@@ -44,10 +44,10 @@ namespace DroneFlightModule.Core.Tests
         {
             var config = DroneConfig.Default;
             var integrator = new DroneIntegrator(config, new FlatTerrain());
-            var grounded = integrator.Step(DroneState.At(Vec3.Zero), ForceCommand.None, Dt);
+            var grounded = integrator.Step(DroneState.At(Vec3.Zero), ForceCommand.None, DeltaTime);
             var fullThrust = new ForceCommand(new Vec3(0f, config.MaxThrust, 0f), 0f);
 
-            var state = integrator.Step(grounded, fullThrust, Dt);
+            var state = integrator.Step(grounded, fullThrust, DeltaTime);
 
             Assert.That(state.IsGrounded, Is.False);
             Assert.That(state.Position.Y, Is.GreaterThan(0f));
@@ -62,7 +62,7 @@ namespace DroneFlightModule.Core.Tests
 
             for (int i = 0; i < 10; i++)
             {
-                state = integrator.Step(state, sideways, Dt);
+                state = integrator.Step(state, sideways, DeltaTime);
             }
 
             Assert.That(state.Position, Is.EqualTo(Vec3.Zero));
@@ -77,7 +77,7 @@ namespace DroneFlightModule.Core.Tests
 
             for (int i = 0; i < 200 && !state.IsGrounded; i++)
             {
-                state = integrator.Step(state, ForceCommand.None, Dt);
+                state = integrator.Step(state, ForceCommand.None, DeltaTime);
             }
 
             Assert.That(state.IsGrounded, Is.True);
@@ -95,7 +95,7 @@ namespace DroneFlightModule.Core.Tests
 
             for (int i = 0; i < 1000; i++)
             {
-                state = integrator.Step(state, forward, Dt);
+                state = integrator.Step(state, forward, DeltaTime);
             }
 
             float terminal = config.MaxLateralForce / config.LinearDrag;
@@ -112,7 +112,7 @@ namespace DroneFlightModule.Core.Tests
 
             for (int i = 0; i < 1000; i++)
             {
-                state = integrator.Step(state, spin, Dt);
+                state = integrator.Step(state, spin, DeltaTime);
                 Assert.That(state.Yaw, Is.GreaterThan(-MathF.PI).And.LessThanOrEqualTo(MathF.PI));
             }
 

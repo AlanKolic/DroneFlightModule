@@ -23,34 +23,31 @@ namespace DroneFlightModule.Core
             Z = z;
         }
 
-        public float SqrMagnitude => X * X + Y * Y + Z * Z;
-        public float Magnitude => MathF.Sqrt(SqrMagnitude);
+        public float SquaredMagnitude => X * X + Y * Y + Z * Z;
+        public float Magnitude => MathF.Sqrt(SquaredMagnitude);
 
-        public static Vec3 operator +(Vec3 a, Vec3 b) => new Vec3(a.X + b.X, a.Y + b.Y, a.Z + b.Z);
-        public static Vec3 operator -(Vec3 a, Vec3 b) => new Vec3(a.X - b.X, a.Y - b.Y, a.Z - b.Z);
-        public static Vec3 operator -(Vec3 v) => new Vec3(-v.X, -v.Y, -v.Z);
-        public static Vec3 operator *(Vec3 v, float s) => new Vec3(v.X * s, v.Y * s, v.Z * s);
-        public static Vec3 operator *(float s, Vec3 v) => v * s;
-        public static Vec3 operator /(Vec3 v, float s) => new Vec3(v.X / s, v.Y / s, v.Z / s);
+        public static Vec3 operator +(Vec3 left, Vec3 right) => new Vec3(left.X + right.X, left.Y + right.Y, left.Z + right.Z);
+        public static Vec3 operator -(Vec3 left, Vec3 right) => new Vec3(left.X - right.X, left.Y - right.Y, left.Z - right.Z);
+        public static Vec3 operator -(Vec3 vector) => new Vec3(-vector.X, -vector.Y, -vector.Z);
+        public static Vec3 operator *(Vec3 vector, float scalar) => new Vec3(vector.X * scalar, vector.Y * scalar, vector.Z * scalar);
+        public static Vec3 operator *(float scalar, Vec3 vector) => vector * scalar;
+        public static Vec3 operator /(Vec3 vector, float scalar) => new Vec3(vector.X / scalar, vector.Y / scalar, vector.Z / scalar);
 
-        /// <summary>
-        /// Rotates the vector around the Y axis. Positive yaw turns Forward towards Right,
-        /// matching Unity's left-handed convention.
-        /// </summary>
         public Vec3 RotateYaw(float yawRadians)
         {
-            float cos = MathF.Cos(yawRadians);
-            float sin = MathF.Sin(yawRadians);
-            return new Vec3(X * cos + Z * sin, Y, -X * sin + Z * cos);
+            // Left-handed like Unity: positive yaw turns Forward towards Right.
+            float cosine = MathF.Cos(yawRadians);
+            float sine = MathF.Sin(yawRadians);
+            return new Vec3(X * cosine + Z * sine, Y, -X * sine + Z * cosine);
         }
 
         public Vec3 WithY(float y) => new Vec3(X, y, Z);
 
         public bool Equals(Vec3 other) => X.Equals(other.X) && Y.Equals(other.Y) && Z.Equals(other.Z);
-        public override bool Equals(object obj) => obj is Vec3 other && Equals(other);
+        public override bool Equals(object value) => value is Vec3 other && Equals(other);
         public override int GetHashCode() => HashCode.Combine(X, Y, Z);
-        public static bool operator ==(Vec3 a, Vec3 b) => a.Equals(b);
-        public static bool operator !=(Vec3 a, Vec3 b) => !a.Equals(b);
+        public static bool operator ==(Vec3 left, Vec3 right) => left.Equals(right);
+        public static bool operator !=(Vec3 left, Vec3 right) => !left.Equals(right);
 
         public override string ToString() => $"({X:0.###}, {Y:0.###}, {Z:0.###})";
     }

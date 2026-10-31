@@ -2,7 +2,7 @@ namespace DroneFlightModule.Core.Tests
 {
     internal static class TestConfigs
     {
-        public const float Dt = 0.02f;
+        public const float DeltaTime = 0.02f;
 
         public static readonly DroneConfig Dragless = new DroneConfig(
             mass: 1.5f,

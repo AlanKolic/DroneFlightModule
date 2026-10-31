@@ -16,25 +16,12 @@ namespace DroneFlightModule.Core
             maxLateralForce: 10f,
             maxYawTorque: 0.5f);
 
-        /// <summary>kg</summary>
         public float Mass { get; }
-
-        /// <summary>kg·m² about the vertical axis.</summary>
         public float YawInertia { get; }
-
-        /// <summary>N per m/s of velocity.</summary>
         public float LinearDrag { get; }
-
-        /// <summary>N·m per rad/s of yaw rate.</summary>
         public float AngularDrag { get; }
-
-        /// <summary>N, straight up in the drone's frame, at full climb input.</summary>
         public float MaxThrust { get; }
-
-        /// <summary>N, horizontal, at full strafe or forward input.</summary>
         public float MaxLateralForce { get; }
-
-        /// <summary>N·m about the vertical axis, at full yaw input.</summary>
         public float MaxYawTorque { get; }
 
         public DroneConfig(
@@ -58,14 +45,18 @@ namespace DroneFlightModule.Core
         private static float RequirePositive(float value, string name)
         {
             if (!(value > 0f) || float.IsInfinity(value))
+            {
                 throw new ArgumentOutOfRangeException(name, value, "Must be positive and finite.");
+            }
             return value;
         }
 
         private static float RequireNonNegative(float value, string name)
         {
             if (!(value >= 0f) || float.IsInfinity(value))
+            {
                 throw new ArgumentOutOfRangeException(name, value, "Must be non-negative and finite.");
+            }
             return value;
         }
     }
