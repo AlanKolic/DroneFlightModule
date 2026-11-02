@@ -3,6 +3,7 @@ namespace DroneFlightModule.Core
     /// <summary>
     /// Snapshot of one completed tick, published to observers such as telemetry.
     /// Time and State are at the end of the tick; Altitude was sampled at its start, before the step.
+    /// Command is what reached the actuators, which is the failsafe's own command while it flies.
     /// </summary>
     public readonly struct FlightFrame
     {
@@ -12,6 +13,8 @@ namespace DroneFlightModule.Core
         public readonly ForceCommand Command;
         public readonly DroneState State;
         public readonly AltitudeReading Altitude;
+        public readonly FlightMode Mode;
+        public readonly double HoldTimeRemaining;
 
         public FlightFrame(
             DroneId droneId,
@@ -19,7 +22,9 @@ namespace DroneFlightModule.Core
             ControlInput input,
             ForceCommand command,
             DroneState state,
-            AltitudeReading altitude)
+            AltitudeReading altitude,
+            FlightMode mode,
+            double holdTimeRemaining)
         {
             DroneId = droneId;
             Time = time;
@@ -27,6 +32,8 @@ namespace DroneFlightModule.Core
             Command = command;
             State = state;
             Altitude = altitude;
+            Mode = mode;
+            HoldTimeRemaining = holdTimeRemaining;
         }
     }
 }

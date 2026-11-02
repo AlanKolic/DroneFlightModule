@@ -76,12 +76,12 @@ Each drone has its own `FlightLoop`, ticked independently.
 ```mermaid
 flowchart TB
     Tick["Fixed tick<br/>FlightLoopRunner calls Tick(deltaTime)"] --> Sense["Sensors<br/>altitude reading from truth"]
-    Sense --> Gate{"Flight gate<br/>assigned pilot in control?"}
-    Gate -- allowed --> Pilot["Pilot input<br/>InputRouter, assigned session"]
-    Gate -- not allowed --> Sup["Flight supervisor<br/>hold 10 s, then descend"]
+    Sense --> Pilot["Pilot input<br/>InputRouter, assigned session"]
     Pilot --> Ctrl["Force controller<br/>input to force and yaw torque"]
-    Sup --> Ctrl
-    Ctrl --> Integ["Integrator<br/>gravity, drag, ground contact"]
+    Ctrl --> Gate{"Flight supervisor<br/>gate allows flight?"}
+    Gate -- allowed: pilot command --> Integ["Integrator<br/>gravity, drag, ground contact"]
+    Gate -- not allowed --> Sup["Failsafe command<br/>hold 10 s, then descend"]
+    Sup --> Integ
     Integ --> Ticked["Ticked event<br/>FlightFrame snapshot"]
     Integ -. new state feeds next tick .-> Sense
     Ticked --> Tele["Telemetry recorder<br/>dashboard, phone sink"]
@@ -138,15 +138,18 @@ stateDiagram-v2
     Descending --> Grounded: contact flag set (motors off)
 ```
 
-- `FlightSupervisor` (Core) owns the mode, the countdown and the hover/descent input.
+- `FlightSupervisor` (Core) owns the mode, the countdown and the hold/descent command. Each tick
+  it takes the pilot's force command and either passes it on or replaces it with its own.
 - **Holding** hovers in place: a proportional controller targets zero vertical speed, and
-  lateral and yaw input are zero. Pilot input is ignored.
-- **Descending** uses the same controller with a target sink rate: about 1 m/s higher up,
-  slowing as the measured altitude drops below a flare height (for example 2 m), so the drone
-  touches down gently.
+  lateral force and yaw torque are zero, so drag brings any drift to rest. Pilot input is
+  ignored. The controller also cancels weight and vertical drag, so the drone settles exactly on
+  the target speed.
+- **Descending** uses the same controller with a target sink rate: 1 m/s higher up, easing to
+  0.3 m/s as the measured altitude drops below the 2 m flare height, so the drone touches down
+  gently.
 - **Invalid altitude reading** (out of range or failed): the drone keeps descending at a constant
-  safe rate. Touchdown is still detected by the contact flag, so a broken sensor can't keep the
-  drone in the air.
+  safe rate of 0.5 m/s. Touchdown is still detected by the contact flag, so a broken sensor
+  can't keep the drone in the air.
 - **Touchdown:** when `IsGrounded` becomes true, the motors cut and the mode becomes Grounded.
 - **Vertical speed** comes from the true velocity for now, as a placeholder until there is a
   velocity or IMU sensor.
@@ -155,8 +158,9 @@ stateDiagram-v2
 - If the gate closes while grounded, there is no countdown. The drone simply can't take off.
 - A takeover by a higher-priority pilot never closes the gate (see below), so it never starts
   the countdown.
-- Countdown length, sink rate and gain are config values. Config validation requires max
-  thrust to exceed the drone's weight.
+- Hold duration, sink rates, flare height and gain are in `FailsafeConfig`. The supervisor
+  rejects a drone whose max thrust doesn't exceed its weight, since it couldn't hold or descend
+  slowly.
 - `FlightFrame` carries the mode and the remaining countdown for telemetry and UI.
 
 ## Pilots
@@ -191,9 +195,11 @@ flowchart TB
 ```
 
 **Core contracts**
-- `IFlightGate { bool IsFlightAllowed { get; } }`. `FlightLoop` reads only this.
+- `IFlightGate { bool IsFlightAllowed { get; } }`. `FlightSupervisor` reads only this, never
+  why the gate is closed.
 - `AllOfFlightGate` combines gates. Future conditions (battery, geofence) are new gates added
-  in the composition root.
+  in the composition root. Until the grant holder exists, the installer registers
+  `PilotInControlGate` on its own.
 - `PilotInControlGate` passes while the router has an active input source that reports a
   connected pilot. A phone whose link drops stops reporting one.
 - `IInputProvider { bool IsConnected; ControlInput Read() }`. `IsConnected` is how a source

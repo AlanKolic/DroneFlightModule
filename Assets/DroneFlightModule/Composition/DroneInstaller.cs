@@ -28,6 +28,7 @@ namespace DroneFlightModule.Composition
         public void Install(IContainerBuilder builder)
         {
             builder.RegisterInstance(DroneConfig.Default);
+            builder.RegisterInstance(FailsafeConfig.Default);
             builder.RegisterInstance<ITerrain>(new FlatTerrain(groundHeight));
             builder.Register<IFlightController, ForceFlightController>(Lifetime.Singleton);
             builder.Register<DroneIntegrator>(Lifetime.Singleton)
@@ -44,12 +45,16 @@ namespace DroneFlightModule.Composition
                     return router;
                 },
                 Lifetime.Singleton);
+            builder.Register<IFlightGate, PilotInControlGate>(Lifetime.Singleton);
+            builder.Register<FlightSupervisor>(Lifetime.Singleton)
+                .WithParameter("gravity", DroneIntegrator.StandardGravity);
 
             builder.Register(
                 resolver => new FlightLoop(
                     droneId,
                     resolver.Resolve<InputRouter>(),
                     resolver.Resolve<IFlightController>(),
+                    resolver.Resolve<FlightSupervisor>(),
                     resolver.Resolve<DroneIntegrator>(),
                     resolver.Resolve<IAltitudeSensor>(),
                     DroneState.At(spawnPosition)),

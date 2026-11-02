@@ -44,11 +44,25 @@ namespace DroneFlightModule.Composition.Tests
         }
 
         [Test]
-        public void WithoutInput_DroneFallsAndLandsOnGroundHeight()
+        public void GateFollowsTheKeyboardPilotsConnection()
+        {
+            var gate = container.Resolve<IFlightGate>();
+            var router = container.Resolve<InputRouter>();
+
+            Assert.That(gate.IsFlightAllowed, Is.EqualTo(router.IsConnected));
+
+            router.Clear();
+            Assert.That(gate.IsFlightAllowed, Is.False);
+        }
+
+        // Whether the editor has a keyboard decides if the drone falls freely or goes through the
+        // failsafe hold and descent; either way it must end up resting on the ground height.
+        [Test]
+        public void WithoutInput_DroneEndsUpOnGroundHeight()
         {
             var loop = container.Resolve<FlightLoop>();
 
-            for (int i = 0; i < 200; i++)
+            for (int i = 0; i < 1500; i++)
             {
                 loop.Tick(0.02f);
             }
