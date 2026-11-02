@@ -49,6 +49,7 @@ Fixed tick ─► altitude sensor ─► pilot input (router) ─► flight cont
 |---|---|---|
 | `Core` | nothing (`noEngineReferences`) | Math, state, input routing, controllers, gates, failsafe supervisor, rangefinder, integrator, `FlightLoop` |
 | `Unity` | Core, Input System | Input-actions provider, drone view with interpolation, debug HUD, follow camera |
+| `Pilots` | Core | Pilot profiles and priorities, registry with a built-in guest, stats and their recorder |
 | `Composition` | Core, Unity, VContainer | `LifetimeScope`, installer, `FlightLoopRunner` (the only place Unity's clock reaches the sim) |
 | `Editor` | the above | Menu item that builds the prototype scene |
 | `*.Tests` | their target | EditMode tests |
@@ -91,15 +92,18 @@ variant is a new class plus one registration in `DroneInstaller`:
   0.3 m/s, a closed gate on the ground blocking takeoff.
 - **Unity**: input bindings through `InputTestFixture` (keyboard and gamepad, the shipped
   asset), the interpolator, the chase camera and the HUD text.
+- **Pilots**: 22 tests for profiles, the registry's guest and priority rules, and stats
+  recording across flights, takeovers and several drones.
 - **Composition**: the real container: resolution, gate wiring, hover, link loss to landing,
   and disposal disabling the controls.
 
 ## Status and roadmap
 
 Done (see the commit history): Core flight model, rangefinder, input routing, Unity runtime,
-gating and failsafe, velocity controller, Input System controls, debug HUD and follow camera.
+gating and failsafe, velocity controller, Input System controls, debug HUD, follow camera and
+the pilot registry with stats (not wired into the scene until the coordinator exists).
 
-Planned, in order (details in the architecture doc): pilot registry, authorization providers
+Planned, in order (details in the architecture doc): authorization providers
 (guest and a simulated server), a flight coordinator for several drones with priority
 takeover, a multi-drone scene, telemetry, a deletable dashboard, ScriptableObject config
 assets, and a phone remote (protocol, host, UDP, iOS and Android app).

@@ -178,15 +178,24 @@ stateDiagram-v2
 A small registry that defines who can fly and with what priority. Everything else asks it
 instead of carrying pilot data around.
 
-- **`PilotProfile { PilotId, DisplayName, Priority }`**. A higher number means higher priority.
-- **`IPilotRegistry { bool TryGet(PilotId, out PilotProfile) }`**, with `InMemoryPilotRegistry`
-  loaded from config first. A file- or server-backed registry later is a new implementation.
-- **The guest profile is built in** and always has the lowest priority. It is used only by the
-  local keyboard session (see authorization below).
+- **`PilotProfile { Id, DisplayName, Priority }`**. A higher number means higher priority.
+- **`IPilotRegistry { Profiles; bool TryGet(PilotId, out PilotProfile) }`**, with
+  `InMemoryPilotRegistry` built from a roster first. A file- or server-backed registry later is a
+  new implementation. `Profiles` lists the highest priority first, for the dashboard.
+- **The guest profile is built in** with priority 0, and registered pilots must have a higher
+  one, so the guest is always strictly the lowest. It can't be registered or replaced, and it is
+  used only by the local session (see authorization below).
 - **Unknown pilots are denied** before any provider is asked.
 - **`PilotStats { Flights, FlightTime, Takeovers, TimesPreempted, LastFlight }`**, kept in an
-  `IPilotStatsStore` (in-memory first). The coordinator's events update it: assigned, released,
-  took over, preempted. Flight time is accumulated in simulation time.
+  `IPilotStatsStore` (in-memory first). The store only stores; `PilotStatsRecorder` decides what
+  changes. The coordinator calls it on its events:
+  - assigned: `FlightStarted(pilot, drone, time)`
+  - released, revoked or disconnected: `FlightEnded(pilot, drone, time)`
+  - takeover: `Preempted` and `FlightEnded` for the old pilot, `TookOver` and `FlightStarted` for
+    the new one
+- Each pilot and drone pair is its own flight, so a pilot holding two drones logs two. Flight
+  time is accumulated in simulation time and counts finished flights only. Starting a flight
+  that's already open, or ending one that isn't, throws: those are coordinator bugs.
 
 ## Flight gate and authorization
 
