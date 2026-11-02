@@ -1,0 +1,21 @@
+{
+    "name": "DroneFlightModule.Editor",
+    "rootNamespace": "DroneFlightModule.Editor",
+    "references": [
+        "DroneFlightModule.Core",
+        "DroneFlightModule.Unity",
+        "DroneFlightModule.Composition",
+        "VContainer"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

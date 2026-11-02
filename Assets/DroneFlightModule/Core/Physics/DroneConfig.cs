@@ -42,7 +42,7 @@ namespace DroneFlightModule.Core
             MaxYawTorque = RequireNonNegative(maxYawTorque, nameof(maxYawTorque));
         }
 
-        private static float RequirePositive(float value, string name)
+        private float RequirePositive(float value, string name)
         {
             if (!(value > 0f) || float.IsInfinity(value))
             {
@@ -51,7 +51,7 @@ namespace DroneFlightModule.Core
             return value;
         }
 
-        private static float RequireNonNegative(float value, string name)
+        private float RequireNonNegative(float value, string name)
         {
             if (!(value >= 0f) || float.IsInfinity(value))
             {

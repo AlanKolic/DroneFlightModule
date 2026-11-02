@@ -17,9 +17,10 @@ namespace DroneFlightModule.Core
         {
             Move = new Vec3(Clamp(move.X), Clamp(move.Y), Clamp(move.Z));
             Yaw = Clamp(yaw);
-        }
 
-        private static float Clamp(float value) => float.IsNaN(value) ? 0f : Math.Clamp(value, -1f, 1f);
+            // A local function, because a struct constructor cannot call instance members before every field is set.
+            float Clamp(float value) => float.IsNaN(value) ? 0f : Math.Clamp(value, -1f, 1f);
+        }
 
         public override string ToString() => $"move {Move} yaw {Yaw:0.###}";
     }

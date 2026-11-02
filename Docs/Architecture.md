@@ -23,12 +23,12 @@ extensibility, boundary separation and testability.
 ```mermaid
 flowchart TB
     subgraph Roots["Composition roots and UI (Unity)"]
-        Comp["Composition<br/>fleet scope, drone scopes"]
+        Comp["Composition<br/>fleet scope, drone scopes, runner"]
         UI["UI<br/>Fleet dashboard, child scope"]
         Mobile["Mobile app<br/>Sticks, connect screen"]
     end
     subgraph Adapters["Unity adapters"]
-        Unity["Unity<br/>Keyboard, runner, view, UDP"]
+        Unity["Unity<br/>Keyboard, view, UDP"]
     end
     subgraph Services["Services (pure C#)"]
         Coord["Coordination"]
@@ -60,9 +60,10 @@ flowchart TB
 | `DroneFlightModule.Telemetry` | Core | Recorder sampling `FlightLoop.Ticked`, `ITelemetrySink` implementations |
 | `DroneFlightModule.Remote.Protocol` | nothing | Messages, binary codec, `ITransport`, loopback transport |
 | `DroneFlightModule.Remote.Host` | Core, Coordination, Remote.Protocol | Remote pilot sessions, `RemoteInputProvider`, link-loss timeout (network telemetry sink later) |
-| `DroneFlightModule.Unity` | Core, Remote.Protocol, Input System | Keyboard provider, `FlightLoopRunner`, cube view, UDP transport |
-| `DroneFlightModule.Composition` | everything except UI, plus VContainer | Fleet `LifetimeScope`, one child scope per drone, installers |
+| `DroneFlightModule.Unity` | Core, Remote.Protocol, Input System | Keyboard provider, smoothed drone view, Core-to-Unity conversions, UDP transport |
+| `DroneFlightModule.Composition` | everything except UI, plus VContainer | Fleet `LifetimeScope`, one child scope per drone, installers, `FlightLoopRunner` (the only VContainer-facing adapter) |
 | `DroneFlightModule.UI` | Core, Coordination, Pilots, Telemetry, VContainer | Fleet dashboard (IMGUI) in its own child scope |
+| `DroneFlightModule.Editor` | Core, Unity, Composition, VContainer | Editor-only tools, such as the menu item that builds the prototype scene |
 | `*.Tests` (one per assembly) | Its target + NUnit | Edit-mode tests |
 
 Nothing references `UI`. Its child scope pulls what it reads from the parent scope, so
@@ -100,6 +101,9 @@ flowchart TB
 - **Sensors** are sampled from the true state at the start of each tick. The reading goes into
   `FlightFrame`.
 - **Observers** (telemetry, view) only read. They never feed back into the loop.
+- **The view is smoothed:** `DroneView` keeps the last two ticked states and blends between them
+  by how far the frame is into the current fixed step, so it renders up to one tick behind the
+  simulation without stutter. Smoothing lives only in the view; the simulation never sees it.
 
 ## Terrain and altitude sensor
 
@@ -394,7 +398,8 @@ Each commit is small, logically separate and includes its own tests.
 3. **Altitude sensor:** `IAltitudeSensor`, `AltitudeReading`, `RangefinderAltitudeSensor` (max
    range, update rate, no noise), sampled each tick and carried in `FlightFrame`.
 4. **Input routing:** `InputRouter` with pilot identity and connected-pilot reporting.
-5. **Unity runtime:** keyboard provider, `FlightLoopRunner`, cube view, ground plane visual,
+5. **Unity runtime:** keyboard provider (WASD move, Space climb, Q/E yaw), `FlightLoopRunner`,
+   smoothed cube view, ground plane visual, editor menu that builds the scene,
    `LifetimeScope`, scene. One drone, flying without a gate.
 6. **Gating and failsafe:** `IFlightGate`, `AllOfFlightGate`, `PilotInControlGate` and
    `FlightSupervisor` (hold, descent with flare from the altitude reading, fallback for an
@@ -410,18 +415,18 @@ Each commit is small, logically separate and includes its own tests.
     keys, destroy and exit cancellation.
 11. **Telemetry:** assembly, recorder per drone, in-memory sink.
 12. **Dashboard:** UI assembly, child scope, fleet view, deletion check.
-13. **Remote protocol:** messages, codec, `ITransport`, loopback.
-14. **Remote host:** remote sessions, `RemoteInputProvider`, link-loss timeout, coordinator
-    requests and results, end-to-end loopback test.
-15. **UDP transport:** threading and cancellation, wired into the simulator scene.
-16. **Mobile app:** scene, composition root, connect screen, sticks, request and release, iOS
-    and Android Build Profiles.
-17. **Config assets:** ScriptableObjects in the Unity layer for the default values: drone frame
+13. **Config assets:** ScriptableObjects in the Unity layer for the default values: drone frame
     (`DroneConfig`), rangefinder, supervisor timings, fleet layout, simulated server latency and
     the pilot roster. Each asset only holds serialized fields and maps them to the plain Core
     type, so Core keeps its constructors and validation and never sees Unity. The composition
     scopes take the assets as serialized fields and register the mapped Core objects in place of
     the hard-coded defaults. Tests check that the shipped assets map to valid Core config.
+14. **Remote protocol:** messages, codec, `ITransport`, loopback.
+15. **Remote host:** remote sessions, `RemoteInputProvider`, link-loss timeout, coordinator
+    requests and results, end-to-end loopback test.
+16. **UDP transport:** threading and cancellation, wired into the simulator scene.
+17. **Mobile app:** scene, composition root, connect screen, sticks, request and release, iOS
+    and Android Build Profiles.
 
 Later: **telemetry to the phone** (network sink, `TelemetryPacket`, readout).
 
@@ -442,5 +447,5 @@ Later: **telemetry to the phone** (network sink, `TelemetryPacket`, readout).
 - **Takeover:** control is handed over instantly, even mid-flight. The drone doesn't need to
   land or hold first.
 - **Default config values:** hard-coded defaults in Core (such as `DroneConfig.Default`) until
-  the last step, then ScriptableObject assets in Unity. Tests and headless runs keep using the
+  the config assets step, then ScriptableObject assets in Unity. Tests and headless runs keep using the
   Core defaults.
