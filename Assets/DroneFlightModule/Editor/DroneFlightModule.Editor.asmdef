@@ -5,7 +5,8 @@
         "DroneFlightModule.Core",
         "DroneFlightModule.Unity",
         "DroneFlightModule.Composition",
-        "VContainer"
+        "VContainer",
+        "Unity.InputSystem"
     ],
     "includePlatforms": [
         "Editor"

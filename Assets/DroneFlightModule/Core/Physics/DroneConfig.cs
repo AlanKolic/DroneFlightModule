@@ -1,5 +1,3 @@
-using System;
-
 namespace DroneFlightModule.Core
 {
     /// <summary>
@@ -15,6 +13,8 @@ namespace DroneFlightModule.Core
             maxThrust: 30f,
             maxLateralForce: 10f,
             maxYawTorque: 0.5f);
+
+        private readonly ArgumentGuard guard = new ArgumentGuard();
 
         public float Mass { get; }
         public float YawInertia { get; }
@@ -33,31 +33,13 @@ namespace DroneFlightModule.Core
             float maxLateralForce,
             float maxYawTorque)
         {
-            Mass = RequirePositive(mass, nameof(mass));
-            YawInertia = RequirePositive(yawInertia, nameof(yawInertia));
-            LinearDrag = RequireNonNegative(linearDrag, nameof(linearDrag));
-            AngularDrag = RequireNonNegative(angularDrag, nameof(angularDrag));
-            MaxThrust = RequireNonNegative(maxThrust, nameof(maxThrust));
-            MaxLateralForce = RequireNonNegative(maxLateralForce, nameof(maxLateralForce));
-            MaxYawTorque = RequireNonNegative(maxYawTorque, nameof(maxYawTorque));
-        }
-
-        private float RequirePositive(float value, string name)
-        {
-            if (!(value > 0f) || float.IsInfinity(value))
-            {
-                throw new ArgumentOutOfRangeException(name, value, "Must be positive and finite.");
-            }
-            return value;
-        }
-
-        private float RequireNonNegative(float value, string name)
-        {
-            if (!(value >= 0f) || float.IsInfinity(value))
-            {
-                throw new ArgumentOutOfRangeException(name, value, "Must be non-negative and finite.");
-            }
-            return value;
+            Mass = guard.RequirePositive(mass, nameof(mass));
+            YawInertia = guard.RequirePositive(yawInertia, nameof(yawInertia));
+            LinearDrag = guard.RequireNonNegative(linearDrag, nameof(linearDrag));
+            AngularDrag = guard.RequireNonNegative(angularDrag, nameof(angularDrag));
+            MaxThrust = guard.RequireNonNegative(maxThrust, nameof(maxThrust));
+            MaxLateralForce = guard.RequireNonNegative(maxLateralForce, nameof(maxLateralForce));
+            MaxYawTorque = guard.RequireNonNegative(maxYawTorque, nameof(maxYawTorque));
         }
     }
 }

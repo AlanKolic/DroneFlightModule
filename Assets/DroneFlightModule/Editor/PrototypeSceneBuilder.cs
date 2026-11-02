@@ -1,9 +1,12 @@
+using System;
 using System.Linq;
 using DroneFlightModule.Composition;
 using DroneFlightModule.Unity;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.InputSystem;
+using Object = UnityEngine.Object;
 
 namespace DroneFlightModule.Editor
 {
@@ -14,6 +17,7 @@ namespace DroneFlightModule.Editor
     public sealed class PrototypeSceneBuilder
     {
         private const string ScenePath = "Assets/Scenes/DronePrototype.unity";
+        private const string ControlsPath = "Assets/DroneFlightModule/Unity/Input/DroneControls.inputactions";
 
         // Unity menu items must be static, so this only hands over to an instance.
         [MenuItem("DroneFlightModule/Create Prototype Scene")]
@@ -31,21 +35,31 @@ namespace DroneFlightModule.Editor
 
             var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
 
-            CreateCamera();
+            var controls = AssetDatabase.LoadAssetAtPath<InputActionAsset>(ControlsPath);
+            if (controls == null)
+            {
+                throw new InvalidOperationException($"Input actions asset not found at {ControlsPath}.");
+            }
+
+            var drone = CreateDrone();
+            CreateCamera(drone.transform);
             CreateLight();
             var ground = CreateGround();
-            var drone = CreateDrone();
-            CreateScope(drone, ground.transform);
+            CreateScope(drone, ground.transform, controls);
 
             EditorSceneManager.SaveScene(scene, ScenePath);
             AddToBuildSettings();
         }
 
-        private void CreateCamera()
+        private void CreateCamera(Transform target)
         {
-            var camera = new GameObject("Main Camera", typeof(Camera), typeof(AudioListener));
+            var camera = new GameObject("Main Camera", typeof(Camera), typeof(AudioListener), typeof(FollowCamera));
             camera.tag = "MainCamera";
-            camera.transform.SetPositionAndRotation(new Vector3(0f, 6f, -12f), Quaternion.Euler(20f, 0f, 0f));
+            camera.transform.SetPositionAndRotation(new Vector3(0f, 2.5f, -6f), Quaternion.Euler(15f, 0f, 0f));
+
+            var serialized = new SerializedObject(camera.GetComponent<FollowCamera>());
+            SetReference(serialized, "target", target);
+            serialized.ApplyModifiedPropertiesWithoutUndo();
         }
 
         private void CreateLight()
@@ -80,15 +94,29 @@ namespace DroneFlightModule.Editor
             return drone.GetComponent<DroneView>();
         }
 
-        private void CreateScope(DroneView drone, Transform ground)
+        private void CreateScope(DroneView drone, Transform ground, InputActionAsset controls)
         {
             var scopeObject = new GameObject("Drone Scope");
+            var hud = scopeObject.AddComponent<FlightDebugHud>();
             var scope = scopeObject.AddComponent<DroneLifetimeScope>();
 
             var serialized = new SerializedObject(scope);
-            serialized.FindProperty("droneView").objectReferenceValue = drone;
-            serialized.FindProperty("groundPlane").objectReferenceValue = ground;
+            SetReference(serialized, "controls", controls);
+            SetReference(serialized, "droneView", drone);
+            SetReference(serialized, "debugHud", hud);
+            SetReference(serialized, "groundPlane", ground);
             serialized.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        // Fails with the field name instead of a null reference when a serialized field is renamed.
+        private void SetReference(SerializedObject serialized, string field, Object value)
+        {
+            var property = serialized.FindProperty(field);
+            if (property == null)
+            {
+                throw new InvalidOperationException($"{serialized.targetObject.GetType().Name} has no serialized field '{field}'.");
+            }
+            property.objectReferenceValue = value;
         }
 
         // The simulation owns all physics, so primitives keep only their mesh and renderer.
@@ -100,15 +128,13 @@ namespace DroneFlightModule.Editor
             return primitive;
         }
 
+        // The prototype scene goes first, so it is the one a build starts in.
         private void AddToBuildSettings()
         {
-            var scenes = EditorBuildSettings.scenes.ToList();
-            if (scenes.Any(scene => scene.path == ScenePath))
-            {
-                return;
-            }
-            scenes.Add(new EditorBuildSettingsScene(ScenePath, true));
+            var scenes = EditorBuildSettings.scenes.Where(scene => scene.path != ScenePath).ToList();
+            scenes.Insert(0, new EditorBuildSettingsScene(ScenePath, true));
             EditorBuildSettings.scenes = scenes.ToArray();
+            AssetDatabase.SaveAssets();
         }
     }
 }

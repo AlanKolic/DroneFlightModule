@@ -16,6 +16,8 @@ namespace DroneFlightModule.Core
             fallbackSinkRate: 0.5f,
             verticalSpeedGain: 4f);
 
+        private readonly ArgumentGuard guard = new ArgumentGuard();
+
         public float HoldDuration { get; }
         public float DescentSinkRate { get; }
         public float TouchdownSinkRate { get; }
@@ -31,12 +33,12 @@ namespace DroneFlightModule.Core
             float fallbackSinkRate,
             float verticalSpeedGain)
         {
-            HoldDuration = RequireNonNegative(holdDuration, nameof(holdDuration));
-            DescentSinkRate = RequirePositive(descentSinkRate, nameof(descentSinkRate));
-            TouchdownSinkRate = RequirePositive(touchdownSinkRate, nameof(touchdownSinkRate));
-            FlareHeight = RequirePositive(flareHeight, nameof(flareHeight));
-            FallbackSinkRate = RequirePositive(fallbackSinkRate, nameof(fallbackSinkRate));
-            VerticalSpeedGain = RequirePositive(verticalSpeedGain, nameof(verticalSpeedGain));
+            HoldDuration = guard.RequireNonNegative(holdDuration, nameof(holdDuration));
+            DescentSinkRate = guard.RequirePositive(descentSinkRate, nameof(descentSinkRate));
+            TouchdownSinkRate = guard.RequirePositive(touchdownSinkRate, nameof(touchdownSinkRate));
+            FlareHeight = guard.RequirePositive(flareHeight, nameof(flareHeight));
+            FallbackSinkRate = guard.RequirePositive(fallbackSinkRate, nameof(fallbackSinkRate));
+            VerticalSpeedGain = guard.RequirePositive(verticalSpeedGain, nameof(verticalSpeedGain));
             if (touchdownSinkRate > descentSinkRate)
             {
                 throw new ArgumentOutOfRangeException(
@@ -44,24 +46,6 @@ namespace DroneFlightModule.Core
                     touchdownSinkRate,
                     "Must not exceed the descent sink rate.");
             }
-        }
-
-        private float RequirePositive(float value, string name)
-        {
-            if (!(value > 0f) || float.IsInfinity(value))
-            {
-                throw new ArgumentOutOfRangeException(name, value, "Must be positive and finite.");
-            }
-            return value;
-        }
-
-        private float RequireNonNegative(float value, string name)
-        {
-            if (!(value >= 0f) || float.IsInfinity(value))
-            {
-                throw new ArgumentOutOfRangeException(name, value, "Must be non-negative and finite.");
-            }
-            return value;
         }
     }
 }

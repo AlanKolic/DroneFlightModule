@@ -12,9 +12,8 @@ namespace DroneFlightModule.Core
         private const double TimeTolerance = 1e-6;
 
         private readonly IFlightGate gate;
-        private readonly DroneConfig drone;
         private readonly FailsafeConfig config;
-        private readonly float gravity;
+        private readonly VerticalSpeedController verticalSpeed;
 
         public FlightSupervisor(
             IFlightGate gate,
@@ -23,17 +22,8 @@ namespace DroneFlightModule.Core
             float gravity = DroneIntegrator.StandardGravity)
         {
             this.gate = gate ?? throw new ArgumentNullException(nameof(gate));
-            this.drone = drone ?? throw new ArgumentNullException(nameof(drone));
             this.config = config ?? throw new ArgumentNullException(nameof(config));
-            if (!(gravity >= 0f) || float.IsInfinity(gravity))
-            {
-                throw new ArgumentOutOfRangeException(nameof(gravity), gravity, "Must be non-negative and finite.");
-            }
-            if (!(drone.MaxThrust > drone.Mass * gravity))
-            {
-                throw new ArgumentException("Max thrust must exceed the drone's weight, or it cannot hold or descend slowly.", nameof(drone));
-            }
-            this.gravity = gravity;
+            verticalSpeed = new VerticalSpeedController(drone, config.VerticalSpeedGain, gravity);
         }
 
         public FlightMode Mode { get; private set; } = FlightMode.Grounded;
@@ -75,8 +65,10 @@ namespace DroneFlightModule.Core
                 }
             }
 
+            // Lateral force and yaw torque are zero; drag brings any drift to rest.
             float targetVerticalSpeed = Mode == FlightMode.Holding ? 0f : -SinkRate(altitude);
-            return VerticalSpeedCommand(targetVerticalSpeed, state);
+            float thrust = verticalSpeed.Thrust(targetVerticalSpeed, state.Velocity.Y);
+            return new ForceCommand(new Vec3(0f, thrust, 0f), 0f);
         }
 
         private float SinkRate(in AltitudeReading altitude)
@@ -87,18 +79,6 @@ namespace DroneFlightModule.Core
             }
             float flare = Math.Clamp(altitude.HeightAboveGround / config.FlareHeight, 0f, 1f);
             return config.TouchdownSinkRate + (config.DescentSinkRate - config.TouchdownSinkRate) * flare;
-        }
-
-        // Weight and vertical drag are cancelled, so the drone settles exactly on the target speed.
-        // Lateral force and yaw torque are zero; drag brings any drift to rest.
-        private ForceCommand VerticalSpeedCommand(float targetVerticalSpeed, in DroneState state)
-        {
-            float verticalSpeed = state.Velocity.Y;
-            float thrust = drone.Mass * gravity
-                + drone.LinearDrag * verticalSpeed
-                + drone.Mass * config.VerticalSpeedGain * (targetVerticalSpeed - verticalSpeed);
-            thrust = Math.Clamp(thrust, 0f, drone.MaxThrust);
-            return new ForceCommand(new Vec3(0f, thrust, 0f), 0f);
         }
     }
 }

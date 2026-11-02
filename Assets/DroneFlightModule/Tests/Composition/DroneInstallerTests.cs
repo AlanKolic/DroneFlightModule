@@ -1,28 +1,47 @@
+using System.IO;
 using DroneFlightModule.Core;
+using DroneFlightModule.Unity;
 using NUnit.Framework;
 using UnityEngine;
+using UnityEngine.InputSystem;
 using VContainer;
 
 namespace DroneFlightModule.Composition.Tests
 {
-    public class DroneInstallerTests
+    public class DroneInstallerTests : InputTestFixture
     {
+        private const string ControlsPath = "Assets/DroneFlightModule/Unity/Input/DroneControls.inputactions";
+        private const float DeltaTime = 0.02f;
+
         private static readonly DroneId TestDrone = new DroneId("drone-1");
 
+        private InputActionAsset controls;
         private IObjectResolver container;
 
-        [SetUp]
-        public void SetUp()
+        public override void Setup()
         {
+            base.Setup();
+            InputSystem.AddDevice<Keyboard>();
+            controls = InputActionAsset.FromJson(File.ReadAllText(ControlsPath));
             var builder = new ContainerBuilder();
-            new DroneInstaller(TestDrone, new Vec3(0f, 5f, 0f), groundHeight: 1f).Install(builder);
+            new DroneInstaller(TestDrone, new Vec3(0f, 5f, 0f), groundHeight: 1f, controls).Install(builder);
             container = builder.Build();
         }
 
-        [TearDown]
-        public void TearDown()
+        public override void TearDown()
         {
             container.Dispose();
+            Object.DestroyImmediate(controls);
+            base.TearDown();
+        }
+
+        private void Run(FlightLoop loop, float seconds)
+        {
+            int ticks = Mathf.RoundToInt(seconds / DeltaTime);
+            for (int i = 0; i < ticks; i++)
+            {
+                loop.Tick(DeltaTime);
+            }
         }
 
         [Test]
@@ -36,37 +55,47 @@ namespace DroneFlightModule.Composition.Tests
         }
 
         [Test]
-        public void AssignsLocalKeyboardPilot()
+        public void AssignsLocalPilot()
         {
             var router = container.Resolve<InputRouter>();
 
-            Assert.That(router.ActivePilotId, Is.EqualTo(DroneInstaller.LocalKeyboardPilot));
+            Assert.That(router.ActivePilotId, Is.EqualTo(DroneInstaller.LocalPilot));
+            Assert.That(router.IsConnected, Is.True);
         }
 
         [Test]
-        public void GateFollowsTheKeyboardPilotsConnection()
+        public void GateFollowsTheLocalPilotsLink()
         {
             var gate = container.Resolve<IFlightGate>();
-            var router = container.Resolve<InputRouter>();
+            var link = container.Resolve<DisconnectableInputProvider>();
 
-            Assert.That(gate.IsFlightAllowed, Is.EqualTo(router.IsConnected));
+            Assert.That(gate.IsFlightAllowed, Is.True);
 
-            router.Clear();
+            link.IsLinkCut = true;
             Assert.That(gate.IsFlightAllowed, Is.False);
         }
 
-        // Whether the editor has a keyboard decides if the drone falls freely or goes through the
-        // failsafe hold and descent; either way it must end up resting on the ground height.
         [Test]
-        public void WithoutInput_DroneEndsUpOnGroundHeight()
+        public void PilotConnected_CentredSticks_DroneHovers()
         {
             var loop = container.Resolve<FlightLoop>();
 
-            for (int i = 0; i < 1500; i++)
-            {
-                loop.Tick(0.02f);
-            }
+            Run(loop, 3f);
 
+            Assert.That(loop.Mode, Is.EqualTo(FlightMode.Piloted));
+            Assert.That(loop.State.Position.Y, Is.EqualTo(5f).Within(0.01f));
+        }
+
+        [Test]
+        public void LinkCut_DroneHoldsThenLandsOnGroundHeight()
+        {
+            var loop = container.Resolve<FlightLoop>();
+            container.Resolve<DisconnectableInputProvider>().IsLinkCut = true;
+
+            Run(loop, 5f);
+            Assert.That(loop.Mode, Is.EqualTo(FlightMode.Holding));
+
+            Run(loop, 25f);
             Assert.That(loop.State.IsGrounded, Is.True);
             Assert.That(loop.State.Position.Y, Is.EqualTo(1f));
         }
@@ -80,6 +109,19 @@ namespace DroneFlightModule.Composition.Tests
             runner.FixedTick();
 
             Assert.That(loop.Time, Is.EqualTo(Time.fixedDeltaTime).Within(1e-6));
+        }
+
+        [Test]
+        public void DisposingTheContainer_DisablesTheControls()
+        {
+            container.Resolve<FlightLoop>();
+            container.Resolve<LinkLossToggle>();
+            Assert.That(controls.FindActionMap("Flight").enabled, Is.True);
+
+            container.Dispose();
+
+            Assert.That(controls.FindActionMap("Flight").enabled, Is.False);
+            Assert.That(controls.FindAction("Debug/ToggleLink").enabled, Is.False);
         }
     }
 }

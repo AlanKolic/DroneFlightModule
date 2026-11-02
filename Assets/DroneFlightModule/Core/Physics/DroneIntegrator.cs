@@ -12,6 +12,7 @@ namespace DroneFlightModule.Core
 
         private const float TwoPi = 2f * MathF.PI;
 
+        private readonly ArgumentGuard guard = new ArgumentGuard();
         private readonly DroneConfig config;
         private readonly ITerrain terrain;
         private readonly float gravity;
@@ -20,11 +21,7 @@ namespace DroneFlightModule.Core
         {
             this.config = config ?? throw new ArgumentNullException(nameof(config));
             this.terrain = terrain ?? throw new ArgumentNullException(nameof(terrain));
-            if (!(gravity >= 0f) || float.IsInfinity(gravity))
-            {
-                throw new ArgumentOutOfRangeException(nameof(gravity), gravity, "Must be non-negative and finite.");
-            }
-            this.gravity = gravity;
+            this.gravity = guard.RequireNonNegative(gravity, nameof(gravity));
         }
 
         public DroneState Step(in DroneState state, in ForceCommand command, float deltaTime)

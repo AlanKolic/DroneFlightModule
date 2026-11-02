@@ -6,6 +6,8 @@
         "DroneFlightModule.Unity",
         "DroneFlightModule.Composition",
         "VContainer",
+        "Unity.InputSystem",
+        "Unity.InputSystem.TestFramework",
         "UnityEngine.TestRunner",
         "UnityEditor.TestRunner"
     ],

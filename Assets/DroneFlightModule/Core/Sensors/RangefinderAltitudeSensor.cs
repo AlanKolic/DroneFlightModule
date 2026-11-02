@@ -14,6 +14,7 @@ namespace DroneFlightModule.Core
         // Absorbs float drift when the tick step divides the sample period exactly.
         private const double TimeTolerance = 1e-6;
 
+        private readonly ArgumentGuard guard = new ArgumentGuard();
         private readonly ITerrain terrain;
         private readonly float maxRange;
         private readonly double samplePeriod;
@@ -28,16 +29,8 @@ namespace DroneFlightModule.Core
             float updateRate = DefaultUpdateRate)
         {
             this.terrain = terrain ?? throw new ArgumentNullException(nameof(terrain));
-            if (!(maxRange > 0f) || float.IsInfinity(maxRange))
-            {
-                throw new ArgumentOutOfRangeException(nameof(maxRange), maxRange, "Must be positive and finite.");
-            }
-            if (!(updateRate > 0f) || float.IsInfinity(updateRate))
-            {
-                throw new ArgumentOutOfRangeException(nameof(updateRate), updateRate, "Must be positive and finite.");
-            }
-            this.maxRange = maxRange;
-            samplePeriod = 1.0 / updateRate;
+            this.maxRange = guard.RequirePositive(maxRange, nameof(maxRange));
+            samplePeriod = 1.0 / guard.RequirePositive(updateRate, nameof(updateRate));
         }
 
         public AltitudeReading Read(in DroneState truth, double time)

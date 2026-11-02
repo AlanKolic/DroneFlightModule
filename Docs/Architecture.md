@@ -28,7 +28,7 @@ flowchart TB
         Mobile["Mobile app<br/>Sticks, connect screen"]
     end
     subgraph Adapters["Unity adapters"]
-        Unity["Unity<br/>Keyboard, view, UDP"]
+        Unity["Unity<br/>Input actions, view, HUD, UDP"]
     end
     subgraph Services["Services (pure C#)"]
         Coord["Coordination"]
@@ -60,8 +60,8 @@ flowchart TB
 | `DroneFlightModule.Telemetry` | Core | Recorder sampling `FlightLoop.Ticked`, `ITelemetrySink` implementations |
 | `DroneFlightModule.Remote.Protocol` | nothing | Messages, binary codec, `ITransport`, loopback transport |
 | `DroneFlightModule.Remote.Host` | Core, Coordination, Remote.Protocol | Remote pilot sessions, `RemoteInputProvider`, link-loss timeout (network telemetry sink later) |
-| `DroneFlightModule.Unity` | Core, Remote.Protocol, Input System | Keyboard provider, smoothed drone view, Core-to-Unity conversions, UDP transport |
-| `DroneFlightModule.Composition` | everything except UI, plus VContainer | Fleet `LifetimeScope`, one child scope per drone, installers, `FlightLoopRunner` (the only VContainer-facing adapter) |
+| `DroneFlightModule.Unity` | Core, Remote.Protocol, Input System | Input-actions provider (keyboard and gamepad), link-loss debug toggle, smoothed drone view, debug HUD, follow camera, Core-to-Unity conversions, UDP transport |
+| `DroneFlightModule.Composition` | everything except UI, plus VContainer and Input System | Fleet `LifetimeScope`, one child scope per drone, installers, `FlightLoopRunner` (the only VContainer-facing adapter) |
 | `DroneFlightModule.UI` | Core, Coordination, Pilots, Telemetry, VContainer | Fleet dashboard (IMGUI) in its own child scope |
 | `DroneFlightModule.Editor` | Core, Unity, Composition, VContainer | Editor-only tools, such as the menu item that builds the prototype scene |
 | `*.Tests` (one per assembly) | Its target + NUnit | Edit-mode tests |
@@ -92,9 +92,19 @@ flowchart TB
   (`Time.fixedDeltaTime`); tests and headless sims call it from a plain loop.
 - **Input** is a `ControlInput`: local-frame move vector (X strafe, Y climb, Z forward) and yaw,
   each clamped to [-1, 1].
-- **Force model:** the controller rotates the local move vector by the drone's yaw into a world
-  force and maps yaw input to a torque about the vertical axis. There is no gravity
-  compensation, so the drone must be pushed up.
+- **Controller:** `IFlightController` turns input into a force command. The scene uses
+  `VelocityFlightController`: the sticks set target velocities in the drone's heading frame
+  (up to 8 m/s across, 3 m/s climb and 1.5 rad/s yaw), and centred sticks hold position and
+  altitude. Each axis is a proportional controller that cancels drag, and the vertical one also
+  cancels weight; `VerticalSpeedController` is shared with the failsafe. The simpler
+  `ForceFlightController` (input scales force directly, no gravity compensation) is kept as a
+  second implementation.
+- **Controls** live in `DroneControls.inputactions`, not in code: WASD or the right stick to
+  move, Space and Ctrl or the left stick's Y to climb and descend, Q and E or the left stick's X
+  to yaw. `L` or Select cuts and restores the local pilot's link, so the failsafe can be
+  triggered on purpose.
+- **Debug view:** a follow camera keeps the drone in frame, and an IMGUI readout shows the mode,
+  hold countdown, pilot link, measured height, speed and heading.
 - **Integration:** semi-implicit Euler over position, velocity, yaw and yaw rate, with gravity,
   linear and angular drag, and ground contact against `ITerrain`. Contact clamps height, cancels
   downward velocity and sets `DroneState.IsGrounded`.
@@ -299,7 +309,7 @@ break the Core boundary. All async code uses `Task` and `CancellationToken`.
 - One child scope per drone, created from a fleet config (drone id, spawn position, frame
   config). It holds that drone's loop, router, supervisor, sensor, grant holder and cube.
 - The scene has 2–3 drones and a ground plane.
-- The keyboard is a local session: guest by default, with a debug key to sign in as a registered
+- The local pilot (keyboard or gamepad) is a local session: guest by default, with a debug key to sign in as a registered
   high-priority pilot through the simulated server.
 - **Keys:**
   - request any drone
@@ -363,7 +373,7 @@ break the Core boundary. All async code uses `Task` and `CancellationToken`.
 
 ## Testing strategy
 
-- **Core:** unit tests for the controller, integrator, router, gates and supervisor. Also
+- **Core:** unit tests for the controllers, integrator, router, gates and supervisor. Also
   closed-loop tests driven by a scripted input provider and a plain `Tick` loop, for example
   "falls with no input" and "descends after exactly 10 s".
 - **Sensor and landing:**
@@ -410,28 +420,32 @@ Each commit is small, logically separate and includes its own tests.
 6. **Gating and failsafe:** `IFlightGate`, `AllOfFlightGate`, `PilotInControlGate` and
    `FlightSupervisor` (hold, descent with flare from the altitude reading, fallback for an
    invalid reading, touchdown from the contact flag).
-7. **Pilots:** `PilotProfile`, `IPilotRegistry` and in-memory registry, built-in guest profile,
+7. **Flight feel and project cleanup:** `VelocityFlightController` with the shared
+   `VerticalSpeedController`, Input System actions asset (keyboard and gamepad) replacing the
+   hard-coded keyboard provider, link-loss debug toggle, debug HUD, follow camera, README,
+   template scene and unused packages removed.
+8. **Pilots:** `PilotProfile`, `IPilotRegistry` and in-memory registry, built-in guest profile,
    `PilotStats` and stats store.
-8. **Authorization:** providers (guest for local only, simulated server), revocable grant,
+9. **Authorization:** providers (guest for local only, simulated server), revocable grant,
    `DroneGrantHolder` gate.
-9. **Flight coordinator:** `PilotSession`, drone registry, request pipeline,
-   `IAssignmentPolicy` and `PriorityAssignmentPolicy`, direct takeover, release, events and
-   stats recording.
-10. **Fleet in Unity:** fleet scope and one child scope per drone, 2–3 cubes, keyboard session,
+10. **Flight coordinator:** `PilotSession`, drone registry, request pipeline,
+    `IAssignmentPolicy` and `PriorityAssignmentPolicy`, direct takeover, release, events and
+    stats recording.
+11. **Fleet in Unity:** fleet scope and one child scope per drone, 2–3 cubes, keyboard session,
     keys, destroy and exit cancellation.
-11. **Telemetry:** assembly, recorder per drone, in-memory sink.
-12. **Dashboard:** UI assembly, child scope, fleet view, deletion check.
-13. **Config assets:** ScriptableObjects in the Unity layer for the default values: drone frame
-    (`DroneConfig`), rangefinder, supervisor timings, fleet layout, simulated server latency and
-    the pilot roster. Each asset only holds serialized fields and maps them to the plain Core
+12. **Telemetry:** assembly, recorder per drone, in-memory sink.
+13. **Dashboard:** UI assembly, child scope, fleet view, deletion check.
+14. **Config assets:** ScriptableObjects in the Unity layer for the default values: drone frame
+    (`DroneConfig`), velocity controller, rangefinder, supervisor timings, fleet layout,
+    simulated server latency and the pilot roster. Each asset only holds serialized fields and maps them to the plain Core
     type, so Core keeps its constructors and validation and never sees Unity. The composition
     scopes take the assets as serialized fields and register the mapped Core objects in place of
     the hard-coded defaults. Tests check that the shipped assets map to valid Core config.
-14. **Remote protocol:** messages, codec, `ITransport`, loopback.
-15. **Remote host:** remote sessions, `RemoteInputProvider`, link-loss timeout, coordinator
+15. **Remote protocol:** messages, codec, `ITransport`, loopback.
+16. **Remote host:** remote sessions, `RemoteInputProvider`, link-loss timeout, coordinator
     requests and results, end-to-end loopback test.
-16. **UDP transport:** threading and cancellation, wired into the simulator scene.
-17. **Mobile app:** scene, composition root, connect screen, sticks, request and release, iOS
+17. **UDP transport:** threading and cancellation, wired into the simulator scene.
+18. **Mobile app:** scene, composition root, connect screen, sticks, request and release, iOS
     and Android Build Profiles.
 
 Later: **telemetry to the phone** (network sink, `TelemetryPacket`, readout).

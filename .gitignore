@@ -76,3 +76,6 @@ crashlytics-build.properties
 
 # macOS Finder metadata
 .DS_Store
+
+# Rider workspace
+.idea/
