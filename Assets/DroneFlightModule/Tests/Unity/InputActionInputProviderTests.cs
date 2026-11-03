@@ -133,13 +133,14 @@ namespace DroneFlightModule.Unity.Tests
         }
 
         [Test]
-        public void AfterDispose_ReadsZero()
+        public void AfterDispose_ReadsZeroAndReportsDisconnected()
         {
             Press(keyboard.wKey);
 
             provider.Dispose();
 
             Assert.That(provider.Read(), Is.EqualTo(ControlInput.Zero));
+            Assert.That(provider.IsConnected, Is.False);
         }
 
         [Test]

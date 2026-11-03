@@ -13,12 +13,11 @@ namespace DroneFlightModule.Pilots
 
         public static readonly PilotProfile Guest = new PilotProfile(new PilotId("guest"), "Guest", GuestPriority);
 
+        private readonly ArgumentGuard guard = new ArgumentGuard();
+
         public PilotProfile(PilotId id, string displayName, int priority)
         {
-            if (id.IsEmpty)
-            {
-                throw new ArgumentException("Pilot id is required.", nameof(id));
-            }
+            guard.RequireId(id, nameof(id));
             if (string.IsNullOrWhiteSpace(displayName))
             {
                 throw new ArgumentException("Display name is required.", nameof(displayName));

@@ -38,6 +38,14 @@ namespace DroneFlightModule.Unity.Tests
         }
 
         [Test]
+        public void YawJustLeftOfNorth_ShowsZeroHeading()
+        {
+            var text = readout.Format(Frame(FlightMode.Piloted, 0.0, new AltitudeReading(3f, true, 1.0), yaw: -0.0003f), Pilot, true);
+
+            StringAssert.Contains("Heading: 0°", text);
+        }
+
+        [Test]
         public void InvalidReading_ShowsOutOfRange_NoPilot_ShowsNone()
         {
             var text = readout.Format(Frame(FlightMode.Descending, 0.0, AltitudeReading.Invalid(1.0)), default, false);

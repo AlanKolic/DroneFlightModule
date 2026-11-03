@@ -9,6 +9,7 @@ namespace DroneFlightModule.Core
     /// </summary>
     public sealed class FlightLoop
     {
+        private readonly ArgumentGuard guard = new ArgumentGuard();
         private readonly IInputProvider input;
         private readonly IFlightController controller;
         private readonly FlightSupervisor supervisor;
@@ -24,11 +25,7 @@ namespace DroneFlightModule.Core
             IAltitudeSensor altitudeSensor,
             DroneState initialState)
         {
-            if (droneId.IsEmpty)
-            {
-                throw new ArgumentException("Drone id is required.", nameof(droneId));
-            }
-            DroneId = droneId;
+            DroneId = guard.RequireId(droneId, nameof(droneId));
             this.input = input ?? throw new ArgumentNullException(nameof(input));
             this.controller = controller ?? throw new ArgumentNullException(nameof(controller));
             this.supervisor = supervisor ?? throw new ArgumentNullException(nameof(supervisor));

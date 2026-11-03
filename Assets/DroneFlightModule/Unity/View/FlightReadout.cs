@@ -16,11 +16,8 @@ namespace DroneFlightModule.Unity
         {
             var state = frame.State;
             var horizontalSpeed = new Vec3(state.Velocity.X, 0f, state.Velocity.Z).Magnitude;
-            float heading = state.Yaw * RadiansToDegrees;
-            if (heading < 0f)
-            {
-                heading += 360f;
-            }
+            // Rounded before wrapping, so a yaw just left of north shows 0°, never 360°.
+            float heading = (MathF.Round(state.Yaw * RadiansToDegrees) % 360f + 360f) % 360f;
 
             return string.Join("\n",
                 $"Mode: {Mode(frame)}",

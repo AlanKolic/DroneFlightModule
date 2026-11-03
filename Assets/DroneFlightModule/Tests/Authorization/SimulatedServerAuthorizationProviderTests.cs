@@ -145,6 +145,28 @@ namespace DroneFlightModule.Authorization.Tests
         }
 
         [Test]
+        public void NullRequest_ThrowsSynchronously()
+        {
+            Assert.Throws<ArgumentNullException>(() => server.AuthorizeAsync(null, CancellationToken.None));
+        }
+
+        [Test]
+        public void DisposedWhileTheAnswerIsInFlight_IssuesNoGrant()
+        {
+            var ignoresCancellation = new CancellationIgnoringDelay();
+            using (var racing = new SimulatedServerAuthorizationProvider(new[] { Alice }, Latency, ignoresCancellation))
+            {
+                var task = racing.AuthorizeAsync(new AuthorizationRequest(Alice, PilotOrigin.Remote), CancellationToken.None);
+
+                racing.Dispose();
+                ignoresCancellation.Complete();
+
+                Assert.That(task.IsCanceled, Is.True);
+                Assert.That(racing.Revoke(Alice), Is.False, "No grant should have been issued.");
+            }
+        }
+
+        [Test]
         public void ZeroLatency_WithRealDelay_AnswersImmediately()
         {
             using (var instant = new SimulatedServerAuthorizationProvider(new[] { Alice }, TimeSpan.Zero, new TaskDelay()))

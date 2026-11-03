@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Generic;
 using DroneFlightModule.Core;
 
@@ -9,6 +8,7 @@ namespace DroneFlightModule.Pilots
     /// </summary>
     public sealed class InMemoryPilotStatsStore : IPilotStatsStore
     {
+        private readonly ArgumentGuard guard = new ArgumentGuard();
         private readonly Dictionary<PilotId, PilotStats> stats = new Dictionary<PilotId, PilotStats>();
 
         public PilotStats Get(PilotId pilot)
@@ -18,10 +18,7 @@ namespace DroneFlightModule.Pilots
 
         public void Save(PilotId pilot, PilotStats stats)
         {
-            if (pilot.IsEmpty)
-            {
-                throw new ArgumentException("Pilot id is required.", nameof(pilot));
-            }
+            guard.RequireId(pilot, nameof(pilot));
             this.stats[pilot] = stats;
         }
     }

@@ -14,6 +14,7 @@ namespace DroneFlightModule.Authorization
     /// </summary>
     public sealed class DroneGrantHolder : IFlightGate
     {
+        private readonly ArgumentGuard guard = new ArgumentGuard();
         private readonly DroneId drone;
         private readonly InputRouter router;
         private readonly PilotClaims claims;
@@ -21,11 +22,7 @@ namespace DroneFlightModule.Authorization
 
         public DroneGrantHolder(DroneId drone, InputRouter router, PilotClaims claims)
         {
-            if (drone.IsEmpty)
-            {
-                throw new ArgumentException("Drone id is required.", nameof(drone));
-            }
-            this.drone = drone;
+            this.drone = guard.RequireId(drone, nameof(drone));
             this.router = router ?? throw new ArgumentNullException(nameof(router));
             this.claims = claims ?? throw new ArgumentNullException(nameof(claims));
         }
@@ -44,13 +41,14 @@ namespace DroneFlightModule.Authorization
             {
                 throw new ArgumentException("The grant is already revoked.", nameof(grant));
             }
-            if (claims.TryGetDrone(grant.PilotId, out var claimed) && claimed != drone)
-            {
-                throw new InvalidOperationException($"{grant.PilotId} already controls {claimed}.");
-            }
 
-            ReleaseCurrent();
+            // Claim first: it refuses a pilot who controls another drone before anything here changes.
             claims.Claim(grant.PilotId, drone);
+            revocation.Dispose();
+            if (Grant != null && Grant.PilotId != grant.PilotId)
+            {
+                claims.Release(Grant.PilotId, drone);
+            }
             Grant = grant;
             revocation = grant.Revoked.Register(() => claims.Release(grant.PilotId, drone));
         }

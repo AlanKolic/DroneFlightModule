@@ -91,14 +91,14 @@ variant is a new class plus one registration in `DroneInstaller`:
 
 ## Tests
 
-- **Core**: 113 tests run headless in milliseconds. Unit tests for every class, plus
+- **Core**: 114 tests run headless in milliseconds. Unit tests for every class, plus
   closed-loop flights: hover, climb rate, top speed, hold for exactly 10 s, flared landing below
   0.3 m/s, a closed gate on the ground blocking takeoff.
 - **Unity**: input bindings through `InputTestFixture` (keyboard and gamepad, the shipped
   asset), the interpolator, the chase camera and the HUD text.
 - **Pilots**: 24 tests for profiles, the registry's guest and priority rules, and stats
   recording across flights and takeovers, one drone per pilot at a time.
-- **Authorization**: 47 tests for grants and revocation, the grant holder (a grant for one
+- **Authorization**: 49 tests for grants and revocation, the grant holder (a grant for one
   pilot never opens the gate for another, and a pilot controls at most one drone), the guest's
   local-only rule, and the server's latency, policy changes, cancellation and disposal. Async code runs with no synchronization
   context and a hand-completed delay, so the tests are synchronous and never sleep.

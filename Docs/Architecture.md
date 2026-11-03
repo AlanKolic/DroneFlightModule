@@ -102,7 +102,9 @@ flowchart TB
 - **Controls** live in `DroneControls.inputactions`, not in code: WASD or the right stick to
   move, Space and Ctrl or the left stick's Y to climb and descend, Q and E or the left stick's X
   to yaw. `L` or Select cuts and restores the local pilot's link, so the failsafe can be
-  triggered on purpose.
+  triggered on purpose. Each drone scope flies with its own copy of the asset, destroyed with
+  the scope, so enabling or disabling one drone's actions never affects another. A disposed
+  input provider reports its pilot as disconnected, so the failsafe takes over.
 - **Debug view:** a follow camera keeps the drone in frame, and an IMGUI readout shows the mode,
   hold countdown, pilot link, measured height, speed and heading.
 - **Integration:** semi-implicit Euler over position, velocity, yaw and yaw rate, with gravity,
@@ -224,8 +226,9 @@ flowchart TB
 - `IInputProvider { bool IsConnected; ControlInput Read() }`. `IsConnected` is how a source
   reports whether its pilot can still reach it.
 - `InputRouter`, one per drone, routes to the input provider of the session assigned to that
-  drone. `Assign(pilotId, source)`, `Clear()`, `ActivePilotId` and `ActiveChanged`. It reads
-  zero input when nothing is assigned or the source is disconnected.
+  drone. `Assign(pilotId, source)`, `Clear()`, `ActivePilotId`, `ActiveChanged` (a different
+  pilot) and `SourceChanged` (any new source, including a new session for the same pilot). It
+  reads zero input when nothing is assigned or the source is disconnected.
 
 **Authorization assembly**
 - `IAuthorizationProvider { string Id; Task<AuthorizationResult> AuthorizeAsync(AuthorizationRequest, CancellationToken) }`.
@@ -256,7 +259,10 @@ flowchart TB
     the latency counts. It is not guest mode. Phones always use it, and the local pilot can use it
     to sign in as a registered pilot.
   - Both cancel pending requests and revoke every grant on `Dispose()`; later requests fail with
-    `ObjectDisposedException`.
+    `ObjectDisposedException`. A null request throws synchronously from both.
+  - The simulated server may answer on a pool thread when there is no synchronization context,
+    so its policy and ledger are guarded by one lock, and an answer that arrives after
+    `Dispose()` is cancelled instead of issuing a grant.
 - **Guest mode is not a bypass.** It goes through the same coordinator pipeline, with the same
   request, the same revocable grant and the same gate as any other provider. The only
   difference is that its `AuthorizeAsync` completes immediately. Nothing checks "is this guest

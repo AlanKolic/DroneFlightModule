@@ -7,7 +7,8 @@ namespace DroneFlightModule.Unity
 {
     /// <summary>
     /// Local pilot driven by the Flight map of an Input System actions asset, so bindings and
-    /// devices (keyboard, gamepad) are data rather than code. Connected while any bound device is present.
+    /// devices (keyboard, gamepad) are data rather than code. Connected while the map is enabled and any
+    /// bound device is present, so a disposed provider reports a lost pilot and the failsafe takes over.
     /// </summary>
     public sealed class InputActionInputProvider : IInputProvider, IDisposable
     {
@@ -29,7 +30,7 @@ namespace DroneFlightModule.Unity
             map.Enable();
         }
 
-        public bool IsConnected => move.controls.Count > 0 || climb.controls.Count > 0 || yaw.controls.Count > 0;
+        public bool IsConnected => map.enabled && (move.controls.Count > 0 || climb.controls.Count > 0 || yaw.controls.Count > 0);
 
         public ControlInput Read()
         {

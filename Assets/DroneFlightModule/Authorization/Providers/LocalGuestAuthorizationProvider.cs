@@ -14,17 +14,14 @@ namespace DroneFlightModule.Authorization
     {
         public const string ProviderId = "local-guest";
 
+        private readonly ArgumentGuard guard = new ArgumentGuard();
         private readonly PilotId guestPilot;
         private readonly GrantLedger grants = new GrantLedger(ProviderId);
         private bool isDisposed;
 
         public LocalGuestAuthorizationProvider(PilotId guestPilot)
         {
-            if (guestPilot.IsEmpty)
-            {
-                throw new ArgumentException("Guest pilot id is required.", nameof(guestPilot));
-            }
-            this.guestPilot = guestPilot;
+            this.guestPilot = guard.RequireId(guestPilot, nameof(guestPilot));
         }
 
         public string Id => ProviderId;

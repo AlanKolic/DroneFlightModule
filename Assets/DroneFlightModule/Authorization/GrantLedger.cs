@@ -12,6 +12,7 @@ namespace DroneFlightModule.Authorization
     /// </summary>
     public sealed class GrantLedger : IDisposable
     {
+        private readonly ArgumentGuard guard = new ArgumentGuard();
         private readonly string providerId;
         private readonly Dictionary<PilotId, (CancellationTokenSource Source, AuthorizationGrant Grant)> live =
             new Dictionary<PilotId, (CancellationTokenSource Source, AuthorizationGrant Grant)>();
@@ -27,10 +28,7 @@ namespace DroneFlightModule.Authorization
 
         public AuthorizationGrant Issue(PilotId pilot)
         {
-            if (pilot.IsEmpty)
-            {
-                throw new ArgumentException("Pilot id is required.", nameof(pilot));
-            }
+            guard.RequireId(pilot, nameof(pilot));
             if (live.TryGetValue(pilot, out var existing))
             {
                 return existing.Grant;

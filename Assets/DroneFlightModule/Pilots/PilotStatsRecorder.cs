@@ -11,6 +11,7 @@ namespace DroneFlightModule.Pilots
     /// </summary>
     public sealed class PilotStatsRecorder
     {
+        private readonly ArgumentGuard guard = new ArgumentGuard();
         private readonly IPilotStatsStore store;
         private readonly Dictionary<PilotId, (DroneId Drone, double Started)> openFlights =
             new Dictionary<PilotId, (DroneId Drone, double Started)>();
@@ -24,19 +25,20 @@ namespace DroneFlightModule.Pilots
 
         public void FlightStarted(PilotId pilot, DroneId drone, double time)
         {
-            RequireIds(pilot, drone);
+            guard.RequireId(pilot, nameof(pilot));
+            guard.RequireId(drone, nameof(drone));
             if (openFlights.TryGetValue(pilot, out var current))
             {
                 throw new InvalidOperationException($"{pilot} is already flying {current.Drone}.");
             }
             openFlights.Add(pilot, (drone, time));
-            var stats = store.Get(pilot);
-            store.Save(pilot, new PilotStats(stats.Flights + 1, stats.FlightTime, stats.Takeovers, stats.TimesPreempted, time));
+            store.Save(pilot, store.Get(pilot).WithFlightStarted(time));
         }
 
         public void FlightEnded(PilotId pilot, DroneId drone, double time)
         {
-            RequireIds(pilot, drone);
+            guard.RequireId(pilot, nameof(pilot));
+            guard.RequireId(drone, nameof(drone));
             if (!openFlights.TryGetValue(pilot, out var flight) || flight.Drone != drone)
             {
                 throw new InvalidOperationException($"{pilot} is not flying {drone}.");
@@ -47,39 +49,19 @@ namespace DroneFlightModule.Pilots
                 throw new ArgumentOutOfRangeException(nameof(time), time, "A flight cannot end before it started.");
             }
             openFlights.Remove(pilot);
-            var stats = store.Get(pilot);
-            store.Save(pilot, new PilotStats(stats.Flights, stats.FlightTime + (time - started), stats.Takeovers, stats.TimesPreempted, stats.LastFlight));
+            store.Save(pilot, store.Get(pilot).WithFlightTime(time - started));
         }
 
         public void TookOver(PilotId pilot)
         {
-            RequirePilot(pilot);
-            var stats = store.Get(pilot);
-            store.Save(pilot, new PilotStats(stats.Flights, stats.FlightTime, stats.Takeovers + 1, stats.TimesPreempted, stats.LastFlight));
+            guard.RequireId(pilot, nameof(pilot));
+            store.Save(pilot, store.Get(pilot).WithTakeover());
         }
 
         public void Preempted(PilotId pilot)
         {
-            RequirePilot(pilot);
-            var stats = store.Get(pilot);
-            store.Save(pilot, new PilotStats(stats.Flights, stats.FlightTime, stats.Takeovers, stats.TimesPreempted + 1, stats.LastFlight));
-        }
-
-        private void RequireIds(PilotId pilot, DroneId drone)
-        {
-            RequirePilot(pilot);
-            if (drone.IsEmpty)
-            {
-                throw new ArgumentException("Drone id is required.", nameof(drone));
-            }
-        }
-
-        private void RequirePilot(PilotId pilot)
-        {
-            if (pilot.IsEmpty)
-            {
-                throw new ArgumentException("Pilot id is required.", nameof(pilot));
-            }
+            guard.RequireId(pilot, nameof(pilot));
+            store.Save(pilot, store.Get(pilot).WithPreemption());
         }
     }
 }

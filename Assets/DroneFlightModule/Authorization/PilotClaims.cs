@@ -10,6 +10,7 @@ namespace DroneFlightModule.Authorization
     /// </summary>
     public sealed class PilotClaims
     {
+        private readonly ArgumentGuard guard = new ArgumentGuard();
         private readonly Dictionary<PilotId, DroneId> drones = new Dictionary<PilotId, DroneId>();
 
         public bool TryGetDrone(PilotId pilot, out DroneId drone)
@@ -19,14 +20,8 @@ namespace DroneFlightModule.Authorization
 
         public void Claim(PilotId pilot, DroneId drone)
         {
-            if (pilot.IsEmpty)
-            {
-                throw new ArgumentException("Pilot id is required.", nameof(pilot));
-            }
-            if (drone.IsEmpty)
-            {
-                throw new ArgumentException("Drone id is required.", nameof(drone));
-            }
+            guard.RequireId(pilot, nameof(pilot));
+            guard.RequireId(drone, nameof(drone));
             if (drones.TryGetValue(pilot, out var claimed) && claimed != drone)
             {
                 throw new InvalidOperationException($"{pilot} already controls {claimed}.");

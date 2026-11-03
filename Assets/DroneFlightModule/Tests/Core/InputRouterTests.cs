@@ -77,14 +77,34 @@ namespace DroneFlightModule.Core.Tests
         }
 
         [Test]
-        public void SamePilotWithNewSource_SwitchesInputWithoutChange()
+        public void SamePilotWithNewSource_SwitchesInputAndRaisesOnlySourceChange()
         {
+            var sourceChanges = new List<PilotId>();
+            router.SourceChanged += sourceChanges.Add;
             router.Assign(Pilot1, new ScriptedInputProvider { Current = Climb });
 
             router.Assign(Pilot1, new ScriptedInputProvider { Current = Forward });
 
             Assert.That(router.Read(), Is.EqualTo(Forward));
             Assert.That(changes, Is.EqualTo(new[] { Pilot1 }));
+            Assert.That(sourceChanges, Is.EqualTo(new[] { Pilot1, Pilot1 }));
+        }
+
+        [Test]
+        public void SameSourceAgain_RaisesNoSourceChange_ClearRaisesOne()
+        {
+            var sourceChanges = new List<PilotId>();
+            var keyboard = new ScriptedInputProvider { Current = Climb };
+            router.Assign(Pilot1, keyboard);
+            router.SourceChanged += sourceChanges.Add;
+
+            router.Assign(Pilot1, keyboard);
+            Assert.That(sourceChanges, Is.Empty);
+
+            router.Clear();
+            router.Clear();
+            Assert.That(sourceChanges, Has.Count.EqualTo(1));
+            Assert.That(sourceChanges[0].IsEmpty, Is.True);
         }
 
         [Test]

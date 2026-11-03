@@ -1,4 +1,3 @@
-using System;
 using DroneFlightModule.Core;
 
 namespace DroneFlightModule.Authorization
@@ -8,13 +7,11 @@ namespace DroneFlightModule.Authorization
     /// </summary>
     public sealed class AuthorizationRequest
     {
+        private readonly ArgumentGuard guard = new ArgumentGuard();
+
         public AuthorizationRequest(PilotId pilotId, PilotOrigin origin)
         {
-            if (pilotId.IsEmpty)
-            {
-                throw new ArgumentException("Pilot id is required.", nameof(pilotId));
-            }
-            PilotId = pilotId;
+            PilotId = guard.RequireId(pilotId, nameof(pilotId));
             Origin = origin;
         }
 

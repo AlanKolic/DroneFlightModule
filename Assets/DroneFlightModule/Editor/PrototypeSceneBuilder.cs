@@ -28,18 +28,18 @@ namespace DroneFlightModule.Editor
 
         public void Create()
         {
+            // Checked before the open scene is replaced, so a missing asset leaves the user's scene alone.
+            var controls = AssetDatabase.LoadAssetAtPath<InputActionAsset>(ControlsPath);
+            if (controls == null)
+            {
+                throw new InvalidOperationException($"Input actions asset not found at {ControlsPath}.");
+            }
             if (!EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo())
             {
                 return;
             }
 
             var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
-
-            var controls = AssetDatabase.LoadAssetAtPath<InputActionAsset>(ControlsPath);
-            if (controls == null)
-            {
-                throw new InvalidOperationException($"Input actions asset not found at {ControlsPath}.");
-            }
 
             var drone = CreateDrone();
             CreateCamera(drone.transform);

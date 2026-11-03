@@ -10,12 +10,11 @@ namespace DroneFlightModule.Authorization
     /// </summary>
     public sealed class AuthorizationGrant
     {
+        private readonly ArgumentGuard guard = new ArgumentGuard();
+
         public AuthorizationGrant(PilotId pilotId, string providerId, CancellationToken revoked)
         {
-            if (pilotId.IsEmpty)
-            {
-                throw new ArgumentException("Pilot id is required.", nameof(pilotId));
-            }
+            guard.RequireId(pilotId, nameof(pilotId));
             if (string.IsNullOrWhiteSpace(providerId))
             {
                 throw new ArgumentException("Provider id is required.", nameof(providerId));
