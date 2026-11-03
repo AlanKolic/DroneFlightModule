@@ -230,18 +230,33 @@ flowchart TB
 **Authorization assembly**
 - `IAuthorizationProvider { string Id; Task<AuthorizationResult> AuthorizeAsync(AuthorizationRequest, CancellationToken) }`.
   A provider answers one question: is this pilot allowed to fly at all?
-- `AuthorizationRequest { PilotId, Origin }`, where `Origin` is `Local` or `Remote`.
-- A successful result carries an `AuthorizationGrant { PilotId, Revoked }`. The provider can
-  cancel the `Revoked` token at any time.
-- `DroneGrantHolder : IFlightGate`, one per drone, holds the grant of the pilot assigned to that
-  drone. It passes only while the grant is valid and its `PilotId` matches the router's
-  `ActivePilotId`, so a grant for one pilot never lets another pilot fly.
+- `AuthorizationRequest { PilotId, Origin }`, where `PilotOrigin` is `Local` or `Remote`.
+- `AuthorizationResult` is either `Granted(grant)` or `Denied(reason)`.
+- An `AuthorizationGrant { PilotId, ProviderId, Revoked }` is revoked by cancelling its
+  `Revoked` token. Anyone holding it can check `IsRevoked` or register a callback.
+- `GrantLedger` is shared by providers: at most one live grant per pilot, and a repeat request
+  returns it. A request after a revocation gets a new grant.
+- **One pilot controls one drone.** `PilotClaims`, shared by every grant holder, records which
+  drone each pilot controls. Installing a grant claims the drone, and installing a grant for a
+  pilot who already controls another drone throws. Clearing, replacing or revoking the grant
+  releases the claim. A drone has one grant holder, so it has one pilot at a time as well.
+  `PilotStatsRecorder` follows the same rule: a pilot has at most one open flight.
+- `DroneGrantHolder(DroneId, InputRouter, PilotClaims) : IFlightGate`, one per drone, holds the grant of the pilot assigned to that
+  drone. It passes only while the grant is unrevoked and its `PilotId` matches the router's
+  `ActivePilotId`, so a grant for one pilot never lets another pilot fly. Combined with
+  `PilotInControlGate` through `AllOfFlightGate`, flight needs both a connected pilot and a valid
+  grant.
 - **Providers:**
-  - `LocalGuestAuthorizationProvider` grants immediately, but only for `Origin.Local`. Any
-    remote request is denied. Guest mode is reserved for the local machine and keyboard.
-  - `SimulatedServerAuthorizationProvider` has configurable latency, an approve/deny policy per
-    pilot and simulated revocation. It is not guest mode. Phones always use it, and the local
-    keyboard can use it to sign in as a registered pilot.
+  - `LocalGuestAuthorizationProvider` grants immediately (the task is already complete), but
+    only to the guest pilot and only for `PilotOrigin.Local`. Any remote request, and any other
+    pilot, is denied. Guest mode is reserved for the local machine.
+  - `SimulatedServerAuthorizationProvider` answers after an injected latency (`IDelay`, with
+    `TaskDelay` for real time), approves or denies per pilot from either origin, and can
+    `Revoke(pilot)` at any time. The policy is read when the answer arrives, so a change during
+    the latency counts. It is not guest mode. Phones always use it, and the local pilot can use it
+    to sign in as a registered pilot.
+  - Both cancel pending requests and revoke every grant on `Dispose()`; later requests fail with
+    `ObjectDisposedException`.
 - **Guest mode is not a bypass.** It goes through the same coordinator pipeline, with the same
   request, the same revocable grant and the same gate as any other provider. The only
   difference is that its `AuthorizeAsync` completes immediately. Nothing checks "is this guest
@@ -267,7 +282,11 @@ drone a pilot gets, and whether that means taking a drone from someone else.
   4. Carry out the decision: assign, take over or deny.
 - A new request from the same session cancels its pending one.
 - **Results:** `Assigned { DroneId }`, `TookOver { DroneId, FromPilot }` or
-  `Denied { Reason }`. Reasons include `UnknownPilot`, `NotAuthorized` and `NoDroneAvailable`.
+  `Denied { Reason }`. Reasons include `UnknownPilot`, `NotAuthorized`, `AlreadyFlying` and
+  `NoDroneAvailable`.
+- A pilot who already controls a drone is denied with `AlreadyFlying`, checked before
+  authorization and again before the decision is carried out. To switch drones, the pilot
+  releases the current one first.
 - **Events:** `Assigned`, `Released`, `TookOver` and `Preempted`. Pilot stats, telemetry, the
   dashboard and the remote host subscribe to them.
 
@@ -287,7 +306,7 @@ drone a pilot gets, and whether that means taking a drone from someone else.
 
 **Releasing a drone:**
 - The pilot releases it (a key, or a button in the app), or the session disconnects.
-- The provider revokes the pilot's grant. All drones held by that pilot are released.
+- The provider revokes the pilot's grant, which releases the pilot's drone.
 - In every case the drone's grant is cleared. If it's airborne, the normal hold-then-descend
   failsafe follows.
 
@@ -402,7 +421,8 @@ break the Core boundary. All async code uses `Task` and `CancellationToken`.
   - an unknown pilot is denied
   - equal priority is denied when no drone is free
   - a higher priority takes over, the gate stays open on every tick and the mode stays Piloted
-  - a provider revocation releases every drone that pilot holds
+  - a provider revocation releases the pilot's drone
+  - a pilot who controls a drone is denied a second one
   - a new request cancels the pending one
 - **Telemetry:** sampling rate, ring buffer, sink fan-out.
 - **Remote:**
@@ -435,8 +455,8 @@ Each commit is small, logically separate and includes its own tests.
    template scene and unused packages removed.
 8. **Pilots:** `PilotProfile`, `IPilotRegistry` and in-memory registry, built-in guest profile,
    `PilotStats` and stats store.
-9. **Authorization:** providers (guest for local only, simulated server), revocable grant,
-   `DroneGrantHolder` gate.
+9. **Authorization:** providers (guest for local only, simulated server with injected latency),
+   revocable grants through `GrantLedger`, `DroneGrantHolder` gate.
 10. **Flight coordinator:** `PilotSession`, drone registry, request pipeline,
     `IAssignmentPolicy` and `PriorityAssignmentPolicy`, direct takeover, release, events and
     stats recording.

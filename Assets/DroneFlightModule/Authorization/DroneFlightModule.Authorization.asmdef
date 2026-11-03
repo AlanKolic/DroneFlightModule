@@ -1,0 +1,16 @@
+{
+    "name": "DroneFlightModule.Authorization",
+    "rootNamespace": "DroneFlightModule.Authorization",
+    "references": [
+        "DroneFlightModule.Core"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": true
+}

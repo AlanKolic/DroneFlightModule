@@ -65,16 +65,36 @@ namespace DroneFlightModule.Pilots.Tests
         }
 
         [Test]
-        public void OnePilot_TwoDrones_AreSeparateFlights()
+        public void OnePilot_CannotFlyTwoDronesAtOnce()
         {
             recorder.FlightStarted(Alice, Drone1, 0.0);
-            recorder.FlightStarted(Alice, Drone2, 5.0);
+
+            Assert.Throws<InvalidOperationException>(() => recorder.FlightStarted(Alice, Drone2, 5.0));
+            Assert.That(recorder.IsFlying(Alice, Drone1), Is.True);
+            Assert.That(recorder.IsFlying(Alice, Drone2), Is.False);
+            Assert.That(store.Get(Alice).Flights, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void AfterAFlightEnds_ThePilotCanFlyAnotherDrone()
+        {
+            recorder.FlightStarted(Alice, Drone1, 0.0);
             recorder.FlightEnded(Alice, Drone1, 10.0);
-            recorder.FlightEnded(Alice, Drone2, 10.0);
+            recorder.FlightStarted(Alice, Drone2, 12.0);
+            recorder.FlightEnded(Alice, Drone2, 17.0);
 
             var stats = store.Get(Alice);
             Assert.That(stats.Flights, Is.EqualTo(2));
             Assert.That(stats.FlightTime, Is.EqualTo(15.0));
+        }
+
+        [Test]
+        public void EndingAnotherDronesFlight_Throws()
+        {
+            recorder.FlightStarted(Alice, Drone1, 0.0);
+
+            Assert.Throws<InvalidOperationException>(() => recorder.FlightEnded(Alice, Drone2, 1.0));
+            Assert.That(recorder.IsFlying(Alice, Drone1), Is.True);
         }
 
         [Test]

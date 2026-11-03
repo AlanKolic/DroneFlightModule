@@ -6,29 +6,30 @@ namespace DroneFlightModule.Pilots
 {
     /// <summary>
     /// Turns coordinator events into stats. A flight runs from the pilot getting a drone to losing
-    /// it, for whatever reason, so a takeover ends one pilot's flight and starts another's. One pilot
-    /// may fly several drones; each drone is its own flight. Times are simulation seconds.
+    /// it, for whatever reason, so a takeover ends one pilot's flight and starts another's. A pilot
+    /// flies one drone at a time. Times are simulation seconds.
     /// </summary>
     public sealed class PilotStatsRecorder
     {
         private readonly IPilotStatsStore store;
-        private readonly Dictionary<(PilotId Pilot, DroneId Drone), double> openFlights =
-            new Dictionary<(PilotId Pilot, DroneId Drone), double>();
+        private readonly Dictionary<PilotId, (DroneId Drone, double Started)> openFlights =
+            new Dictionary<PilotId, (DroneId Drone, double Started)>();
 
         public PilotStatsRecorder(IPilotStatsStore store)
         {
             this.store = store ?? throw new ArgumentNullException(nameof(store));
         }
 
-        public bool IsFlying(PilotId pilot, DroneId drone) => openFlights.ContainsKey((pilot, drone));
+        public bool IsFlying(PilotId pilot, DroneId drone) => openFlights.TryGetValue(pilot, out var flight) && flight.Drone == drone;
 
         public void FlightStarted(PilotId pilot, DroneId drone, double time)
         {
             RequireIds(pilot, drone);
-            if (!openFlights.TryAdd((pilot, drone), time))
+            if (openFlights.TryGetValue(pilot, out var current))
             {
-                throw new InvalidOperationException($"{pilot} is already flying {drone}.");
+                throw new InvalidOperationException($"{pilot} is already flying {current.Drone}.");
             }
+            openFlights.Add(pilot, (drone, time));
             var stats = store.Get(pilot);
             store.Save(pilot, new PilotStats(stats.Flights + 1, stats.FlightTime, stats.Takeovers, stats.TimesPreempted, time));
         }
@@ -36,15 +37,16 @@ namespace DroneFlightModule.Pilots
         public void FlightEnded(PilotId pilot, DroneId drone, double time)
         {
             RequireIds(pilot, drone);
-            if (!openFlights.TryGetValue((pilot, drone), out double started))
+            if (!openFlights.TryGetValue(pilot, out var flight) || flight.Drone != drone)
             {
                 throw new InvalidOperationException($"{pilot} is not flying {drone}.");
             }
+            double started = flight.Started;
             if (time < started)
             {
                 throw new ArgumentOutOfRangeException(nameof(time), time, "A flight cannot end before it started.");
             }
-            openFlights.Remove((pilot, drone));
+            openFlights.Remove(pilot);
             var stats = store.Get(pilot);
             store.Save(pilot, new PilotStats(stats.Flights, stats.FlightTime + (time - started), stats.Takeovers, stats.TimesPreempted, stats.LastFlight));
         }
