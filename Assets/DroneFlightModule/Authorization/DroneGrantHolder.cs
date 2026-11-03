@@ -11,6 +11,7 @@ namespace DroneFlightModule.Authorization
     /// <see cref="PilotClaims"/>, so a pilot who controls another drone is refused; clearing,
     /// replacing or revoking the grant releases the claim. Installing a grant and switching the
     /// router happen together, between ticks, so a takeover never sees the gate closed.
+    /// A revocation also empties <see cref="Grant"/>.
     /// </summary>
     public sealed class DroneGrantHolder : IFlightGate
     {
@@ -50,16 +51,10 @@ namespace DroneFlightModule.Authorization
                 claims.Release(Grant.PilotId, drone);
             }
             Grant = grant;
-            revocation = grant.Revoked.Register(() => claims.Release(grant.PilotId, drone));
+            revocation = grant.Revoked.Register(() => OnRevoked(grant));
         }
 
         public void Clear()
-        {
-            ReleaseCurrent();
-            Grant = null;
-        }
-
-        private void ReleaseCurrent()
         {
             revocation.Dispose();
             revocation = default;
@@ -67,6 +62,13 @@ namespace DroneFlightModule.Authorization
             {
                 claims.Release(Grant.PilotId, drone);
             }
+            Grant = null;
+        }
+
+        private void OnRevoked(AuthorizationGrant revoked)
+        {
+            claims.Release(revoked.PilotId, drone);
+            Grant = null;
         }
     }
 }

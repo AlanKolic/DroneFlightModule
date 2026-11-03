@@ -50,7 +50,7 @@ namespace DroneFlightModule.Composition
                 }
                 if (debugHud != null)
                 {
-                    debugHud.Bind(loop, container.Resolve<InputRouter>());
+                    debugHud.Bind(loop, container.Resolve<InputRouter>(), ownControls);
                 }
                 // Nothing else depends on the toggle, so resolve it here to start listening for its key.
                 container.Resolve<LinkLossToggle>();

@@ -174,6 +174,7 @@ namespace DroneFlightModule.Authorization.Tests
             ledger.Revoke(Alice);
 
             Assert.That(claims.TryGetDrone(Alice, out _), Is.False);
+            Assert.That(holder.Grant, Is.Null);
         }
 
         [Test]

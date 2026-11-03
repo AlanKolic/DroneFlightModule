@@ -39,9 +39,9 @@ namespace DroneFlightModule.Core
             float groundHeight = terrain.HeightAt(position.X, position.Z);
             if (position.Y > groundHeight)
             {
-                return new DroneState(position, velocity, yaw, yawRate, isGrounded: false);    
+                return new DroneState(position, velocity, yaw, yawRate, isGrounded: false);
             }
-            
+
             // Resting on the ground: no sinking, sliding or spinning until enough thrust lifts it off.
             // A drone that was already down keeps its spot; one arriving from the air lands where it got to.
             bool wasResting = state.IsGrounded

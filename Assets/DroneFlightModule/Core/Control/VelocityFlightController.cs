@@ -9,18 +9,18 @@ namespace DroneFlightModule.Core
     /// </summary>
     public sealed class VelocityFlightController : IFlightController
     {
-        private readonly DroneConfig drone;
+        private readonly DroneConfig droneConfig;
         private readonly VelocityControllerConfig config;
         private readonly VerticalSpeedController verticalSpeed;
 
         public VelocityFlightController(
-            DroneConfig drone,
+            DroneConfig droneConfig,
             VelocityControllerConfig config,
             float gravity = DroneIntegrator.StandardGravity)
         {
-            this.drone = drone ?? throw new ArgumentNullException(nameof(drone));
+            this.droneConfig = droneConfig ?? throw new ArgumentNullException(nameof(droneConfig));
             this.config = config ?? throw new ArgumentNullException(nameof(config));
-            verticalSpeed = new VerticalSpeedController(drone, config.VerticalSpeedGain, gravity);
+            verticalSpeed = new VerticalSpeedController(droneConfig, config.VerticalSpeedGain, gravity);
         }
 
         public ForceCommand Compute(in ControlInput input, in DroneState state)
@@ -36,9 +36,9 @@ namespace DroneFlightModule.Core
                 0f,
                 HorizontalForce(targetVelocity.Z, velocity.Z));
             float horizontalMagnitude = horizontalForce.Magnitude;
-            if (horizontalMagnitude > drone.MaxLateralForce)
+            if (horizontalMagnitude > droneConfig.MaxLateralForce)
             {
-                horizontalForce *= drone.MaxLateralForce / horizontalMagnitude;
+                horizontalForce *= droneConfig.MaxLateralForce / horizontalMagnitude;
             }
 
             float thrust = verticalSpeed.Thrust(targetVelocity.Y, velocity.Y);
@@ -47,13 +47,13 @@ namespace DroneFlightModule.Core
 
         private float HorizontalForce(float targetSpeed, float speed)
         {
-            return drone.LinearDrag * speed + drone.Mass * config.HorizontalSpeedGain * (targetSpeed - speed);
+            return droneConfig.LinearDrag * speed + droneConfig.Mass * config.HorizontalSpeedGain * (targetSpeed - speed);
         }
 
         private float YawTorque(float targetYawRate, float yawRate)
         {
-            float torque = drone.AngularDrag * yawRate + drone.YawInertia * config.YawRateGain * (targetYawRate - yawRate);
-            return Math.Clamp(torque, -drone.MaxYawTorque, drone.MaxYawTorque);
+            float torque = droneConfig.AngularDrag * yawRate + droneConfig.YawInertia * config.YawRateGain * (targetYawRate - yawRate);
+            return Math.Clamp(torque, -droneConfig.MaxYawTorque, droneConfig.MaxYawTorque);
         }
     }
 }

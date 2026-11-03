@@ -1,4 +1,4 @@
-using System;
+using DroneFlightModule.Core;
 using UnityEngine;
 
 namespace DroneFlightModule.Unity
@@ -9,19 +9,16 @@ namespace DroneFlightModule.Unity
     /// </summary>
     public sealed class ChaseCameraRig
     {
+        private readonly ArgumentGuard guard = new ArgumentGuard();
         private readonly Vector3 offset;
         private readonly float lookHeight;
         private readonly float sharpness;
 
         public ChaseCameraRig(Vector3 offset, float lookHeight, float sharpness)
         {
-            if (!(sharpness > 0f) || float.IsInfinity(sharpness))
-            {
-                throw new ArgumentOutOfRangeException(nameof(sharpness), sharpness, "Must be positive and finite.");
-            }
             this.offset = offset;
             this.lookHeight = lookHeight;
-            this.sharpness = sharpness;
+            this.sharpness = guard.RequirePositive(sharpness, nameof(sharpness));
         }
 
         public Pose Snap(Pose target)

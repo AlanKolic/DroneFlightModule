@@ -33,7 +33,7 @@ namespace DroneFlightModule.Unity
 
         private void LateUpdate()
         {
-            if (target == null)
+            if (target == null || rig == null)
             {
                 return;
             }

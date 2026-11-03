@@ -42,10 +42,7 @@ namespace DroneFlightModule.Core
 
         public void Tick(float deltaTime)
         {
-            if (!(deltaTime > 0f) || float.IsInfinity(deltaTime))
-            {
-                throw new ArgumentOutOfRangeException(nameof(deltaTime), deltaTime, "Tick duration must be positive and finite.");
-            }
+            guard.RequirePositive(deltaTime, nameof(deltaTime));
 
             var altitude = altitudeSensor.Read(State, Time);
             var currentInput = input.Read();

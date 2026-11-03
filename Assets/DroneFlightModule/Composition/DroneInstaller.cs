@@ -48,27 +48,18 @@ namespace DroneFlightModule.Composition
             builder.Register<DisconnectableInputProvider>(Lifetime.Singleton)
                 .WithParameter<IInputProvider>(resolver => resolver.Resolve<InputActionInputProvider>());
             builder.Register<LinkLossToggle>(Lifetime.Singleton);
-            builder.Register(resolver =>
-                {
-                    var router = new InputRouter();
-                    router.Assign(LocalPilot, resolver.Resolve<DisconnectableInputProvider>());
-                    return router;
-                },
-                Lifetime.Singleton);
+            builder.Register<InputRouter>(Lifetime.Singleton);
             builder.Register<IFlightGate, PilotInControlGate>(Lifetime.Singleton);
             builder.Register<FlightSupervisor>(Lifetime.Singleton)
                 .WithParameter("gravity", DroneIntegrator.StandardGravity);
 
-            builder.Register(
-                resolver => new FlightLoop(
-                    droneId,
-                    resolver.Resolve<InputRouter>(),
-                    resolver.Resolve<IFlightController>(),
-                    resolver.Resolve<FlightSupervisor>(),
-                    resolver.Resolve<DroneIntegrator>(),
-                    resolver.Resolve<IAltitudeSensor>(),
-                    DroneState.At(spawnPosition)),
-                Lifetime.Singleton);
+            builder.Register<FlightLoop>(Lifetime.Singleton)
+                .WithParameter("droneId", droneId)
+                .WithParameter("initialState", DroneState.At(spawnPosition))
+                .WithParameter<IInputProvider>(resolver => resolver.Resolve<InputRouter>());
+
+            builder.RegisterBuildCallback(container =>
+                container.Resolve<InputRouter>().Assign(LocalPilot, container.Resolve<DisconnectableInputProvider>()));
         }
     }
 }

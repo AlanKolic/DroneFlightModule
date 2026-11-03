@@ -5,7 +5,10 @@ namespace DroneFlightModule.Core
     /// <summary>
     /// Decides each tick whether the pilot's command reaches the actuators. While the gate is open
     /// the pilot flies. When it closes in the air the drone holds for the hold duration, then
-    /// descends, flaring near the ground, until touchdown cuts the motors.
+    /// descends, flaring near the ground, until touchdown cuts the motors. Holding spends a hold
+    /// budget that flying earns back at the same rate and landing refills, so a link that drops
+    /// again soon after it returns resumes the hold where it left off instead of restarting it,
+    /// and a flapping link cannot keep the drone in the air forever.
     /// </summary>
     public sealed class FlightSupervisor
     {
@@ -14,16 +17,18 @@ namespace DroneFlightModule.Core
         private readonly IFlightGate gate;
         private readonly FailsafeConfig config;
         private readonly VerticalSpeedController verticalSpeed;
+        private double holdBudget;
 
         public FlightSupervisor(
             IFlightGate gate,
-            DroneConfig drone,
+            DroneConfig droneConfig,
             FailsafeConfig config,
             float gravity = DroneIntegrator.StandardGravity)
         {
             this.gate = gate ?? throw new ArgumentNullException(nameof(gate));
             this.config = config ?? throw new ArgumentNullException(nameof(config));
-            verticalSpeed = new VerticalSpeedController(drone, config.VerticalSpeedGain, gravity);
+            verticalSpeed = new VerticalSpeedController(droneConfig, config.VerticalSpeedGain, gravity);
+            holdBudget = config.HoldDuration;
         }
 
         public FlightMode Mode { get; private set; } = FlightMode.Grounded;
@@ -37,6 +42,7 @@ namespace DroneFlightModule.Core
         {
             if (gate.IsFlightAllowed)
             {
+                holdBudget = state.IsGrounded ? config.HoldDuration : Math.Min(config.HoldDuration, holdBudget + deltaTime);
                 HoldTimeRemaining = 0;
                 Mode = state.IsGrounded ? FlightMode.Grounded : FlightMode.Piloted;
                 return pilotCommand;
@@ -44,6 +50,7 @@ namespace DroneFlightModule.Core
 
             if (state.IsGrounded)
             {
+                holdBudget = config.HoldDuration;
                 HoldTimeRemaining = 0;
                 Mode = FlightMode.Grounded;
                 return ForceCommand.None;
@@ -52,7 +59,7 @@ namespace DroneFlightModule.Core
             if (Mode == FlightMode.Grounded || Mode == FlightMode.Piloted)
             {
                 Mode = FlightMode.Holding;
-                HoldTimeRemaining = config.HoldDuration;
+                HoldTimeRemaining = holdBudget;
             }
 
             if (Mode == FlightMode.Holding)
@@ -63,6 +70,7 @@ namespace DroneFlightModule.Core
                     HoldTimeRemaining = 0;
                     Mode = FlightMode.Descending;
                 }
+                holdBudget = HoldTimeRemaining;
             }
 
             // Lateral force and yaw torque are zero; drag brings any drift to rest.

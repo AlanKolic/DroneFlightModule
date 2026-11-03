@@ -4,6 +4,8 @@ namespace DroneFlightModule.Core
     /// Snapshot of one completed tick, published to observers such as telemetry.
     /// Time and State are at the end of the tick; Altitude was sampled at its start, before the step.
     /// Command is what reached the actuators, which is the failsafe's own command while it flies.
+    /// Mode was decided from the state at the start of the tick, so on the tick that lands or
+    /// lifts off, State already shows the new contact while Mode catches up on the next tick.
     /// </summary>
     public readonly struct FlightFrame
     {

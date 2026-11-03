@@ -171,7 +171,7 @@ namespace DroneFlightModule.Core.Tests
         }
 
         [Test]
-        public void GateReopensDuringHold_PilotFliesAndCountdownResets()
+        public void GateReopensDuringHold_PilotFliesAndTheHoldResumesWhereItLeftOff()
         {
             gate.IsFlightAllowed = false;
             Supervise(airborne);
@@ -183,8 +183,52 @@ namespace DroneFlightModule.Core.Tests
             Assert.That(supervisor.HoldTimeRemaining, Is.EqualTo(0.0));
             Assert.That(command.Force, Is.EqualTo(pilotCommand.Force));
 
+            // Two ticks held, one earned back flying, one spent now.
             gate.IsFlightAllowed = false;
             Supervise(airborne);
+            Assert.That(supervisor.HoldTimeRemaining, Is.EqualTo(config.HoldDuration - 2 * DeltaTime).Within(1e-6));
+        }
+
+        [Test]
+        public void FlyingForTheHoldDuration_EarnsBackTheFullHold()
+        {
+            HoldUntilDescending();
+
+            gate.IsFlightAllowed = true;
+            supervisor.Supervise(pilotCommand, airborne, Altitude(5f), config.HoldDuration);
+            gate.IsFlightAllowed = false;
+            Supervise(airborne);
+
+            Assert.That(supervisor.Mode, Is.EqualTo(FlightMode.Holding));
+            Assert.That(supervisor.HoldTimeRemaining, Is.EqualTo(config.HoldDuration - DeltaTime).Within(1e-6));
+        }
+
+        [Test]
+        public void FlappingLinkDuringDescent_KeepsDescending()
+        {
+            HoldUntilDescending();
+
+            for (int i = 0; i < 100; i++)
+            {
+                gate.IsFlightAllowed = true;
+                Supervise(airborne);
+                gate.IsFlightAllowed = false;
+                Supervise(airborne);
+                Assert.That(supervisor.Mode, Is.EqualTo(FlightMode.Descending));
+            }
+        }
+
+        [Test]
+        public void Landing_RefillsTheHold()
+        {
+            HoldUntilDescending();
+            Supervise(grounded);
+
+            gate.IsFlightAllowed = true;
+            Supervise(airborne);
+            gate.IsFlightAllowed = false;
+            Supervise(airborne);
+
             Assert.That(supervisor.HoldTimeRemaining, Is.EqualTo(config.HoldDuration - DeltaTime).Within(1e-6));
         }
 

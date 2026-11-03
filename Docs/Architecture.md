@@ -144,7 +144,7 @@ stateDiagram-v2
     [*] --> Grounded
     Grounded --> Piloted: gate opens and pilot gives input
     Piloted --> Holding: gate closes while airborne
-    Holding --> Piloted: gate reopens (countdown resets)
+    Holding --> Piloted: gate reopens (countdown paused)
     Holding --> Descending: 10 s countdown reaches 0
     Descending --> Piloted: gate reopens
     Descending --> Grounded: contact flag set (motors off)
@@ -167,6 +167,11 @@ stateDiagram-v2
   velocity or IMU sensor.
 - The countdown runs on **simulation time** (it decrements by `deltaTime`), so it pauses with the
   simulation and tests can check it without waiting.
+- **Hold budget.** The countdown spends a budget of up to the hold duration. Flying earns it
+  back at the same rate and landing refills it. A pilot who reconnects and flies on for the hold
+  duration gets the full 10 s again, but a link that comes back for a moment resumes the hold
+  where it left off, and during a descent it barely delays it. A flapping link can't keep the
+  drone in the air.
 - If the gate closes while grounded, there is no countdown. The drone simply can't take off.
 - A takeover by a higher-priority pilot never closes the gate (see below), so it never starts
   the countdown.
@@ -242,7 +247,7 @@ flowchart TB
 - **One pilot controls one drone.** `PilotClaims`, shared by every grant holder, records which
   drone each pilot controls. Installing a grant claims the drone, and installing a grant for a
   pilot who already controls another drone throws. Clearing, replacing or revoking the grant
-  releases the claim. A drone has one grant holder, so it has one pilot at a time as well.
+  releases the claim, and a revocation also empties the holder's `Grant`. A drone has one grant holder, so it has one pilot at a time as well.
   `PilotStatsRecorder` follows the same rule: a pilot has at most one open flight.
 - `DroneGrantHolder(DroneId, InputRouter, PilotClaims) : IFlightGate`, one per drone, holds the grant of the pilot assigned to that
   drone. It passes only while the grant is unrevoked and its `PilotId` matches the router's
@@ -256,13 +261,14 @@ flowchart TB
   - `SimulatedServerAuthorizationProvider` answers after an injected latency (`IDelay`, with
     `TaskDelay` for real time), approves or denies per pilot from either origin, and can
     `Revoke(pilot)` at any time. The policy is read when the answer arrives, so a change during
-    the latency counts. It is not guest mode. Phones always use it, and the local pilot can use it
+    the latency counts. `Approve` and `Deny` change only later answers; a denied pilot keeps a
+    live grant until `Revoke`. It is not guest mode. Phones always use it, and the local pilot can use it
     to sign in as a registered pilot.
   - Both cancel pending requests and revoke every grant on `Dispose()`; later requests fail with
     `ObjectDisposedException`. A null request throws synchronously from both.
-  - The simulated server may answer on a pool thread when there is no synchronization context,
-    so its policy and ledger are guarded by one lock, and an answer that arrives after
-    `Dispose()` is cancelled instead of issuing a grant.
+  - An answer that arrives after `Dispose()` is cancelled instead of issuing a grant.
+  - Revoking every grant on dispose finishes even if a revocation callback throws; the failures
+    are rethrown together afterwards, so a broken handler can't leave other pilots authorized.
 - **Guest mode is not a bypass.** It goes through the same coordinator pipeline, with the same
   request, the same revocable grant and the same gate as any other provider. The only
   difference is that its `AuthorizeAsync` completes immediately. Nothing checks "is this guest

@@ -6,7 +6,7 @@ namespace DroneFlightModule.Authorization
 {
     /// <summary>
     /// Shared by every drone's grant holder: records which drone each pilot controls, so a pilot
-    /// controls at most one drone at a time. Main thread only, like the grant holders that use it.
+    /// controls at most one drone at a time.
     /// </summary>
     public sealed class PilotClaims
     {

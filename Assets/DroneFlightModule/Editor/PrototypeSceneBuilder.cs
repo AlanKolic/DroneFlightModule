@@ -47,7 +47,10 @@ namespace DroneFlightModule.Editor
             var ground = CreateGround();
             CreateScope(drone, ground.transform, controls);
 
-            EditorSceneManager.SaveScene(scene, ScenePath);
+            if (!EditorSceneManager.SaveScene(scene, ScenePath))
+            {
+                throw new InvalidOperationException($"The prototype scene could not be saved to {ScenePath}.");
+            }
             AddToBuildSettings();
         }
 

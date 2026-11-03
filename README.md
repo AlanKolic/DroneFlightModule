@@ -33,8 +33,10 @@ Centred sticks hold position and altitude, so the drone hovers hands-off.
 1. Take off with Space, fly around, let go: the drone stops and hovers.
 2. Press **L** to simulate losing the pilot's link. The HUD switches to **Holding** and counts
    down 10 s while the drone hovers in place and ignores input.
-3. Press **L** again within 10 s to take back control, or wait: the drone descends at 1 m/s,
-   slows to 0.3 m/s below 2 m, lands and cuts its motors.
+3. Press **L** again within 10 s to take back control, or wait: the drone descends at 1 m/s
+   (0.5 m/s above the rangefinder's 10 m range), slows to 0.3 m/s below 2 m, lands and cuts its
+   motors. Cutting the link again soon after restoring it resumes the countdown rather than
+   restarting it.
 4. With the link cut on the ground, the drone can't take off.
 
 ## How it fits together
@@ -77,7 +79,8 @@ variant is a new class plus one registration in `DroneInstaller`:
   one tick (20 ms) behind without stutter.
 - **The failsafe is not a special case.** The supervisor only asks `IFlightGate` whether flight
   is allowed. Losing the pilot, and later losing authorization, both close the gate and get the
-  same hold-then-descend behaviour. The countdown runs on simulation time.
+  same hold-then-descend behaviour. The countdown runs on simulation time, and flying earns it
+  back at the same rate, so a flapping link can't keep the drone hovering forever.
 - **VContainer, plain `Task`.** VContainer composes the scene; Core never references it.
   UniTask was left out because it would pull `UnityEngine` into the async services planned for
   Core-side code.
@@ -91,17 +94,18 @@ variant is a new class plus one registration in `DroneInstaller`:
 
 ## Tests
 
-- **Core**: 114 tests run headless in milliseconds. Unit tests for every class, plus
+- **Core**: 117 tests run headless in milliseconds. Unit tests for every class, plus
   closed-loop flights: hover, climb rate, top speed, hold for exactly 10 s, flared landing below
   0.3 m/s, a closed gate on the ground blocking takeoff.
 - **Unity**: input bindings through `InputTestFixture` (keyboard and gamepad, the shipped
   asset), the interpolator, the chase camera and the HUD text.
 - **Pilots**: 24 tests for profiles, the registry's guest and priority rules, and stats
   recording across flights and takeovers, one drone per pilot at a time.
-- **Authorization**: 49 tests for grants and revocation, the grant holder (a grant for one
+- **Authorization**: 50 tests for grants and revocation, the grant holder (a grant for one
   pilot never opens the gate for another, and a pilot controls at most one drone), the guest's
-  local-only rule, and the server's latency, policy changes, cancellation and disposal. Async code runs with no synchronization
-  context and a hand-completed delay, so the tests are synchronous and never sleep.
+  local-only rule, and the server's latency, policy changes, cancellation and disposal. Async
+  code runs with no synchronization context and a hand-completed delay, so the tests are
+  synchronous and never sleep.
 - **Composition**: the real container: resolution, gate wiring, hover, link loss to landing,
   and disposal disabling the controls.
 
@@ -113,9 +117,9 @@ the pilot registry with stats, and authorization (guest and simulated server pro
 revocable grants, the grant holder gate). Pilots and authorization are not wired into the
 scene until the coordinator exists.
 
-Planned, in order (details in the architecture doc): a flight coordinator for several drones with priority
-takeover, a multi-drone scene, telemetry, a deletable dashboard, ScriptableObject config
-assets, and a phone remote (protocol, host, UDP, iOS and Android app).
+Planned, in order (details in the architecture doc): a flight coordinator for several drones
+with priority takeover, a multi-drone scene, telemetry, a deletable dashboard, ScriptableObject
+config assets, and a phone remote (protocol, host, UDP, iOS and Android app).
 
 ## Known limitations
 
