@@ -27,18 +27,29 @@ The full design, including the parts that are planned but not built yet, is in
 | Request any drone | R | South button |
 | Request drone 1, 2 or 3 | 1 / 2 / 3 | |
 | Release the drone | X | East button |
-| Switch between guest and registered pilot | P | Start |
-| Make the server revoke the registered pilot's grant | V | |
+| Switch to the next pilot | P | Start |
+| Make the server revoke your grant | V | |
 | Cut or restore the pilot's link | L | Select |
 | Add a drone | N | |
 | Remove the newest drone | M | |
+| Show or hide the fleet dashboard | Tab | |
 
 Bindings live in `Assets/DroneFlightModule/Unity/Input/DroneControls.inputactions`, not in code.
 Centred sticks hold position and altitude, so the drone hovers hands-off.
 
 You start as the **guest**, authorized at once by local guest mode, without a drone. **P**
-signs you in as **Ace**, a registered pilot with a higher priority, through a simulated server
-that answers after 0.5 s; switching ends the current session, so its drone is released.
+switches to the next pilot in the registry, such as **Ace**, a registered pilot with a higher
+priority who signs in through a simulated server that answers after 0.5 s. Switching leaves
+the previous pilot on their drone with their hands off the sticks, so it hovers, and only the
+selected pilot steers. That lets Ace take over the guest's drone from the same keyboard.
+
+The control panel and the dashboard both track takeovers: the dropdowns say who flies what,
+the panel's status shows the current pilot's takeovers and preemptions, and a pilot who loses
+their drone is told who took it.
+
+Every action also has a button in the **control panel** at the bottom right: a pilot
+dropdown, a drone dropdown ("Any drone" or one of the fleet), and Request, Release, Revoke
+grant, Cut/Restore link, Add drone and Remove drone (for the chosen drone).
 
 ## What to try
 
@@ -58,6 +69,13 @@ that answers after 0.5 s; switching ends the current session, so its drone is re
    released first and the HUD tells you.
 8. Press **P**, then **R**, to fly as Ace through the server. **V** makes the server revoke
    Ace's grant: the drone is released at once and the failsafe takes over.
+9. Take a drone over: as the guest press **1**, then **P** to become Ace, who outranks the
+   guest, and press **1** again. Ace takes drone-1, the guest is preempted, and the dashboard
+   counts one takeover for Ace and one preemption for the guest.
+10. Watch the fleet dashboard on the right: every drone's pilot, mode, measured and true
+   height, position and heading; each pilot's stats; and the latest events, denials
+   included. **Tab** hides it.
+11. Or skip the keys: in the control panel, pick a pilot and a drone and press **Request**.
 
 ## How it fits together
 
@@ -82,6 +100,7 @@ share: the coordinator, pilots and stats, the providers, and the local pilot's i
 | `Telemetry` | Core | A recorder per drone sampling its flight at 10 Hz, ring buffers, sinks (fleet-wide in-memory sink) |
 | `Coordination` | Core, Pilots, Authorization | `FlightCoordinator`: pilot sessions, drone registry, request pipeline, priority assignment policy, takeover and release, stats from its events |
 | `Composition` | everything above, VContainer, Input System | Fleet scope and installer, `DroneInstantiator` (adds and removes drones, one child scope each), the local pilot's keys, runners (the only places Unity's clock reaches the sim) |
+| `UI` | Core, Pilots, Coordination, Telemetry, VContainer, Input System | Fleet dashboard in its own child scope; nothing references it, so it can be deleted |
 | `Editor` | the above | Menu item that builds the prototype scene |
 | `*.Tests` | their target | EditMode tests |
 
@@ -117,8 +136,10 @@ variant is a new class plus one registration in `DroneInstaller`:
   `PilotClaims`, and refuses a pilot who already holds another. Revocation releases the claim.
   A pilot who asks the coordinator for another drone is switched to it, letting go of the first
   only once the second is secured, so a denied request leaves them where they were.
-- **IMGUI for the debug HUD.** It's a developer readout, not product UI; the planned dashboard
-  lives in its own assembly that can be deleted without breaking flight.
+- **IMGUI for the debug HUD and the dashboard.** The HUD is a developer readout. The fleet
+  dashboard lives in its own `UI` assembly and child scope, which nothing else references (the
+  scene builder adds it by type name), so deleting the UI folder leaves flight, the scene and
+  every other test intact.
 - **No per-tick allocations** in the simulation path, telemetry included: samples go into
   preallocated ring buffers. The HUD rebuilds its text at most once per rendered frame.
 - **Telemetry can't break flight.** It only reads, and a sink that throws is logged and
@@ -138,12 +159,15 @@ variant is a new class plus one registration in `DroneInstaller`:
   local-only rule, and the server's latency, policy changes, cancellation and disposal. Async
   code runs with no synchronization context and a hand-completed delay, so the tests are
   synchronous and never sleep.
-- **Coordination**: 49 tests on real flight loops: assignment preferring grounded drones,
+- **Coordination**: 51 tests on real flight loops: assignment preferring grounded drones,
   priority takeover with the gate open on every tick, equal priority never taking over,
   switching drones, denied switches, revocation, release, ending a session, cancelled and
   superseded requests, decisions on the fleet as it is once authorization completes, the
   drones joining and leaving at any time, the policy on its own, and stats timed by the simulation
   clock.
+- **Dashboard**: 22 tests for the event log, the readout's text (run in a comma-decimal
+  culture to keep the formatting invariant), Tab toggling the dashboard, and the control
+  panel's pilot and drone choices, labels that follow a takeover, and each pilot's record.
 - **Telemetry**: 18 tests for the ring buffer, sampling on simulation time, sink fan-out, a
   failing sink never breaking the flight, streams ending with the drone, and the in-memory
   sink.
@@ -162,17 +186,15 @@ gating and failsafe, velocity controller, Input System controls, debug HUD, foll
 the pilot registry with stats, authorization (guest and simulated server providers, revocable
 grants, the grant holder gate), the flight coordinator (sessions, priority assignment and
 takeover, switching, release, stats), and the fleet scene (a fleet scope with one child scope
-per drone, three drones and more added or removed at runtime, the local pilot's keys), and
-telemetry (a recorder per drone, a fleet-wide in-memory sink).
+per drone, three drones and more added or removed at runtime, the local pilot's keys),
+telemetry (a recorder per drone, a fleet-wide in-memory sink), and the deletable fleet
+dashboard.
 
-Planned, in order (details in the architecture doc): a deletable dashboard,
-ScriptableObject config assets, and a phone remote (protocol, host, UDP, iOS and Android app).
+Planned, in order (details in the architecture doc): ScriptableObject config assets, and a phone remote (protocol, host, UDP, iOS and Android app).
 
 ## Known limitations
 
 - The drone doesn't pitch or roll; lateral force is applied directly. Good enough to exercise
   the loop, not a multirotor model.
 - Vertical speed for the failsafe comes from the true state, standing in for an IMU.
-- There is one local pilot, so a priority takeover shows only in the tests until the phone
-  remote brings more pilots.
 - No PlayMode tests yet; the scene is covered through the container and component tests.

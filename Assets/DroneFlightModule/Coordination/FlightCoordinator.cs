@@ -16,7 +16,9 @@ namespace DroneFlightModule.Coordination
     /// drone and is given another lets go of the first only then, so a denied request leaves them
     /// where they were. Asking for the drone they already fly just routes it to this session. A
     /// new request from a session cancels its pending one. A drone is freed when its pilot
-    /// releases it, the session ends, the provider revokes the grant, or it leaves the fleet.
+    /// releases it, the session ends, the provider revokes the grant, or it leaves the fleet. Each change
+    /// of who flies which drone is an event, and so is each denial, for stats and the dashboard; a
+    /// cancelled request raises none.
     /// </summary>
     public sealed class FlightCoordinator
     {
@@ -36,6 +38,7 @@ namespace DroneFlightModule.Coordination
         public event Action<DroneAssigned> Assigned;
         public event Action<DroneReleased> Released;
         public event Action<DroneTakenOver> TookOver;
+        public event Action<FlightDenied> Denied;
 
         public bool TryGetDrone(PilotId pilot, out DroneId drone)
         {
@@ -112,18 +115,18 @@ namespace DroneFlightModule.Coordination
             {
                 if (!pilots.TryGet(session.PilotId, out var profile))
                 {
-                    return FlightRequestResult.Denied(FlightDenial.UnknownPilot, $"{session.PilotId} is not a registered pilot.");
+                    return Deny(session, preferred, FlightDenial.UnknownPilot, $"{session.PilotId} is not a registered pilot.");
                 }
 
                 var authorization = await session.Provider.AuthorizeAsync(new AuthorizationRequest(session.PilotId, session.Origin), token);
                 token.ThrowIfCancellationRequested();
                 if (!authorization.IsGranted)
                 {
-                    return FlightRequestResult.Denied(FlightDenial.NotAuthorized, authorization.DenialReason);
+                    return Deny(session, preferred, FlightDenial.NotAuthorized, authorization.DenialReason);
                 }
                 if (authorization.Grant.IsRevoked)
                 {
-                    return FlightRequestResult.Denied(FlightDenial.NotAuthorized, $"{session.PilotId}'s grant was revoked before it was used.");
+                    return Deny(session, preferred, FlightDenial.NotAuthorized, $"{session.PilotId}'s grant was revoked before it was used.");
                 }
                 return CarryOut(session, profile, authorization.Grant, preferred);
             }
@@ -150,7 +153,7 @@ namespace DroneFlightModule.Coordination
             var decision = policy.Decide(profile, preferred, Snapshot(current));
             if (decision.Action == AssignmentAction.Deny)
             {
-                return FlightRequestResult.Denied(decision.Denial, DenialMessage(decision.Denial, session.PilotId, preferred));
+                return Deny(session, preferred, decision.Denial, DenialMessage(decision.Denial, session.PilotId, preferred));
             }
             var target = Validate(decision, current);
 
@@ -252,6 +255,12 @@ namespace DroneFlightModule.Coordination
             pending.Remove(session);
             previous.Cancel();
             previous.Dispose();
+        }
+
+        private FlightRequestResult Deny(PilotSession session, DroneId? preferred, FlightDenial denial, string message)
+        {
+            Denied?.Invoke(new FlightDenied(session.PilotId, preferred, denial, message));
+            return FlightRequestResult.Denied(denial, message);
         }
 
         private string DenialMessage(FlightDenial denial, PilotId pilot, DroneId? preferred)

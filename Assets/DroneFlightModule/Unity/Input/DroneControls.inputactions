@@ -401,6 +401,15 @@
                     "processors": "",
                     "interactions": "",
                     "initialStateCheck": false
+                },
+                {
+                    "name": "ToggleDashboard",
+                    "type": "Button",
+                    "id": "e6f588a4-efe5-4a3e-a2fd-4d55522a710c",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
                 }
             ],
             "bindings": [
@@ -445,6 +454,17 @@
                     "processors": "",
                     "groups": "Keyboard",
                     "action": "RemoveDrone",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "2aba8d52-37ff-4e0f-a7a6-be6b8de62b3a",
+                    "path": "<Keyboard>/tab",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "Keyboard",
+                    "action": "ToggleDashboard",
                     "isComposite": false,
                     "isPartOfComposite": false
                 }

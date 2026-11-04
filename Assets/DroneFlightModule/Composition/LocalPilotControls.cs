@@ -12,20 +12,22 @@ using UnityEngine.InputSystem;
 namespace DroneFlightModule.Composition
 {
     /// <summary>
-    /// The pilot at this machine's keyboard or gamepad, driven by the Fleet action map. They fly
-    /// as the guest through local guest mode, or switch to the registered pilot, who signs in
-    /// through the simulated server. Their keys request any drone or drone 1 to 3, release it,
-    /// switch identity and make the server revoke the registered pilot's grant. Switching ends the
-    /// current session, so its drone is released. The latest outcome is kept for the HUD, and
-    /// StatusChanged fires whenever it or the fleet changes.
+    /// The pilot at this machine's keyboard or gamepad, driven by the Fleet action map. They can fly
+    /// as any pilot in the registry: the guest through local guest mode, everyone else signing in
+    /// through the simulated server. They start as the guest. Their keys request any drone or
+    /// drone 1 to 3, release it, switch to the next pilot and make the server revoke the current
+    /// pilot's grant. Switching keeps the previous pilot on their drone with their hands off the
+    /// sticks, so the next pilot can outrank and take it over. The latest outcome, including a
+    /// local pilot being preempted, is kept for the HUD, and StatusChanged fires whenever it or
+    /// the fleet changes.
     /// </summary>
     public sealed class LocalPilotControls : IDisposable
     {
         private readonly FlightCoordinator coordinator;
         private readonly DroneRegistry drones;
         private readonly SimulatedServerAuthorizationProvider server;
-        private readonly PilotSession guest;
-        private readonly PilotSession registered;
+        private readonly List<PilotSession> sessions = new List<PilotSession>();
+        private readonly Dictionary<PilotSession, LocalPilotInput> inputs = new Dictionary<PilotSession, LocalPilotInput>();
         private readonly CancellationToken lifetime;
         private readonly InputActionMap map;
         private readonly List<(InputAction Action, Action<InputAction.CallbackContext> Handler)> keys =
@@ -36,10 +38,10 @@ namespace DroneFlightModule.Composition
             InputActionAsset actions,
             FlightCoordinator coordinator,
             DroneRegistry drones,
+            IPilotRegistry pilots,
             LocalGuestAuthorizationProvider guestProvider,
             SimulatedServerAuthorizationProvider server,
             DisconnectableInputProvider input,
-            PilotId registeredPilot,
             CancellationToken lifetime)
         {
             if (actions == null)
@@ -50,9 +52,27 @@ namespace DroneFlightModule.Composition
             this.drones = drones ?? throw new ArgumentNullException(nameof(drones));
             this.server = server ?? throw new ArgumentNullException(nameof(server));
             this.lifetime = lifetime;
-            guest = new PilotSession(PilotProfile.Guest.Id, PilotOrigin.Local, guestProvider, input);
-            registered = new PilotSession(registeredPilot, PilotOrigin.Local, server, input);
-            Session = guest;
+            if (pilots == null)
+            {
+                throw new ArgumentNullException(nameof(pilots));
+            }
+            foreach (var profile in pilots.Profiles)
+            {
+                var provider = profile.IsGuest ? (IAuthorizationProvider)guestProvider : server;
+                var pilotInput = new LocalPilotInput(input);
+                var session = new PilotSession(profile.Id, PilotOrigin.Local, provider, pilotInput);
+                sessions.Add(session);
+                inputs.Add(session, pilotInput);
+                if (profile.IsGuest)
+                {
+                    Session = session;
+                }
+            }
+            if (Session == null)
+            {
+                throw new ArgumentException("The pilot registry has no guest to start as.", nameof(pilots));
+            }
+            inputs[Session].IsSelected = true;
 
             map = actions.FindActionMap("Fleet", throwIfNotFound: true);
             OnRequestKey("RequestAny", () => RequestFlightAsync(null));
@@ -61,7 +81,7 @@ namespace DroneFlightModule.Composition
             OnRequestKey("RequestDrone3", () => RequestDroneAsync(3));
             OnKey("Release", () => Release());
             OnKey("SwitchPilot", SwitchPilot);
-            OnKey("RevokeGrant", () => RevokeRegisteredGrant());
+            OnKey("RevokeGrant", () => RevokeServerGrant());
             map.Enable();
 
             coordinator.Assigned += OnAssigned;
@@ -117,17 +137,33 @@ namespace DroneFlightModule.Composition
 
         public void SwitchPilot()
         {
-            coordinator.EndSession(Session);
-            Session = Session == guest ? registered : guest;
-            Report($"Now flying as {Session.PilotId}, authorized by {Session.Provider.Id}.");
+            int next = (sessions.IndexOf(Session) + 1) % sessions.Count;
+            SelectPilot(sessions[next].PilotId);
         }
 
-        public bool RevokeRegisteredGrant()
+        public void SelectPilot(PilotId pilot)
         {
-            bool revoked = server.Revoke(registered.PilotId);
-            Report(revoked
-                ? $"The server revoked {registered.PilotId}'s grant."
-                : $"{registered.PilotId} holds no server grant.");
+            var session = sessions.Find(candidate => candidate.PilotId == pilot)
+                ?? throw new ArgumentException($"{pilot} is not in the pilot registry.", nameof(pilot));
+            if (session == Session)
+            {
+                return;
+            }
+            var previous = Session;
+            inputs[previous].IsSelected = false;
+            inputs[session].IsSelected = true;
+            Session = session;
+            string kept = coordinator.TryGetDrone(previous.PilotId, out var parked)
+                ? $" {previous.PilotId} keeps {parked}, hands off."
+                : "";
+            Report($"Now flying as {Session.PilotId}, authorized by {Session.Provider.Id}.{kept}");
+        }
+
+        public bool RevokeServerGrant()
+        {
+            var pilot = Session.PilotId;
+            bool revoked = server.Revoke(pilot);
+            Report(revoked ? $"The server revoked {pilot}'s grant." : $"{pilot} holds no server grant.");
             return revoked;
         }
 
@@ -187,8 +223,14 @@ namespace DroneFlightModule.Composition
             StatusChanged?.Invoke();
         }
 
+        // The pilot who took over hears it from their request; a local pilot who lost a drone hears it here.
         private void OnTookOver(DroneTakenOver takenOver)
         {
+            if (takenOver.Pilot != Session.PilotId && sessions.Exists(session => session.PilotId == takenOver.FromPilot))
+            {
+                Report($"{takenOver.Pilot} took {takenOver.Drone} over from {takenOver.FromPilot}.");
+                return;
+            }
             StatusChanged?.Invoke();
         }
     }

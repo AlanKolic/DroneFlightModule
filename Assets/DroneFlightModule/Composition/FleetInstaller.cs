@@ -74,7 +74,6 @@ namespace DroneFlightModule.Composition
                 .WithParameter<IInputProvider>(resolver => resolver.Resolve<InputActionInputProvider>());
             builder.Register<LinkLossToggle>(Lifetime.Singleton);
             builder.Register<LocalPilotControls>(Lifetime.Singleton)
-                .WithParameter("registeredPilot", RegisteredPilot.Id)
                 .WithParameter("lifetime", lifetime);
         }
 

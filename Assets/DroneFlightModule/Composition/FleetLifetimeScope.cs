@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Threading;
+using DroneFlightModule.Coordination;
 using DroneFlightModule.Core;
 using DroneFlightModule.Unity;
 using UnityEngine;
@@ -11,7 +12,8 @@ using VContainer.Unity;
 namespace DroneFlightModule.Composition
 {
     /// <summary>
-    /// Composition root of the fleet scene. Installs what the fleet shares, then has the
+    /// Composition root of the fleet scene. Installs what the fleet shares and the
+    /// <see cref="FleetConsole"/> a control panel drives, then has the
     /// <see cref="DroneInstantiator"/> add the configured drones; the Debug/AddDrone and
     /// Debug/RemoveDrone keys add a drone from the prefab and remove the newest one while the
     /// fleet runs. The local pilot starts as the guest without a drone; the HUD shows every drone
@@ -56,6 +58,7 @@ namespace DroneFlightModule.Composition
                 .WithParameter("hud", debugHud)
                 .WithParameter("groundHeight", groundHeight)
                 .WithParameter("spawnStep", spawnStep);
+            builder.Register<IFleetConsole, FleetConsole>(Lifetime.Singleton);
 
             builder.RegisterBuildCallback(container =>
             {

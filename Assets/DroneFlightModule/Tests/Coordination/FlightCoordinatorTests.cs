@@ -26,6 +26,7 @@ namespace DroneFlightModule.Coordination.Tests
         private List<DroneAssigned> assigned;
         private List<DroneReleased> released;
         private List<DroneTakenOver> tookOver;
+        private List<FlightDenied> denied;
 
         [SetUp]
         public void SetUp()
@@ -49,9 +50,11 @@ namespace DroneFlightModule.Coordination.Tests
             assigned = new List<DroneAssigned>();
             released = new List<DroneReleased>();
             tookOver = new List<DroneTakenOver>();
+            denied = new List<FlightDenied>();
             coordinator.Assigned += assigned.Add;
             coordinator.Released += released.Add;
             coordinator.TookOver += tookOver.Add;
+            coordinator.Denied += denied.Add;
         }
 
         private PilotSession Session(PilotId pilot, IAuthorizationProvider authorizer = null)
@@ -108,6 +111,34 @@ namespace DroneFlightModule.Coordination.Tests
             Assert.That(result.Outcome, Is.EqualTo(FlightRequestOutcome.Denied));
             Assert.That(result.Denial, Is.EqualTo(FlightDenial.UnknownPilot));
             Assert.That(provider.RequestCount, Is.EqualTo(0));
+        }
+
+        [Test]
+        public void EveryDenial_IsAnEvent_AndASuccessIsNot()
+        {
+            Request(Session(Stranger));
+            Request(Session(Alice), new DroneId("drone-9"));
+            Request(Session(Alice));
+
+            Assert.That(denied, Has.Count.EqualTo(2));
+            Assert.That(denied[0].Pilot, Is.EqualTo(Stranger));
+            Assert.That(denied[0].Denial, Is.EqualTo(FlightDenial.UnknownPilot));
+            Assert.That(denied[1].Preferred, Is.EqualTo(new DroneId("drone-9")));
+            Assert.That(denied[1].Denial, Is.EqualTo(FlightDenial.UnknownDrone));
+            Assert.That(denied[1].Message, Is.EqualTo("drone-9 is not in the fleet."));
+        }
+
+        [Test]
+        public void ACancelledRequest_IsNoDenial()
+        {
+            var session = Session(Alice);
+            provider.AnswersAtOnce = false;
+            Start(session);
+
+            coordinator.EndSession(session);
+            provider.AnswerAll();
+
+            Assert.That(denied, Is.Empty);
         }
 
         [Test]

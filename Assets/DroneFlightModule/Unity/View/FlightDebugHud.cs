@@ -37,8 +37,8 @@ namespace DroneFlightModule.Unity
                 Describe(controls, "Fleet/RequestAny", "request any drone"),
                 $"{Display(controls, "Fleet/RequestDrone1")}/{Display(controls, "Fleet/RequestDrone2")}/{Display(controls, "Fleet/RequestDrone3")}: request drone 1, 2 or 3",
                 Describe(controls, "Fleet/Release", "release the drone"),
-                Describe(controls, "Fleet/SwitchPilot", "switch between guest and registered pilot"),
-                Describe(controls, "Fleet/RevokeGrant", "server revokes the registered pilot's grant"),
+                Describe(controls, "Fleet/SwitchPilot", "switch to the next pilot"),
+                Describe(controls, "Fleet/RevokeGrant", "the server revokes your grant"),
                 Describe(controls, "Debug/ToggleLink", "cut or restore the link"),
                 Describe(controls, "Debug/AddDrone", "add a drone"),
                 Describe(controls, "Debug/RemoveDrone", "remove the newest drone"));

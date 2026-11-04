@@ -6,6 +6,7 @@ using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using VContainer.Unity;
 using Object = UnityEngine.Object;
 
 namespace DroneFlightModule.Editor
@@ -13,14 +14,15 @@ namespace DroneFlightModule.Editor
     /// <summary>
     /// Builds the fleet prototype scene from primitives, so the scene can be recreated from code
     /// instead of being edited by hand: a drone prefab, three instances of it side by side on the
-    /// ground, the fleet scope that flies them and adds more from the prefab, and a camera that
-    /// starts on the first drone.
+    /// ground, the fleet scope that flies them and adds more from the prefab, a camera that starts
+    /// on the first drone, and the fleet dashboard when its UI assembly is there.
     /// </summary>
     public sealed class PrototypeSceneBuilder
     {
         private const string ScenePath = "Assets/Scenes/DronePrototype.unity";
         private const string ControlsPath = "Assets/DroneFlightModule/Unity/Input/DroneControls.inputactions";
         private const string DronePrefabPath = "Assets/DroneFlightModule/Unity/View/Drone.prefab";
+        private const string DashboardScopeType = "DroneFlightModule.UI.DashboardLifetimeScope";
         private const int DroneCount = 3;
         private const float DroneSpacing = 4f;
 
@@ -54,6 +56,7 @@ namespace DroneFlightModule.Editor
             CreateLight();
             var ground = CreateGround();
             CreateScope(drones, prefab, camera, ground.transform, controls);
+            CreateDashboard();
 
             if (!EditorSceneManager.SaveScene(scene, ScenePath))
             {
@@ -163,6 +166,21 @@ namespace DroneFlightModule.Editor
                 FindRelative(entry, "spawnPosition").vector3Value = drones[i].transform.position;
                 FindRelative(entry, "view").objectReferenceValue = drones[i];
             }
+            serialized.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        // Found by name, so the editor never depends on the deletable UI assembly; without it the scene has no dashboard.
+        private void CreateDashboard()
+        {
+            var scopeType = TypeCache.GetTypesDerivedFrom<LifetimeScope>().FirstOrDefault(type => type.FullName == DashboardScopeType);
+            if (scopeType == null)
+            {
+                Debug.Log($"No {DashboardScopeType} found, so the scene has no dashboard.");
+                return;
+            }
+            var scope = new GameObject("Dashboard").AddComponent(scopeType);
+            var serialized = new SerializedObject(scope);
+            FindRelative(FindProperty(serialized, "parentReference"), "TypeName").stringValue = typeof(FleetLifetimeScope).FullName;
             serialized.ApplyModifiedPropertiesWithoutUndo();
         }
 

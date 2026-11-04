@@ -218,20 +218,72 @@ namespace DroneFlightModule.Composition.Tests
         }
 
         [Test]
-        public void SwitchKey_ReleasesTheDrone_AndTheRegisteredPilotSignsInThroughTheServer()
+        public void SwitchKey_KeepsThePreviousPilotsDrone_AndTheRegisteredPilotSignsInThroughTheServer()
         {
             Tap(keyboard.rKey);
 
             Tap(keyboard.pKey);
-            AssertFree(grounded);
+            AssertFlownBy(grounded, PilotProfile.Guest.Id);
             Assert.That(Pilot.Session.PilotId, Is.EqualTo(FleetInstaller.RegisteredPilot.Id));
+            Assert.That(Pilot.LastMessage, Does.EndWith("guest keeps drone-2, hands off."));
 
             Tap(keyboard.rKey);
-            AssertFlownBy(grounded, FleetInstaller.RegisteredPilot.Id);
-            Assert.That(grounded.Resolve<DroneGrantHolder>().Grant.ProviderId, Is.EqualTo(SimulatedServerAuthorizationProvider.ProviderId));
+            AssertFlownBy(airborne, FleetInstaller.RegisteredPilot.Id);
+            Assert.That(airborne.Resolve<DroneGrantHolder>().Grant.ProviderId, Is.EqualTo(SimulatedServerAuthorizationProvider.ProviderId));
 
             Tap(keyboard.pKey);
             Assert.That(Pilot.Session.PilotId, Is.EqualTo(PilotProfile.Guest.Id));
+            Assert.That(Pilot.TryGetDrone(out var drone), Is.True);
+            Assert.That(drone, Is.EqualTo(GroundedDrone));
+        }
+
+        [Test]
+        public void TheRegisteredPilot_TakesOverTheGuestsDrone_AndBothAreTracked()
+        {
+            Tap(keyboard.rKey);
+            Tap(keyboard.pKey);
+
+            Tap(keyboard.digit2Key);
+
+            AssertFlownBy(grounded, FleetInstaller.RegisteredPilot.Id);
+            Assert.That(Pilot.LastMessage, Is.EqualTo("Took over drone-2 from guest."));
+            var stats = fleet.Resolve<IPilotStatsStore>();
+            Assert.That(stats.Get(FleetInstaller.RegisteredPilot.Id).Takeovers, Is.EqualTo(1));
+            Assert.That(stats.Get(PilotProfile.Guest.Id).TimesPreempted, Is.EqualTo(1));
+
+            Tap(keyboard.pKey);
+            Assert.That(Pilot.TryGetDrone(out _), Is.False);
+        }
+
+        [Test]
+        public void TheSelectedPilot_HearsWhenTheyArePreempted()
+        {
+            Tap(keyboard.rKey);
+            var remoteAce = new PilotSession(
+                FleetInstaller.RegisteredPilot.Id,
+                PilotOrigin.Remote,
+                fleet.Resolve<SimulatedServerAuthorizationProvider>(),
+                fleet.Resolve<DisconnectableInputProvider>());
+
+            var result = fleet.Resolve<FlightCoordinator>().RequestFlightAsync(remoteAce, GroundedDrone, CancellationToken.None).Result;
+
+            Assert.That(result.Outcome, Is.EqualTo(FlightRequestOutcome.TookOver));
+            Assert.That(Pilot.LastMessage, Is.EqualTo("ace took drone-2 over from guest."));
+            Assert.That(Pilot.TryGetDrone(out _), Is.False);
+        }
+
+        [Test]
+        public void AParkedPilotsDrone_IgnoresTheKeyboard()
+        {
+            Tap(keyboard.rKey);
+            Tap(keyboard.pKey);
+
+            Press(keyboard.spaceKey);
+            Run(grounded, 1f);
+            Release(keyboard.spaceKey);
+
+            Assert.That(grounded.Resolve<FlightLoop>().State.IsGrounded, Is.True);
+            AssertFlownBy(grounded, PilotProfile.Guest.Id);
         }
 
         [Test]
@@ -244,6 +296,57 @@ namespace DroneFlightModule.Composition.Tests
 
             AssertFree(grounded);
             Assert.That(Pilot.LastMessage, Does.Contain("revoked"));
+        }
+
+        [Test]
+        public void SelectingAPilot_SwitchesToThem_AndAnUnknownOneIsRefused()
+        {
+            Tap(keyboard.rKey);
+
+            Pilot.SelectPilot(FleetInstaller.RegisteredPilot.Id);
+
+            Assert.That(Pilot.Session.PilotId, Is.EqualTo(FleetInstaller.RegisteredPilot.Id));
+            AssertFlownBy(grounded, PilotProfile.Guest.Id);
+            Assert.Throws<ArgumentException>(() => Pilot.SelectPilot(new PilotId("stranger")));
+        }
+
+        [Test]
+        public void RevokingAsTheGuest_SaysThereIsNoServerGrant()
+        {
+            Tap(keyboard.rKey);
+
+            Tap(keyboard.vKey);
+
+            Assert.That(Pilot.LastMessage, Is.EqualTo("guest holds no server grant."));
+            AssertFlownBy(grounded, PilotProfile.Guest.Id);
+        }
+
+        [Test]
+        public void TheConsole_DoesWhatTheKeysDo()
+        {
+            var console = new FleetConsole(Pilot, fleet.Resolve<DisconnectableInputProvider>(), drones);
+
+            console.SelectPilot(FleetInstaller.RegisteredPilot.Id);
+            console.RequestFlight(AirborneDrone);
+            Assert.That(console.Pilot, Is.EqualTo(FleetInstaller.RegisteredPilot.Id));
+            Assert.That(console.TryGetDrone(out var flown), Is.True);
+            Assert.That(flown, Is.EqualTo(AirborneDrone));
+
+            console.ToggleLink();
+            Assert.That(console.IsLinkCut, Is.True);
+            Assert.That(airborne.Resolve<IFlightGate>().IsFlightAllowed, Is.False);
+            console.ToggleLink();
+
+            console.RevokeGrant();
+            Assert.That(console.TryGetDrone(out _), Is.False);
+            Assert.That(console.LastMessage, Does.Contain("revoked"));
+
+            console.RequestFlight(null);
+            console.Release();
+            Assert.That(console.TryGetDrone(out _), Is.False);
+
+            console.RemoveDrone(GroundedDrone);
+            Assert.That(fleet.Resolve<DroneRegistry>().Drones, Has.Count.EqualTo(1));
         }
 
         [Test]

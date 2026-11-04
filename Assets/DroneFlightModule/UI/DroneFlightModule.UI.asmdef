@@ -1,0 +1,21 @@
+{
+    "name": "DroneFlightModule.UI",
+    "rootNamespace": "DroneFlightModule.UI",
+    "references": [
+        "DroneFlightModule.Core",
+        "DroneFlightModule.Pilots",
+        "DroneFlightModule.Coordination",
+        "DroneFlightModule.Telemetry",
+        "VContainer",
+        "Unity.InputSystem"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
