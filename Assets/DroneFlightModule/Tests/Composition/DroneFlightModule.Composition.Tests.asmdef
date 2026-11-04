@@ -7,6 +7,7 @@
         "DroneFlightModule.Pilots",
         "DroneFlightModule.Authorization",
         "DroneFlightModule.Coordination",
+        "DroneFlightModule.Telemetry",
         "DroneFlightModule.Composition",
         "VContainer",
         "Unity.InputSystem",

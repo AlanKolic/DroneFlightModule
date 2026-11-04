@@ -5,6 +5,7 @@ using DroneFlightModule.Authorization;
 using DroneFlightModule.Coordination;
 using DroneFlightModule.Core;
 using DroneFlightModule.Pilots;
+using DroneFlightModule.Telemetry;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -283,6 +284,32 @@ namespace DroneFlightModule.Composition.Tests
 
             Assert.That(fleet.Resolve<ISimulationClock>(), Is.SameAs(clock));
             Assert.That(fleet.Resolve<IPilotStatsStore>().Get(PilotProfile.Guest.Id).FlightTime, Is.EqualTo(3.0).Within(1e-6));
+        }
+
+        [Test]
+        public void EveryDrone_StreamsTelemetryToTheFleetSink()
+        {
+            Run(airborne, 1f);
+            Run(grounded, 1f);
+
+            var sink = fleet.Resolve<InMemoryTelemetrySink>();
+            var recorder = airborne.Resolve<TelemetryRecorder>();
+            Assert.That(sink.TryGetLatest(AirborneDrone, out var latest), Is.True);
+            // 50 ticks of 0.02 s at 10 samples per second: the first tick, then every fifth, so the last at 0.92 s.
+            Assert.That(recorder.History, Has.Count.EqualTo(10));
+            Assert.That(latest.Time, Is.EqualTo(0.92).Within(1e-6));
+            Assert.That(latest.Time, Is.EqualTo(recorder.Latest.Time));
+            Assert.That(sink.TryGetLatest(GroundedDrone, out _), Is.True);
+        }
+
+        [Test]
+        public void ARemovedDrone_EndsItsTelemetryStream()
+        {
+            Run(grounded, 1f);
+
+            drones.RemoveDrone(GroundedDrone);
+
+            Assert.That(fleet.Resolve<InMemoryTelemetrySink>().TryGetLatest(GroundedDrone, out _), Is.False);
         }
 
         [Test]

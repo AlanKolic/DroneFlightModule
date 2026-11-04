@@ -5,6 +5,7 @@ using DroneFlightModule.Authorization;
 using DroneFlightModule.Coordination;
 using DroneFlightModule.Core;
 using DroneFlightModule.Pilots;
+using DroneFlightModule.Telemetry;
 using DroneFlightModule.Unity;
 using UnityEngine.InputSystem;
 using VContainer;
@@ -14,8 +15,9 @@ namespace DroneFlightModule.Composition
 {
     /// <summary>
     /// Registers what the whole fleet shares: frame and failsafe configs, the ground, pilots and
-    /// their stats, both authorization providers, the coordinator, the simulation clock, and the
-    /// pilot at this machine's keyboard or gamepad. The fleet starts empty: each drone's child
+    /// their stats, both authorization providers, the coordinator, the simulation clock, the
+    /// telemetry config and the fleet-wide in-memory telemetry sink, and the pilot at this
+    /// machine's keyboard or gamepad. The fleet starts empty: each drone's child
     /// scope adds its own objects with <see cref="DroneInstaller"/> and joins it, at startup or
     /// later. Kept apart from the scope so tests can build the fleet without a scene.
     /// </summary>
@@ -62,6 +64,9 @@ namespace DroneFlightModule.Composition
             builder.Register<FlightCoordinator>(Lifetime.Singleton);
             builder.Register<SimulationClock>(Lifetime.Singleton).AsSelf().As<ISimulationClock>();
             builder.Register<PilotStatsListener>(Lifetime.Singleton);
+
+            builder.RegisterInstance(TelemetryConfig.Default);
+            builder.Register<InMemoryTelemetrySink>(Lifetime.Singleton);
 
             builder.RegisterInstance(controls);
             builder.Register<InputActionInputProvider>(Lifetime.Singleton);

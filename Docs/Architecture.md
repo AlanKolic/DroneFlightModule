@@ -57,7 +57,7 @@ flowchart TB
 | `DroneFlightModule.Pilots` | Core | Pilot profiles and priorities, pilot registry, pilot stats |
 | `DroneFlightModule.Authorization` | Core | Providers, revocable grants, per-drone grant holder and gate |
 | `DroneFlightModule.Coordination` | Core, Pilots, Authorization | `FlightCoordinator`, pilot sessions, drone registry, assignment policy, stats recording |
-| `DroneFlightModule.Telemetry` | Core | Recorder sampling `FlightLoop.Ticked`, `ITelemetrySink` implementations |
+| `DroneFlightModule.Telemetry` | Core | Recorder per drone sampling `FlightLoop.Ticked`, ring buffer, `ITelemetrySink` and the in-memory sink |
 | `DroneFlightModule.Remote.Protocol` | nothing | Messages, binary codec, `ITransport`, loopback transport |
 | `DroneFlightModule.Remote.Host` | Core, Coordination, Remote.Protocol | Remote pilot sessions, `RemoteInputProvider`, link-loss timeout (network telemetry sink later) |
 | `DroneFlightModule.Unity` | Core, Remote.Protocol, Input System | Input-actions provider (keyboard and gamepad), link-loss debug toggle, smoothed drone view, debug HUD, follow camera, Core-to-Unity conversions, UDP transport |
@@ -410,9 +410,19 @@ break the Core boundary. All async code uses `Task` and `CancellationToken`.
 
 ## Telemetry and dashboard
 
-- `TelemetryRecorder` (one per drone) subscribes to `FlightLoop.Ticked`, samples at a
-  configurable rate, keeps the latest snapshot and a ring buffer, and forwards to
-  `ITelemetrySink`s (in-memory first, network later).
+- **`TelemetryRecorder`**, one per drone in its child scope, subscribes to `FlightLoop.Ticked`
+  and samples the `FlightFrame`s at `TelemetryConfig.SampleRate` (10 Hz) of simulation time,
+  starting with the first tick. It keeps the latest sample and a `RingBuffer` of recent ones
+  (600, a minute), and passes each sample to its `ITelemetrySink`s. Adding to a ring buffer
+  never allocates, so nothing on the tick does.
+- **Telemetry only reads.** A sink that throws is reported through `SinkFailed`, which the
+  composition logs, and skipped for that sample, so a broken sink can't break a tick or starve
+  the other sinks.
+- **`ITelemetrySink { Write(sample); End(drone); }`.** `End` says a drone's stream finished:
+  disposing a recorder, as happens when its drone is removed, ends it in every sink.
+- **`InMemoryTelemetrySink`**, one for the fleet, keeps the latest sample of every drone still
+  streaming and the fleet's most recent samples together (3000). The dashboard reads it; a
+  network sink for the phone is one more sink in each drone's list.
 - The fleet dashboard (IMGUI) shows, for each drone:
   - the assigned pilot and their priority
   - flight mode and countdown
@@ -491,11 +501,15 @@ break the Core boundary. All async code uses `Task` and `CancellationToken`.
   - a new request cancels the pending one
 - **Fleet** (the real container, two drone scopes, real key presses through the Input System
   test fixture): drones join the fleet in order, one added while the fleet is in use can be
-  flown, a taken id is refused, removing the guest's drone releases it and tells them, and the instantiator on its own:
-  prefab ids and spawn spots, refused ids, removal destroying views, the row restarting, free drones
-  hold and land, number keys switch drones, signing in through the server, revocation, link
-  loss, stats on the fleet's simulation time, and disposal disabling the controls.
-- **Telemetry:** sampling rate, ring buffer, sink fan-out.
+  flown, a taken id is refused, removing the guest's drone releases it and tells them, free
+  drones hold and land, number keys switch drones, signing in through the server, revocation,
+  link loss, stats on the fleet's simulation time, telemetry from every drone reaching the
+  fleet sink and ending with the drone, and disposal disabling the controls.
+- **Drone instantiator:** prefab ids and spawn spots, refused ids, removal destroying views,
+  the row restarting, and disposal destroying only the views it built.
+- **Telemetry:** sampling rate on simulation time, the first tick sampled, the ring buffer,
+  sink fan-out, a failing sink reported without breaking the flight or other sinks, the
+  stream ending on dispose, and the in-memory sink's latest samples and history.
 - **Remote:**
   - the full loopback path from the client through the coordinator to `FlightLoop`
   - a link drop that leads to hold and then descent

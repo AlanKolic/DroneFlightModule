@@ -2,6 +2,8 @@ using System.Collections.Generic;
 using DroneFlightModule.Authorization;
 using DroneFlightModule.Coordination;
 using DroneFlightModule.Core;
+using DroneFlightModule.Telemetry;
+using UnityEngine;
 using VContainer;
 using VContainer.Unity;
 
@@ -11,7 +13,8 @@ namespace DroneFlightModule.Composition
     /// Registers one drone's flight objects in its own child scope; the configs, the ground, the
     /// pilot claims and the fleet come from the fleet scope. The drone flies whoever the
     /// coordinator routes to it, only while that pilot is connected and holds a valid grant, and
-    /// joins the fleet's drone registry once its scope is built, whenever that is.
+    /// joins the fleet's drone registry once its scope is built, whenever that is. Its telemetry
+    /// recorder starts then too, writing to the fleet's sinks, and ends with the scope.
     /// </summary>
     public sealed class DroneInstaller : IInstaller
     {
@@ -49,11 +52,18 @@ namespace DroneFlightModule.Composition
                 .WithParameter("initialState", initialState)
                 .WithParameter<IInputProvider>(resolver => resolver.Resolve<InputRouter>());
 
+            builder.Register<TelemetryRecorder>(Lifetime.Singleton)
+                .WithParameter<IReadOnlyList<ITelemetrySink>>(resolver =>
+                    new ITelemetrySink[] { resolver.Resolve<InMemoryTelemetrySink>() });
+
             builder.Register<IDroneStatus, FlightLoopStatus>(Lifetime.Singleton);
             builder.Register<FleetDrone>(Lifetime.Singleton)
                 .WithParameter("id", droneId);
             builder.RegisterBuildCallback(container =>
-                container.Resolve<DroneRegistry>().Add(container.Resolve<FleetDrone>()));
+            {
+                container.Resolve<TelemetryRecorder>().SinkFailed += (sink, exception) => Debug.LogException(exception);
+                container.Resolve<DroneRegistry>().Add(container.Resolve<FleetDrone>());
+            });
         }
     }
 }

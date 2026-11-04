@@ -26,6 +26,15 @@ namespace DroneFlightModule.Core
             return value;
         }
 
+        public int RequirePositive(int value, string name)
+        {
+            if (value <= 0)
+            {
+                throw new ArgumentOutOfRangeException(name, value, "Must be positive.");
+            }
+            return value;
+        }
+
         public PilotId RequireId(PilotId id, string name)
         {
             if (id.IsEmpty)

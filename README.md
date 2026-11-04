@@ -79,6 +79,7 @@ share: the coordinator, pilots and stats, the providers, and the local pilot's i
 | `Unity` | Core, Input System | Input-actions provider, drone view with interpolation, debug HUD, follow camera |
 | `Pilots` | Core | Pilot profiles and priorities, registry with a built-in guest, stats and their recorder |
 | `Authorization` | Core | Providers (local guest, simulated server), revocable grants, per-drone grant holder gate, one drone per pilot |
+| `Telemetry` | Core | A recorder per drone sampling its flight at 10 Hz, ring buffers, sinks (fleet-wide in-memory sink) |
 | `Coordination` | Core, Pilots, Authorization | `FlightCoordinator`: pilot sessions, drone registry, request pipeline, priority assignment policy, takeover and release, stats from its events |
 | `Composition` | everything above, VContainer, Input System | Fleet scope and installer, `DroneInstantiator` (adds and removes drones, one child scope each), the local pilot's keys, runners (the only places Unity's clock reaches the sim) |
 | `Editor` | the above | Menu item that builds the prototype scene |
@@ -118,8 +119,10 @@ variant is a new class plus one registration in `DroneInstaller`:
   only once the second is secured, so a denied request leaves them where they were.
 - **IMGUI for the debug HUD.** It's a developer readout, not product UI; the planned dashboard
   lives in its own assembly that can be deleted without breaking flight.
-- **No per-tick allocations** in the simulation path. The HUD rebuilds its text at most once per
-  rendered frame.
+- **No per-tick allocations** in the simulation path, telemetry included: samples go into
+  preallocated ring buffers. The HUD rebuilds its text at most once per rendered frame.
+- **Telemetry can't break flight.** It only reads, and a sink that throws is logged and
+  skipped, so a broken sink never stops a tick.
 
 ## Tests
 
@@ -141,11 +144,15 @@ variant is a new class plus one registration in `DroneInstaller`:
   superseded requests, decisions on the fleet as it is once authorization completes, the
   drones joining and leaving at any time, the policy on its own, and stats timed by the simulation
   clock.
+- **Telemetry**: 18 tests for the ring buffer, sampling on simulation time, sink fan-out, a
+  failing sink never breaking the flight, streams ending with the drone, and the in-memory
+  sink.
 - **Composition**: the real fleet container with two drone scopes, driven by key presses:
   each drone in its own scope, drones added and removed while the fleet is in use, free
   drones holding and landing, the guest getting a grounded drone, flying with the keyboard,
   number keys switching drones, release, signing in through the server, revocation, link
-  loss, stats on simulation time, and disposal disabling the controls. The drone instantiator
+  loss, stats on simulation time, telemetry reaching the fleet sink, and disposal disabling the
+  controls. The drone instantiator
   on its own: ids and spawn spots from the prefab, refused ids, removal and disposal.
 
 ## Status and roadmap
@@ -155,9 +162,10 @@ gating and failsafe, velocity controller, Input System controls, debug HUD, foll
 the pilot registry with stats, authorization (guest and simulated server providers, revocable
 grants, the grant holder gate), the flight coordinator (sessions, priority assignment and
 takeover, switching, release, stats), and the fleet scene (a fleet scope with one child scope
-per drone, three drones and more added or removed at runtime, the local pilot's keys).
+per drone, three drones and more added or removed at runtime, the local pilot's keys), and
+telemetry (a recorder per drone, a fleet-wide in-memory sink).
 
-Planned, in order (details in the architecture doc): telemetry, a deletable dashboard,
+Planned, in order (details in the architecture doc): a deletable dashboard,
 ScriptableObject config assets, and a phone remote (protocol, host, UDP, iOS and Android app).
 
 ## Known limitations
