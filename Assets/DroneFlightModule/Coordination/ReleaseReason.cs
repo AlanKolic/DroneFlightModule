@@ -8,6 +8,7 @@ namespace DroneFlightModule.Coordination
         Released,
         SessionEnded,
         Revoked,
-        Switched
+        Switched,
+        Removed
     }
 }

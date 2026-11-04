@@ -20,6 +20,8 @@ namespace DroneFlightModule.Coordination.Tests
         private ScriptedAuthorizationProvider provider;
         private TestDrone airborne;
         private TestDrone grounded;
+        private PilotClaims claims;
+        private DroneRegistry registry;
         private FlightCoordinator coordinator;
         private List<DroneAssigned> assigned;
         private List<DroneReleased> released;
@@ -29,7 +31,7 @@ namespace DroneFlightModule.Coordination.Tests
         public void SetUp()
         {
             provider = new ScriptedAuthorizationProvider("test-provider");
-            var claims = new PilotClaims();
+            claims = new PilotClaims();
             airborne = new TestDrone("drone-1", claims, isAirborne: true);
             grounded = new TestDrone("drone-2", claims, isAirborne: false);
             var pilots = new InMemoryPilotRegistry(new[]
@@ -41,7 +43,7 @@ namespace DroneFlightModule.Coordination.Tests
             });
             coordinator = new FlightCoordinator(
                 pilots,
-                new DroneRegistry(new[] { airborne.Fleet, grounded.Fleet }),
+                registry = new DroneRegistry(new[] { airborne.Fleet, grounded.Fleet }),
                 new PriorityAssignmentPolicy());
 
             assigned = new List<DroneAssigned>();
@@ -192,6 +194,83 @@ namespace DroneFlightModule.Coordination.Tests
             Assert.That(Request(Session(Dave)).Denial, Is.EqualTo(FlightDenial.NoDroneAvailable));
             Assert.That(Request(Session(Dave), airborne.Id).Denial, Is.EqualTo(FlightDenial.NoDroneAvailable));
             AssertFlying(Alice, airborne);
+        }
+
+        [Test]
+        public void ADroneThatJoinsLater_IsAssignedLikeAnyOther()
+        {
+            Request(Session(Alice), airborne.Id);
+            Request(Session(Carol), grounded.Id);
+            Assert.That(Request(Session(Dave)).Denial, Is.EqualTo(FlightDenial.NoDroneAvailable));
+            var late = new TestDrone("drone-3", claims, isAirborne: false);
+
+            registry.Add(late.Fleet);
+            var result = Request(Session(Dave));
+
+            Assert.That(result.Drone, Is.EqualTo(late.Id));
+            AssertFlying(Dave, late);
+        }
+
+        [Test]
+        public void ADroneThatJoinsDuringAuthorization_IsPartOfTheDecision()
+        {
+            Request(Session(Alice), airborne.Id);
+            Request(Session(Carol), grounded.Id);
+            var slow = new ScriptedAuthorizationProvider("slow-provider") { AnswersAtOnce = false };
+            var pending = Start(Session(Dave, slow));
+            var late = new TestDrone("drone-3", claims, isAirborne: false);
+
+            registry.Add(late.Fleet);
+            slow.AnswerAll();
+
+            Assert.That(pending.Result.Drone, Is.EqualTo(late.Id));
+        }
+
+        [Test]
+        public void RemovingAFreeDrone_TakesItOutOfTheFleet()
+        {
+            Assert.That(coordinator.RemoveDrone(airborne.Id), Is.True);
+
+            Assert.That(registry.TryGet(airborne.Id, out _), Is.False);
+            Assert.That(registry.Drones, Has.Count.EqualTo(1));
+            Assert.That(coordinator.RemoveDrone(airborne.Id), Is.False);
+            Assert.That(released, Is.Empty);
+        }
+
+        [Test]
+        public void RemovingAFlownDrone_ReleasesItFirst()
+        {
+            Request(Session(Alice), airborne.Id);
+
+            coordinator.RemoveDrone(airborne.Id);
+
+            Assert.That(released, Has.Count.EqualTo(1));
+            Assert.That(released[0].Reason, Is.EqualTo(ReleaseReason.Removed));
+            AssertFree(airborne);
+            Assert.That(coordinator.TryGetDrone(Alice, out _), Is.False);
+            Assert.That(Request(Session(Alice), grounded.Id).Drone, Is.EqualTo(grounded.Id), "Her claim went with the drone.");
+        }
+
+        [Test]
+        public void APendingRequestForARemovedDrone_IsDeniedAsUnknown()
+        {
+            var slow = new ScriptedAuthorizationProvider("slow-provider") { AnswersAtOnce = false };
+            var pending = Start(Session(Alice, slow), airborne.Id);
+
+            coordinator.RemoveDrone(airborne.Id);
+            slow.AnswerAll();
+
+            Assert.That(pending.Result.Denial, Is.EqualTo(FlightDenial.UnknownDrone));
+        }
+
+        [Test]
+        public void ARemovedDrone_CanRejoin()
+        {
+            coordinator.RemoveDrone(airborne.Id);
+
+            registry.Add(airborne.Fleet);
+
+            Assert.That(Request(Session(Alice), airborne.Id).Drone, Is.EqualTo(airborne.Id));
         }
 
         [Test]

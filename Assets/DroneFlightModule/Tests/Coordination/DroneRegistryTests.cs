@@ -36,9 +36,33 @@ namespace DroneFlightModule.Coordination.Tests
         public void RejectsAnInvalidFleet()
         {
             Assert.Throws<ArgumentNullException>(() => new DroneRegistry(null));
-            Assert.Throws<ArgumentException>(() => new DroneRegistry(new FleetDrone[0]));
-            Assert.Throws<ArgumentException>(() => new DroneRegistry(new FleetDrone[] { null }));
+            Assert.Throws<ArgumentNullException>(() => new DroneRegistry(new FleetDrone[] { null }));
             Assert.Throws<ArgumentException>(() => new DroneRegistry(new[] { Drone("drone-1"), Drone("drone-1") }));
+        }
+
+        [Test]
+        public void DronesCanJoinLater_InOrder()
+        {
+            var registry = new DroneRegistry(new FleetDrone[0]);
+            var first = Drone("drone-1");
+            var second = Drone("drone-2");
+
+            registry.Add(first);
+            registry.Add(second);
+
+            Assert.That(registry.Drones, Is.EqualTo(new[] { first, second }));
+            Assert.That(registry.TryGet(second.Id, out var found), Is.True);
+            Assert.That(found, Is.SameAs(second));
+        }
+
+        [Test]
+        public void Add_RejectsNullAndDuplicates()
+        {
+            var registry = new DroneRegistry(new[] { Drone("drone-1") });
+
+            Assert.Throws<ArgumentNullException>(() => registry.Add(null));
+            Assert.Throws<ArgumentException>(() => registry.Add(Drone("drone-1")));
+            Assert.That(registry.Drones, Has.Count.EqualTo(1));
         }
 
         [Test]

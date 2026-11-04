@@ -4,6 +4,9 @@
     "references": [
         "DroneFlightModule.Core",
         "DroneFlightModule.Unity",
+        "DroneFlightModule.Pilots",
+        "DroneFlightModule.Authorization",
+        "DroneFlightModule.Coordination",
         "DroneFlightModule.Composition",
         "VContainer",
         "Unity.InputSystem",

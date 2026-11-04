@@ -1,40 +1,31 @@
+using System.Collections.Generic;
+using DroneFlightModule.Authorization;
+using DroneFlightModule.Coordination;
 using DroneFlightModule.Core;
-using DroneFlightModule.Unity;
-using UnityEngine.InputSystem;
 using VContainer;
 using VContainer.Unity;
 
 namespace DroneFlightModule.Composition
 {
     /// <summary>
-    /// Registers one drone's Core flight objects with plain constructors. Kept apart from the
-    /// scope so tests can build the container without a scene. Until the flight coordinator
-    /// exists, the local pilot (keyboard or gamepad, through a link that can be cut for testing)
-    /// is assigned to the drone directly.
+    /// Registers one drone's flight objects in its own child scope; the configs, the ground, the
+    /// pilot claims and the fleet come from the fleet scope. The drone flies whoever the
+    /// coordinator routes to it, only while that pilot is connected and holds a valid grant, and
+    /// joins the fleet's drone registry once its scope is built, whenever that is.
     /// </summary>
     public sealed class DroneInstaller : IInstaller
     {
-        public static readonly PilotId LocalPilot = new PilotId("local-pilot");
-
         private readonly DroneId droneId;
-        private readonly Vec3 spawnPosition;
-        private readonly float groundHeight;
-        private readonly InputActionAsset controls;
+        private readonly DroneState initialState;
 
-        public DroneInstaller(DroneId droneId, Vec3 spawnPosition, float groundHeight, InputActionAsset controls)
+        public DroneInstaller(DroneId droneId, DroneState initialState)
         {
             this.droneId = droneId;
-            this.spawnPosition = spawnPosition;
-            this.groundHeight = groundHeight;
-            this.controls = controls;
+            this.initialState = initialState;
         }
 
         public void Install(IContainerBuilder builder)
         {
-            builder.RegisterInstance(DroneConfig.Default);
-            builder.RegisterInstance(FailsafeConfig.Default);
-            builder.RegisterInstance(VelocityControllerConfig.Default);
-            builder.RegisterInstance<ITerrain>(new FlatTerrain(groundHeight));
             builder.Register<IFlightController, VelocityFlightController>(Lifetime.Singleton)
                 .WithParameter("gravity", DroneIntegrator.StandardGravity);
             builder.Register<DroneIntegrator>(Lifetime.Singleton)
@@ -43,23 +34,26 @@ namespace DroneFlightModule.Composition
                 .WithParameter("maxRange", RangefinderAltitudeSensor.DefaultMaxRange)
                 .WithParameter("updateRate", RangefinderAltitudeSensor.DefaultUpdateRate);
 
-            builder.RegisterInstance(controls);
-            builder.Register<InputActionInputProvider>(Lifetime.Singleton);
-            builder.Register<DisconnectableInputProvider>(Lifetime.Singleton)
-                .WithParameter<IInputProvider>(resolver => resolver.Resolve<InputActionInputProvider>());
-            builder.Register<LinkLossToggle>(Lifetime.Singleton);
             builder.Register<InputRouter>(Lifetime.Singleton);
-            builder.Register<IFlightGate, PilotInControlGate>(Lifetime.Singleton);
+            builder.Register<PilotInControlGate>(Lifetime.Singleton);
+            builder.Register<DroneGrantHolder>(Lifetime.Singleton)
+                .WithParameter("drone", droneId);
+            builder.Register<IFlightGate, AllOfFlightGate>(Lifetime.Singleton)
+                .WithParameter<IReadOnlyList<IFlightGate>>(resolver =>
+                    new IFlightGate[] { resolver.Resolve<PilotInControlGate>(), resolver.Resolve<DroneGrantHolder>() });
             builder.Register<FlightSupervisor>(Lifetime.Singleton)
                 .WithParameter("gravity", DroneIntegrator.StandardGravity);
 
             builder.Register<FlightLoop>(Lifetime.Singleton)
                 .WithParameter("droneId", droneId)
-                .WithParameter("initialState", DroneState.At(spawnPosition))
+                .WithParameter("initialState", initialState)
                 .WithParameter<IInputProvider>(resolver => resolver.Resolve<InputRouter>());
 
+            builder.Register<IDroneStatus, FlightLoopStatus>(Lifetime.Singleton);
+            builder.Register<FleetDrone>(Lifetime.Singleton)
+                .WithParameter("id", droneId);
             builder.RegisterBuildCallback(container =>
-                container.Resolve<InputRouter>().Assign(LocalPilot, container.Resolve<DisconnectableInputProvider>()));
+                container.Resolve<DroneRegistry>().Add(container.Resolve<FleetDrone>()));
         }
     }
 }

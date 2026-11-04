@@ -61,7 +61,7 @@ flowchart TB
 | `DroneFlightModule.Remote.Protocol` | nothing | Messages, binary codec, `ITransport`, loopback transport |
 | `DroneFlightModule.Remote.Host` | Core, Coordination, Remote.Protocol | Remote pilot sessions, `RemoteInputProvider`, link-loss timeout (network telemetry sink later) |
 | `DroneFlightModule.Unity` | Core, Remote.Protocol, Input System | Input-actions provider (keyboard and gamepad), link-loss debug toggle, smoothed drone view, debug HUD, follow camera, Core-to-Unity conversions, UDP transport |
-| `DroneFlightModule.Composition` | everything except UI, plus VContainer and Input System | Fleet `LifetimeScope`, one child scope per drone, installers, `FlightLoopRunner` (the only VContainer-facing adapter) |
+| `DroneFlightModule.Composition` | everything except UI, plus VContainer and Input System | Fleet `LifetimeScope`, one child scope per drone, installers, the local pilot's keys, `FlightLoopRunner` and `SimulationClockRunner` (the only places Unity's clock reaches the simulation) |
 | `DroneFlightModule.UI` | Core, Coordination, Pilots, Telemetry, VContainer | Fleet dashboard (IMGUI) in its own child scope |
 | `DroneFlightModule.Editor` | Core, Unity, Composition, VContainer | Editor-only tools, such as the menu item that builds the prototype scene |
 | `*.Tests` (one per assembly) | Its target + NUnit | Edit-mode tests |
@@ -286,7 +286,10 @@ drone a pilot gets, and whether that means taking a drone from someone else.
   pilot connects (keyboard or phone). Input belongs to the pilot, not to the drone, so a session
   can be moved between drones without registering anything again.
 - **`DroneRegistry`** holds the fleet as `FleetDrone(DroneId, InputRouter, DroneGrantHolder,
-  IDroneStatus)`, in a fixed order that the policy also uses. `FlightLoopStatus` reads the
+  IDroneStatus)`, in the order drones joined, which the policy also uses. Drones can join at any
+  time, also while pilots fly; ids must be unique. They leave only through
+  `FlightCoordinator.RemoveDrone`, which releases the drone first, so nobody is left flying a
+  drone that is no longer in the fleet. `FlightLoopStatus` reads the
   status (grounded or not) straight from a drone's `FlightLoop`.
 - **`RequestFlightAsync(session, DroneId? preferred, CancellationToken)`** runs this pipeline:
   1. Look up the pilot's profile in the registry. Unknown pilots are denied, without asking a
@@ -306,7 +309,7 @@ drone a pilot gets, and whether that means taking a drone from someone else.
   it to the requesting session, for example after a phone reconnects; the flight goes on.
 - **Events:** `Assigned`, `Released { Drone, Pilot, Reason }` and
   `TookOver { Drone, Pilot, FromPilot }`. Release reasons are `Released`, `SessionEnded`,
-  `Revoked` and `Switched`. A takeover is not a release: the preempted pilot is `FromPilot`.
+  `Revoked`, `Switched` and `Removed`. A takeover is not a release: the preempted pilot is `FromPilot`.
   Pilot stats, telemetry, the dashboard and the remote host subscribe to them.
 
 **`IAssignmentPolicy`**, first implementation `PriorityAssignmentPolicy`:
@@ -332,6 +335,7 @@ of leaving a pilot half switched.
 - The pilot releases it (a key, or a button in the app), or the session ends.
 - The provider revokes the pilot's grant.
 - The pilot switches to another drone.
+- The drone leaves the fleet. A request still waiting for it is then denied as `UnknownDrone`.
 - In every case the drone's grant and router are cleared. If it's airborne, the normal
   hold-then-descend failsafe follows. A link that only drops for a while is not a release: the
   pilot gate closes and the failsafe holds until the link returns.
@@ -358,19 +362,51 @@ break the Core boundary. All async code uses `Task` and `CancellationToken`.
 
 ## Fleet in Unity
 
-- The fleet `LifetimeScope` holds the coordinator, the pilot registry, the providers and the
-  stats store.
-- One child scope per drone, created from a fleet config (drone id, spawn position, frame
-  config). It holds that drone's loop, router, supervisor, sensor, grant holder and cube.
-- The scene has 2–3 drones and a ground plane.
-- The local pilot (keyboard or gamepad) is a local session: guest by default, with a debug key to sign in as a registered
-  high-priority pilot through the simulated server.
+- **`FleetLifetimeScope`** is the scene's composition root. `FleetInstaller` registers what the
+  fleet shares: frame and failsafe configs, the ground, the pilot registry (the guest plus one
+  registered pilot, Ace), stats, both providers, `PilotClaims`, the coordinator, a fleet-wide
+  `SimulationClock` and the local pilot's input. The installer is kept apart from the scope,
+  so tests build the whole fleet without a scene.
+- **`DroneInstantiator`** (registered in the fleet scope) adds and removes drones. Each drone
+  gets its own child scope of the fleet's container: `DroneInstaller` registers that drone's
+  loop, router, controller, sensor, supervisor, grant holder and the gate that combines them,
+  and the instantiator adds a `FlightLoopRunner`. Shared objects come from the fleet scope. It
+  also binds the drone's view and adds its HUD box. The fleet scope only wires: it has the
+  instantiator add the drones from its list (id, spawn position, view) and maps the debug keys
+  to it. Being a plain class on the container, it is tested without a scene.
+- **Joining the fleet.** The fleet starts empty, and each drone scope adds its `FleetDrone` to
+  the `DroneRegistry` once built, at startup or later. A request decides on the fleet as it is
+  once authorization completes, so a drone that joins meanwhile is part of the decision.
+- **Adding drones at runtime.** `DroneInstantiator.AddDrone()` builds a drone from the drone
+  prefab, one spawn step past the last drone, with the first free `drone-N` id, and creates its
+  child scope like the configured ones. A taken id is refused before anything is built. The Debug/AddDrone key (N) calls it. The new drone is
+  free, so any pilot can request it straight away, and the HUD wraps its boxes into more rows.
+- **Removing drones at runtime.** `DroneInstantiator.RemoveDrone(id)` has the coordinator
+  remove the drone, which releases it first, so its pilot's flight ends and they're told.
+  Then the drone's child scope is disposed and its view and HUD box are removed. The
+  Debug/RemoveDrone key (M) removes the newest drone, and the next added one takes its spot.
+  Disposing the instantiator, with the fleet, disposes every drone scope and destroys the views
+  it built from the prefab; views from the scene stay with the scene.
+- **Input belongs to the local pilot**, not to a drone: one copy of the controls asset per fleet
+  scope, one keyboard and gamepad provider, and the link-loss toggle wrapping it.
+- **`LocalPilotControls`** holds two sessions on that input: the guest through local guest mode,
+  and Ace through the simulated server (0.5 s latency). It maps the Fleet action map to the
+  coordinator and keeps the latest outcome for the HUD. Requests never fault: a superseded or
+  cancelled one ends quietly, and anything else is logged.
 - **Keys:**
-  - request any drone
-  - request drone 1–3
-  - release
-  - simulate server revocation
-  - switch the keyboard between guest and registered pilot
+  - R: request any drone
+  - 1–3: request that drone
+  - X: release
+  - P: switch between guest and Ace (ends the current session, so its drone is released)
+  - V: the server revokes Ace's grant
+  - L: cut or restore the link
+  - N: add a drone
+  - M: remove the newest drone
+- **View:** each drone's cube follows its own loop; the HUD has a box per drone and one for the
+  local pilot and the controls; the camera follows the drone the local pilot flies.
+- **Lifetime:** pending requests use a token linked to the scope's `destroyCancellationToken`
+  and `Application.exitCancellationToken`. Destroying the scope cancels them, then the
+  container disposes the providers, controls and listeners.
 
 ## Telemetry and dashboard
 
@@ -451,7 +487,14 @@ break the Core boundary. All async code uses `Task` and `CancellationToken`.
   - a provider revocation releases the pilot's drone
   - a pilot who asks for another drone lets go of the first only once it's secured, and a
     denied switch keeps the current drone
+  - drones join and leave at any time; removing a flown drone releases it first
   - a new request cancels the pending one
+- **Fleet** (the real container, two drone scopes, real key presses through the Input System
+  test fixture): drones join the fleet in order, one added while the fleet is in use can be
+  flown, a taken id is refused, removing the guest's drone releases it and tells them, and the instantiator on its own:
+  prefab ids and spawn spots, refused ids, removal destroying views, the row restarting, free drones
+  hold and land, number keys switch drones, signing in through the server, revocation, link
+  loss, stats on the fleet's simulation time, and disposal disabling the controls.
 - **Telemetry:** sampling rate, ring buffer, sink fan-out.
 - **Remote:**
   - the full loopback path from the client through the coordinator to `FlightLoop`

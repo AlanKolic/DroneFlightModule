@@ -6,8 +6,8 @@ using VContainer.Unity;
 namespace DroneFlightModule.Composition
 {
     /// <summary>
-    /// The only place Unity's clock reaches the simulation: ticks the flight loop once per fixed
-    /// update with Unity's fixed step.
+    /// Where Unity's clock reaches a drone's simulation: ticks its flight loop once per fixed
+    /// update with Unity's fixed step. Each drone scope has one.
     /// </summary>
     public sealed class FlightLoopRunner : IFixedTickable
     {

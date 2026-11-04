@@ -109,6 +109,17 @@ namespace DroneFlightModule.Coordination.Tests
         }
 
         [Test]
+        public void RemovingTheDrone_EndsTheFlight()
+        {
+            Fly(Alice, drone1);
+            clock.Time = 3.0;
+
+            coordinator.RemoveDrone(drone1.Id);
+
+            Assert.That(store.Get(Alice).FlightTime, Is.EqualTo(3.0));
+        }
+
+        [Test]
         public void AfterDispose_NothingIsRecorded()
         {
             listener.Dispose();

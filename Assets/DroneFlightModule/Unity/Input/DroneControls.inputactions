@@ -191,6 +191,187 @@
             ]
         },
         {
+            "name": "Fleet",
+            "id": "67d13679-3cdb-4e25-87dd-61ff3c7f2875",
+            "actions": [
+                {
+                    "name": "RequestAny",
+                    "type": "Button",
+                    "id": "14143667-3c15-4e88-945b-21fce8bb5dff",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                },
+                {
+                    "name": "RequestDrone1",
+                    "type": "Button",
+                    "id": "046ac186-b605-4d82-b862-1f427eaf7cbc",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                },
+                {
+                    "name": "RequestDrone2",
+                    "type": "Button",
+                    "id": "2aa48e50-c3c9-4795-b060-3c060d6b3c7d",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                },
+                {
+                    "name": "RequestDrone3",
+                    "type": "Button",
+                    "id": "d4d9a9ec-5e44-4b9f-b710-d399d6a282ff",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                },
+                {
+                    "name": "Release",
+                    "type": "Button",
+                    "id": "49553c91-6389-4c71-8dd4-c06bf58881bd",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                },
+                {
+                    "name": "SwitchPilot",
+                    "type": "Button",
+                    "id": "ebbe4007-9027-4fe0-aae1-cb402fa93c11",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                },
+                {
+                    "name": "RevokeGrant",
+                    "type": "Button",
+                    "id": "410c0d36-b441-4b1c-b68a-55230e7319c6",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                }
+            ],
+            "bindings": [
+                {
+                    "name": "",
+                    "id": "11fa05a1-4229-428c-a62b-b5100734addb",
+                    "path": "<Keyboard>/r",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "Keyboard",
+                    "action": "RequestAny",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "fd93a568-35bf-4035-8089-e1c7cfb8e8fc",
+                    "path": "<Gamepad>/buttonSouth",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "Gamepad",
+                    "action": "RequestAny",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "7afa643f-f5f3-4ba4-b599-21d17187dc38",
+                    "path": "<Keyboard>/1",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "Keyboard",
+                    "action": "RequestDrone1",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "e0d29f19-0ea7-4328-bcf7-6d76b39b4172",
+                    "path": "<Keyboard>/2",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "Keyboard",
+                    "action": "RequestDrone2",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "c5d3159c-cb22-41e3-9df0-1644d389e16c",
+                    "path": "<Keyboard>/3",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "Keyboard",
+                    "action": "RequestDrone3",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "e44b8851-6ccd-4e81-bfdb-c266b7bff099",
+                    "path": "<Keyboard>/x",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "Keyboard",
+                    "action": "Release",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "76faedf0-879e-4ea8-a72a-e1713901a9a8",
+                    "path": "<Gamepad>/buttonEast",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "Gamepad",
+                    "action": "Release",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "78acd8ab-7f0a-4f45-bb95-4ee687a97504",
+                    "path": "<Keyboard>/p",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "Keyboard",
+                    "action": "SwitchPilot",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "8f886a82-5dc5-4707-9924-db6a50453612",
+                    "path": "<Gamepad>/start",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "Gamepad",
+                    "action": "SwitchPilot",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "f252621e-cd52-43b0-80c6-21d6f40c9c8c",
+                    "path": "<Keyboard>/v",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "Keyboard",
+                    "action": "RevokeGrant",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                }
+            ]
+        },
+        {
             "name": "Debug",
             "id": "ef141aad-b7fe-49a3-bbcc-f3972fb09ace",
             "actions": [
@@ -198,6 +379,24 @@
                     "name": "ToggleLink",
                     "type": "Button",
                     "id": "6328918e-94d1-41c0-9e37-ac0e75d98892",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                },
+                {
+                    "name": "AddDrone",
+                    "type": "Button",
+                    "id": "8591dc22-5a9e-4ccb-a782-442119ce6174",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                },
+                {
+                    "name": "RemoveDrone",
+                    "type": "Button",
+                    "id": "07a78ab5-18c0-4c7e-8cbf-4f16ca1ad181",
                     "expectedControlType": "Button",
                     "processors": "",
                     "interactions": "",
@@ -224,6 +423,28 @@
                     "processors": "",
                     "groups": "Gamepad",
                     "action": "ToggleLink",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "1d2e1e78-a5f3-42f5-8dd8-08d469791a5e",
+                    "path": "<Keyboard>/n",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "Keyboard",
+                    "action": "AddDrone",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "138d8d57-62e7-4bc3-8d0b-189d4926f224",
+                    "path": "<Keyboard>/m",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "Keyboard",
+                    "action": "RemoveDrone",
                     "isComposite": false,
                     "isPartOfComposite": false
                 }

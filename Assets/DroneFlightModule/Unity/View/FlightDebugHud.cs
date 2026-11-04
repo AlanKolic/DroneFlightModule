@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using DroneFlightModule.Core;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -6,95 +7,145 @@ using UnityEngine.InputSystem;
 namespace DroneFlightModule.Unity
 {
     /// <summary>
-    /// On-screen debug readout for one drone, plus the controls. Only reads from the loop and the
-    /// router; the text is rebuilt at most once per rendered frame, not on every OnGUI pass. The
-    /// controls are described from the actions asset's bindings, so they never drift from it.
+    /// On-screen debug readout for the fleet: a box per drone along the top, wrapping into more rows
+    /// as drones join and closing up as they leave, and below them the local pilot's status and the controls. Only reads from the loops and routers; each drone's
+    /// text is rebuilt at most once per rendered frame, not on every OnGUI pass. The controls are
+    /// described from the actions asset's bindings, so they never drift from it.
     /// </summary>
     public sealed class FlightDebugHud : MonoBehaviour
     {
-        [SerializeField] private Rect area = new Rect(12f, 12f, 320f, 210f);
+        [SerializeField] private Vector2 origin = new Vector2(12f, 12f);
+        [SerializeField] private Vector2 droneBoxSize = new Vector2(240f, 116f);
+        [SerializeField] private Vector2 pilotBoxSize = new Vector2(400f, 272f);
+        [SerializeField] private float spacing = 8f;
 
         private readonly FlightReadout readout = new FlightReadout();
-        private FlightLoop loop;
-        private InputRouter router;
-        private FlightFrame lastFrame;
-        private bool hasFrame;
-        private bool isDirty;
+        private readonly List<DroneReadout> drones = new List<DroneReadout>();
         private string controlsText = string.Empty;
-        private string text = string.Empty;
+        private string pilotStatus = string.Empty;
 
-        public void Bind(FlightLoop loop, InputRouter router, InputActionAsset controls)
+        public void Bind(InputActionAsset controls)
         {
-            if (loop == null)
-            {
-                throw new ArgumentNullException(nameof(loop));
-            }
-            if (router == null)
-            {
-                throw new ArgumentNullException(nameof(router));
-            }
             if (controls == null)
             {
                 throw new ArgumentNullException(nameof(controls));
             }
-            Unbind();
-            this.loop = loop;
-            this.router = router;
             controlsText = string.Join("\n",
                 Describe(controls, "Flight/Move", "move"),
                 Describe(controls, "Flight/Climb", "climb, descend"),
                 Describe(controls, "Flight/Yaw", "yaw"),
-                Describe(controls, "Debug/ToggleLink", "cut or restore the link"));
-            loop.Ticked += OnTicked;
+                Describe(controls, "Fleet/RequestAny", "request any drone"),
+                $"{Display(controls, "Fleet/RequestDrone1")}/{Display(controls, "Fleet/RequestDrone2")}/{Display(controls, "Fleet/RequestDrone3")}: request drone 1, 2 or 3",
+                Describe(controls, "Fleet/Release", "release the drone"),
+                Describe(controls, "Fleet/SwitchPilot", "switch between guest and registered pilot"),
+                Describe(controls, "Fleet/RevokeGrant", "server revokes the registered pilot's grant"),
+                Describe(controls, "Debug/ToggleLink", "cut or restore the link"),
+                Describe(controls, "Debug/AddDrone", "add a drone"),
+                Describe(controls, "Debug/RemoveDrone", "remove the newest drone"));
+        }
+
+        public void AddDrone(FlightLoop loop, InputRouter router)
+        {
+            var drone = new DroneReadout(loop ?? throw new ArgumentNullException(nameof(loop)),
+                router ?? throw new ArgumentNullException(nameof(router)));
+            loop.Ticked += drone.OnTicked;
+            drones.Add(drone);
+        }
+
+        public void RemoveDrone(FlightLoop loop)
+        {
+            int index = drones.FindIndex(drone => drone.Loop == loop);
+            if (index < 0)
+            {
+                return;
+            }
+            drones[index].Loop.Ticked -= drones[index].OnTicked;
+            drones.RemoveAt(index);
+        }
+
+        public void SetPilotStatus(string status)
+        {
+            pilotStatus = status ?? string.Empty;
         }
 
         private void Update()
         {
-            if (!isDirty)
+            foreach (var drone in drones)
             {
-                return;
+                if (!drone.IsDirty)
+                {
+                    continue;
+                }
+                drone.IsDirty = false;
+                var frame = drone.LastFrame;
+                drone.Text = $"{frame.DroneId}\n{readout.Format(frame, drone.Router.ActivePilotId, drone.Router.IsConnected)}";
             }
-            isDirty = false;
-            text = readout.Format(lastFrame, router.ActivePilotId, router.IsConnected) + "\n\n" + controlsText;
         }
 
         private void OnGUI()
         {
-            if (!hasFrame)
+            int columns = Mathf.Max(1, Mathf.FloorToInt((Screen.width - origin.x + spacing) / (droneBoxSize.x + spacing)));
+            for (int i = 0; i < drones.Count; i++)
             {
-                return;
+                if (!drones[i].HasFrame)
+                {
+                    continue;
+                }
+                float x = origin.x + i % columns * (droneBoxSize.x + spacing);
+                float y = origin.y + i / columns * (droneBoxSize.y + spacing);
+                DrawBox(new Rect(x, y, droneBoxSize.x, droneBoxSize.y), drones[i].Text);
             }
-            GUI.Box(area, GUIContent.none);
-            GUI.Label(new Rect(area.x + 8f, area.y + 6f, area.width - 16f, area.height - 12f), text);
+            int rows = (drones.Count + columns - 1) / columns;
+            var pilotBox = new Rect(origin.x, origin.y + rows * (droneBoxSize.y + spacing), pilotBoxSize.x, pilotBoxSize.y);
+            DrawBox(pilotBox, pilotStatus + "\n\n" + controlsText);
         }
 
         private void OnDestroy()
         {
-            Unbind();
+            foreach (var drone in drones)
+            {
+                drone.Loop.Ticked -= drone.OnTicked;
+            }
+            drones.Clear();
         }
 
-        private void Unbind()
+        private void DrawBox(Rect box, string text)
         {
-            if (loop == null)
-            {
-                return;
-            }
-            loop.Ticked -= OnTicked;
-            loop = null;
-            router = null;
-            hasFrame = false;
+            GUI.Box(box, GUIContent.none);
+            GUI.Label(new Rect(box.x + 8f, box.y + 6f, box.width - 16f, box.height - 12f), text);
         }
 
         private string Describe(InputActionAsset controls, string action, string meaning)
         {
-            return $"{controls.FindAction(action, throwIfNotFound: true).GetBindingDisplayString()}: {meaning}";
+            return $"{Display(controls, action)}: {meaning}";
         }
 
-        private void OnTicked(FlightFrame frame)
+        private string Display(InputActionAsset controls, string action)
         {
-            lastFrame = frame;
-            hasFrame = true;
-            isDirty = true;
+            return controls.FindAction(action, throwIfNotFound: true).GetBindingDisplayString();
+        }
+
+        private sealed class DroneReadout
+        {
+            public DroneReadout(FlightLoop loop, InputRouter router)
+            {
+                Loop = loop;
+                Router = router;
+            }
+
+            public FlightLoop Loop { get; }
+            public InputRouter Router { get; }
+            public FlightFrame LastFrame { get; private set; }
+            public bool HasFrame { get; private set; }
+            public bool IsDirty { get; set; }
+            public string Text { get; set; } = string.Empty;
+
+            public void OnTicked(FlightFrame frame)
+            {
+                LastFrame = frame;
+                HasFrame = true;
+                IsDirty = true;
+            }
         }
     }
 }

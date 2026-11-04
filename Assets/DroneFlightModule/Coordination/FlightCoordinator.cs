@@ -16,7 +16,7 @@ namespace DroneFlightModule.Coordination
     /// drone and is given another lets go of the first only then, so a denied request leaves them
     /// where they were. Asking for the drone they already fly just routes it to this session. A
     /// new request from a session cancels its pending one. A drone is freed when its pilot
-    /// releases it, the session ends, or the provider revokes the grant.
+    /// releases it, the session ends, the provider revokes the grant, or it leaves the fleet.
     /// </summary>
     public sealed class FlightCoordinator
     {
@@ -82,6 +82,13 @@ namespace DroneFlightModule.Coordination
                 throw new ArgumentNullException(nameof(session));
             }
             return ReleaseFlownBy(session, ReleaseReason.Released);
+        }
+
+        // Released first, so its pilot's flight ends before the drone is gone; a pending request for it is then denied as UnknownDrone.
+        public bool RemoveDrone(DroneId drone)
+        {
+            ReleaseDrone(drone, ReleaseReason.Removed);
+            return drones.Remove(drone);
         }
 
         public void EndSession(PilotSession session)
