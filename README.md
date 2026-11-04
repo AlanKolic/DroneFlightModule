@@ -53,6 +53,7 @@ Fixed tick ─► altitude sensor ─► pilot input (router) ─► flight cont
 | `Unity` | Core, Input System | Input-actions provider, drone view with interpolation, debug HUD, follow camera |
 | `Pilots` | Core | Pilot profiles and priorities, registry with a built-in guest, stats and their recorder |
 | `Authorization` | Core | Providers (local guest, simulated server), revocable grants, per-drone grant holder gate, one drone per pilot |
+| `Coordination` | Core, Pilots, Authorization | `FlightCoordinator`: pilot sessions, drone registry, request pipeline, priority assignment policy, takeover and release, stats from its events |
 | `Composition` | Core, Unity, VContainer | `LifetimeScope`, installer, `FlightLoopRunner` (the only place Unity's clock reaches the sim) |
 | `Editor` | the above | Menu item that builds the prototype scene |
 | `*.Tests` | their target | EditMode tests |
@@ -87,6 +88,8 @@ variant is a new class plus one registration in `DroneInstaller`:
 - **One pilot, one drone.** A pilot controls at most one drone at a time, enforced where
   control is granted: each drone's grant holder claims the drone for its pilot in a shared
   `PilotClaims`, and refuses a pilot who already holds another. Revocation releases the claim.
+  A pilot who asks the coordinator for another drone is switched to it, letting go of the first
+  only once the second is secured, so a denied request leaves them where they were.
 - **IMGUI for the debug HUD.** It's a developer readout, not product UI; the planned dashboard
   lives in its own assembly that can be deleted without breaking flight.
 - **No per-tick allocations** in the simulation path. The HUD rebuilds its text at most once per
@@ -106,6 +109,11 @@ variant is a new class plus one registration in `DroneInstaller`:
   local-only rule, and the server's latency, policy changes, cancellation and disposal. Async
   code runs with no synchronization context and a hand-completed delay, so the tests are
   synchronous and never sleep.
+- **Coordination**: 40 tests on real flight loops: assignment preferring grounded drones,
+  priority takeover with the gate open on every tick, equal priority never taking over,
+  switching drones, denied switches, revocation, release, ending a session, cancelled and
+  superseded requests, decisions on the fleet as it is once authorization completes, the
+  policy on its own, and stats timed by the simulation clock.
 - **Composition**: the real container: resolution, gate wiring, hover, link loss to landing,
   and disposal disabling the controls.
 
@@ -113,13 +121,14 @@ variant is a new class plus one registration in `DroneInstaller`:
 
 Done (see the commit history): Core flight model, rangefinder, input routing, Unity runtime,
 gating and failsafe, velocity controller, Input System controls, debug HUD, follow camera and
-the pilot registry with stats, and authorization (guest and simulated server providers,
-revocable grants, the grant holder gate). Pilots and authorization are not wired into the
-scene until the coordinator exists.
+the pilot registry with stats, authorization (guest and simulated server providers, revocable
+grants, the grant holder gate), and the flight coordinator (sessions, priority assignment and
+takeover, switching, release, stats). Pilots, authorization and the coordinator are not wired
+into the scene until the multi-drone scene exists.
 
-Planned, in order (details in the architecture doc): a flight coordinator for several drones
-with priority takeover, a multi-drone scene, telemetry, a deletable dashboard, ScriptableObject
-config assets, and a phone remote (protocol, host, UDP, iOS and Android app).
+Planned, in order (details in the architecture doc): a multi-drone scene, telemetry, a
+deletable dashboard, ScriptableObject config assets, and a phone remote (protocol, host, UDP,
+iOS and Android app).
 
 ## Known limitations
 

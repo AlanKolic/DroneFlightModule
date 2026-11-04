@@ -195,12 +195,13 @@ instead of carrying pilot data around.
 - **Unknown pilots are denied** before any provider is asked.
 - **`PilotStats { Flights, FlightTime, Takeovers, TimesPreempted, LastFlight }`**, kept in an
   `IPilotStatsStore` (in-memory first). The store only stores; `PilotStatsRecorder` decides what
-  changes. The coordinator calls it on its events:
+  changes. `PilotStatsListener` (Coordination) calls it on the coordinator's events, timed by an
+  `ISimulationClock`:
   - assigned: `FlightStarted(pilot, drone, time)`
-  - released, revoked or disconnected: `FlightEnded(pilot, drone, time)`
+  - released for any reason, including a switch: `FlightEnded(pilot, drone, time)`
   - takeover: `Preempted` and `FlightEnded` for the old pilot, `TookOver` and `FlightStarted` for
     the new one
-- Each pilot and drone pair is its own flight, so a pilot holding two drones logs two. Flight
+- A pilot flies one drone at a time, so a switch ends one flight and starts the next. Flight
   time is accumulated in simulation time and counts finished flights only. Starting a flight
   that's already open, or ending one that isn't, throws: those are coordinator bugs.
 
@@ -281,46 +282,59 @@ flowchart TB
 One coordinator per simulator manages every drone and every pilot session. It decides which
 drone a pilot gets, and whether that means taking a drone from someone else.
 
-- **`PilotSession { PilotId, Origin, ProviderId, IInputProvider }`** is created when a pilot
-  connects (keyboard or phone). Input belongs to the pilot, not to the drone, so a session can
-  be moved between drones without registering anything again.
-- **Drone registry:** each drone's id, its grant holder, its router and a read-only view of its
-  state (grounded, mode).
+- **`PilotSession(PilotId, Origin, IAuthorizationProvider, IInputProvider)`** is created when a
+  pilot connects (keyboard or phone). Input belongs to the pilot, not to the drone, so a session
+  can be moved between drones without registering anything again.
+- **`DroneRegistry`** holds the fleet as `FleetDrone(DroneId, InputRouter, DroneGrantHolder,
+  IDroneStatus)`, in a fixed order that the policy also uses. `FlightLoopStatus` reads the
+  status (grounded or not) straight from a drone's `FlightLoop`.
 - **`RequestFlightAsync(session, DroneId? preferred, CancellationToken)`** runs this pipeline:
-  1. Look up the pilot's profile in the registry. Unknown pilots are denied.
+  1. Look up the pilot's profile in the registry. Unknown pilots are denied, without asking a
+     provider.
   2. Ask the session's provider to authorize the pilot.
   3. Ask the assignment policy for a decision, using a fresh snapshot of the fleet taken after
-     authorization completes.
+     authorization completes. The pilot's own drone is left out of the snapshot.
   4. Carry out the decision: assign, take over or deny.
-- A new request from the same session cancels its pending one.
-- **Results:** `Assigned { DroneId }`, `TookOver { DroneId, FromPilot }` or
-  `Denied { Reason }`. Reasons include `UnknownPilot`, `NotAuthorized`, `AlreadyFlying` and
+- A new request from the same session cancels its pending one, and so does ending the session.
+- **Results:** `Assigned { Drone }`, `TookOver { Drone, FromPilot }` or
+  `Denied { Denial, Message }`. Denials are `UnknownPilot`, `NotAuthorized`, `UnknownDrone` and
   `NoDroneAvailable`.
-- A pilot who already controls a drone is denied with `AlreadyFlying`, checked before
-  authorization and again before the decision is carried out. To switch drones, the pilot
-  releases the current one first.
-- **Events:** `Assigned`, `Released`, `TookOver` and `Preempted`. Pilot stats, telemetry, the
-  dashboard and the remote host subscribe to them.
+- **Switching drones.** A pilot who flies a drone and asks for another is given it like anyone
+  else, and lets go of the first one only once the second is secured, in the same step. A
+  denied request leaves them on the drone they fly. The released drone behaves as after any
+  release: an airborne one holds, then lands. Asking for the drone they already fly only routes
+  it to the requesting session, for example after a phone reconnects; the flight goes on.
+- **Events:** `Assigned`, `Released { Drone, Pilot, Reason }` and
+  `TookOver { Drone, Pilot, FromPilot }`. Release reasons are `Released`, `SessionEnded`,
+  `Revoked` and `Switched`. A takeover is not a release: the preempted pilot is `FromPilot`.
+  Pilot stats, telemetry, the dashboard and the remote host subscribe to them.
 
 **`IAssignmentPolicy`**, first implementation `PriorityAssignmentPolicy`:
-1. **A specific drone is requested and it's free:** assign it.
+1. **A specific drone is requested:** assign it if it's free, take it over if its pilot ranks
+   strictly lower, and otherwise deny with `NoDroneAvailable`. A drone that isn't in the fleet
+   is `UnknownDrone`.
 2. **Any drone is requested:** pick a free one, preferring grounded drones.
-3. **No free drone:** find the drone whose holder has the lowest priority. If the requesting
+3. **No free drone:** find the drone whose pilot has the lowest priority. If the requesting
    pilot's priority is strictly higher, take that drone over.
 4. **Otherwise deny** with `NoDroneAvailable`. Equal priority never takes over, and there is no
    queue for now.
+
+The coordinator checks the decision before changing anything, so a faulty policy throws instead
+of leaving a pilot half switched.
 
 **Takeover hands control over directly:**
 - The new grant is installed and the router switched to the new session in a single step on
   the main thread, between two ticks. The gate never sees a moment without a valid pilot, so the
   drone doesn't enter Holding and doesn't dip.
-- The pilot who lost the drone gets `Preempted { DroneId, ByPilot }`.
+- The pilot who lost the drone is reported as `FromPilot` in the `TookOver` event.
 
 **Releasing a drone:**
-- The pilot releases it (a key, or a button in the app), or the session disconnects.
-- The provider revokes the pilot's grant, which releases the pilot's drone.
-- In every case the drone's grant is cleared. If it's airborne, the normal hold-then-descend
-  failsafe follows.
+- The pilot releases it (a key, or a button in the app), or the session ends.
+- The provider revokes the pilot's grant.
+- The pilot switches to another drone.
+- In every case the drone's grant and router are cleared. If it's airborne, the normal
+  hold-then-descend failsafe follows. A link that only drops for a while is not a release: the
+  pilot gate closes and the failsafe holds until the link returns.
 
 ## Async rules (plain `Task`, no UniTask)
 
@@ -395,7 +409,8 @@ break the Core boundary. All async code uses `Task` and `CancellationToken`.
   - On `Hello`, the host creates a remote `PilotSession` that uses the simulated server
     provider, with a `RemoteInputProvider` as its input.
   - It forwards `RequestFlight` and `ReleaseFlight` to the coordinator, and sends the
-    coordinator's results and `Preempted` events back to the phone.
+    coordinator's results back to the phone, plus `Preempted` when a `TookOver` event names the
+    phone's pilot as `FromPilot`.
   - With no packet for about 0.5 s, the input reports no connected pilot. The pilot gate closes
     and the normal hold-then-descend failsafe follows.
 - **App:** the same Unity project with a separate scene and a Build Profile each for iOS and
@@ -434,7 +449,8 @@ break the Core boundary. All async code uses `Task` and `CancellationToken`.
   - equal priority is denied when no drone is free
   - a higher priority takes over, the gate stays open on every tick and the mode stays Piloted
   - a provider revocation releases the pilot's drone
-  - a pilot who controls a drone is denied a second one
+  - a pilot who asks for another drone lets go of the first only once it's secured, and a
+    denied switch keeps the current drone
   - a new request cancels the pending one
 - **Telemetry:** sampling rate, ring buffer, sink fan-out.
 - **Remote:**

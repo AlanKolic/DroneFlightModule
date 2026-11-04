@@ -1,0 +1,18 @@
+{
+    "name": "DroneFlightModule.Coordination",
+    "rootNamespace": "DroneFlightModule.Coordination",
+    "references": [
+        "DroneFlightModule.Core",
+        "DroneFlightModule.Pilots",
+        "DroneFlightModule.Authorization"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": true
+}
