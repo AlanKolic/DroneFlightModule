@@ -281,10 +281,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: DroneFlightModule.Unity::DroneFlightModule.Unity.FlightDebugHud
   origin: {x: 12, y: 12}
-  droneBoxSize: {x: 240, y: 116}
   stationBoxSize: {x: 400, y: 26}
-  controlsBoxSize: {x: 400, y: 270}
-  spacing: 8
+  spacing: 10
 --- !u!4 &338102171
 Transform:
   m_ObjectHideFlags: 0
@@ -440,6 +438,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: DroneFlightModule.UI::DroneFlightModule.UI.ControlPanel
   width: 340
   margin: 12
+  refreshInterval: 0.25
 --- !u!114 &1353050264
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -452,8 +451,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 2d5f6ccf268804461a70bfba8660fefa, type: 3}
   m_Name: 
   m_EditorClassIdentifier: DroneFlightModule.UI::DroneFlightModule.UI.FleetDashboard
-  width: 460
-  margin: 12
+  width: 480
+  margin: 15
   refreshInterval: 0.25
   eventCount: 8
   isVisible: 1
@@ -482,6 +481,7 @@ GameObject:
   m_Component:
   - component: {fileID: 2144559885}
   - component: {fileID: 2144559884}
+  - component: {fileID: 2144559886}
   m_Layer: 0
   m_Name: Directional Light
   m_TagString: Untagged
@@ -569,6 +569,35 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &2144559886
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2144559883}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 474bcb49853aa07438625e644c072ee6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.RenderPipelines.Universal.Runtime::UnityEngine.Rendering.Universal.UniversalAdditionalLightData
+  m_UsePipelineSettings: 1
+  m_AdditionalLightsShadowResolutionTier: 2
+  m_CustomShadowLayers: 0
+  m_LightCookieSize: {x: 1, y: 1}
+  m_LightCookieOffset: {x: 0, y: 0}
+  m_SoftShadowQuality: 0
+  m_RenderingLayersMask:
+    serializedVersion: 0
+    m_Bits: 1
+  m_ShadowRenderingLayersMask:
+    serializedVersion: 0
+    m_Bits: 1
+  m_Version: 4
+  m_LightLayerMask: 1
+  m_ShadowLayerMask: 1
+  m_RenderingLayers: 1
+  m_ShadowRenderingLayers: 1
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

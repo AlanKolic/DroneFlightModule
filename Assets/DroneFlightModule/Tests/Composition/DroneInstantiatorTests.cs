@@ -49,7 +49,7 @@ namespace DroneFlightModule.Composition.Tests
         private DroneInstantiator Instantiator(DroneView dronePrefab)
         {
             return new DroneInstantiator(
-                fleet, fleet.Resolve<DroneRegistry>(), fleet.Resolve<FlightCoordinator>(), fleet.Resolve<ISimulationClock>(), dronePrefab, null, fleet.Resolve<ITerrain>(), SpawnStep);
+                fleet, fleet.Resolve<DroneRegistry>(), fleet.Resolve<FlightCoordinator>(), fleet.Resolve<ISimulationClock>(), dronePrefab, fleet.Resolve<ITerrain>(), SpawnStep);
         }
 
         private DroneRegistry Registry => fleet.Resolve<DroneRegistry>();
@@ -68,11 +68,11 @@ namespace DroneFlightModule.Composition.Tests
             var clock = fleet.Resolve<ISimulationClock>();
             var terrain = fleet.Resolve<ITerrain>();
 
-            Assert.Throws<ArgumentNullException>(() => new DroneInstantiator(null, registry, coordinator, clock, prefab, null, terrain, SpawnStep));
-            Assert.Throws<ArgumentNullException>(() => new DroneInstantiator(fleet, null, coordinator, clock, prefab, null, terrain, SpawnStep));
-            Assert.Throws<ArgumentNullException>(() => new DroneInstantiator(fleet, registry, null, clock, prefab, null, terrain, SpawnStep));
-            Assert.Throws<ArgumentNullException>(() => new DroneInstantiator(fleet, registry, coordinator, null, prefab, null, terrain, SpawnStep));
-            Assert.Throws<ArgumentNullException>(() => new DroneInstantiator(fleet, registry, coordinator, clock, prefab, null, null, SpawnStep));
+            Assert.Throws<ArgumentNullException>(() => new DroneInstantiator(null, registry, coordinator, clock, prefab, terrain, SpawnStep));
+            Assert.Throws<ArgumentNullException>(() => new DroneInstantiator(fleet, null, coordinator, clock, prefab, terrain, SpawnStep));
+            Assert.Throws<ArgumentNullException>(() => new DroneInstantiator(fleet, registry, null, clock, prefab, terrain, SpawnStep));
+            Assert.Throws<ArgumentNullException>(() => new DroneInstantiator(fleet, registry, coordinator, null, prefab, terrain, SpawnStep));
+            Assert.Throws<ArgumentNullException>(() => new DroneInstantiator(fleet, registry, coordinator, clock, prefab, null, SpawnStep));
         }
 
         [Test]
@@ -154,7 +154,7 @@ namespace DroneFlightModule.Composition.Tests
         {
             var hill = new SteppedTerrain();
             var onHill = new DroneInstantiator(
-                fleet, Registry, fleet.Resolve<FlightCoordinator>(), fleet.Resolve<ISimulationClock>(), null, null, hill, SpawnStep);
+                fleet, Registry, fleet.Resolve<FlightCoordinator>(), fleet.Resolve<ISimulationClock>(), null, hill, SpawnStep);
             var hilltop = new DroneId("hilltop");
             var valley = new DroneId("valley");
 

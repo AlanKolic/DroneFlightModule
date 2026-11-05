@@ -1,6 +1,7 @@
+using DroneFlightModule.Core;
 using NUnit.Framework;
 
-namespace DroneFlightModule.Core.Tests
+namespace DroneFlightModule.UI.Tests
 {
     public class FlightTextFormatTests
     {

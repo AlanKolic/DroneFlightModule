@@ -75,7 +75,7 @@ where the latest outcome shows: what you asked for, a denial, or that someone to
 2. Take off with Space, fly around, let go: the drone stops and hovers.
 3. Press **2** or **3** to switch drones. You get the new one first, then the old one is
    released, so an airborne drone you leave holds for 10 s and lands by itself.
-4. Press **L** to simulate losing the pilot's link. The HUD switches to **Holding** and counts
+4. Press **L** to simulate losing the pilot's link. The dashboard shows **Holding** and counts
    down 10 s while the drone brakes to a stop, hovers and ignores input.
 5. Press **L** again within 10 s to take back control, or wait: the drone descends at 1 m/s
    (0.5 m/s above the rangefinder's 10 m range), slows to 0.3 m/s below 2 m, lands and cuts its
@@ -104,7 +104,7 @@ where the latest outcome shows: what you asked for, a denial, or that someone to
 ```
 Fixed tick ─► altitude sensor ─► pilot input (router) ─► flight controller
            ─► flight supervisor (gate open? pilot's command : failsafe command)
-           ─► integrator ─► Ticked event ─► view, HUD (read-only)
+           ─► integrator ─► Ticked event ─► view, telemetry (read-only)
 
 Request ─► pilot registry ─► authorization provider ─► assignment policy (fresh fleet snapshot)
         ─► grant installed and router switched in one step ─► gate opens for that pilot
@@ -116,7 +116,7 @@ share: the coordinator, pilots and stats, the providers, and a pilot station per
 | Assembly | Depends on | Role |
 |---|---|---|
 | `Core` | nothing (`noEngineReferences`) | Math, state, input routing, controllers, gates, failsafe supervisor, rangefinder, integrator, `FlightLoop` |
-| `Unity` | Core, Input System | Input-actions provider, drone view with interpolation, debug HUD (drones, stations and controls), follow camera |
+| `Unity` | Core, Input System | Input-actions provider, drone view with interpolation, debug HUD (stations and controls), follow camera |
 | `Pilots` | Core | Pilot profiles and priorities, registry with a built-in guest, stats and their recorder |
 | `Authorization` | Core | Providers (local guest, simulated server that can revoke), revocable grants, per-drone grant holder gate |
 | `Telemetry` | Core | A recorder per drone sampling its flight at 10 Hz, sinks (a fleet-wide in-memory sink of the latest samples) |
@@ -165,7 +165,7 @@ variant is a new class plus one registration in `DroneInstaller`:
 - **One timebase.** A drone that joins a running fleet starts its loop at the fleet's
   simulation time, so telemetry, stats and the event log all share one clock.
 - **IMGUI for the debug HUD, the dashboard and the control panel.** The HUD is a developer
-  readout of the drones, the stations and the controls. The dashboard and the control panel,
+  readout of the stations and the controls; the drones are on the dashboard. The dashboard and the control panel,
   which is the one place a station's full status shows, live in their own `UI` assembly and child scope, which
   nothing else references (the scene builder adds it by type name), so deleting the UI folder
   leaves flight, the scene and every other test intact.
@@ -176,21 +176,20 @@ variant is a new class plus one registration in `DroneInstaller`:
 - **Keys in two places.** `StationKeys` binds a station's buttons and `FleetKeys` the
   fleet-wide ones; the keys and the control panel drive the same objects. Only the dashboard's
   Tab toggle stays with the dashboard, so it goes when the UI is deleted.
-- **No per-tick allocations** in the simulation path, telemetry included. The HUD's drone boxes
-  build their text at most once per rendered frame, the rest of the UI a few times a second,
-  and OnGUI only draws.
+- **No per-tick allocations** in the simulation path, telemetry included. The UI builds its text a few
+  times a second, and OnGUI only draws.
 - **Telemetry can't break flight.** It only reads, and a sink that throws is logged and
   skipped, so a broken sink never stops a tick.
 
 ## Tests
 
-- **Core**: 132 tests run headless in milliseconds. Unit tests for every class, plus
+- **Core**: 126 tests run headless in milliseconds. Unit tests for every class, plus
   closed-loop flights: hover, climb rate, top speed, hold for exactly 10 s, braking to a stop
   when the link drops at full speed, flared landing below 0.3 m/s, a closed gate on the ground
   blocking takeoff, sampling that averages its rate on any tick step, and a loop that starts
   at the fleet's time.
 - **Unity**: input bindings through `InputTestFixture` (keyboard and gamepad, the shipped
-  asset), the interpolator, the chase camera and the HUD text.
+  asset), the interpolator and the chase camera.
 - **Pilots**: 24 tests for profiles, the registry's guest and priority rules, and stats
   recording across flights and takeovers.
 - **Authorization**: 39 tests for grants and revocation, the grant holder (a grant for one
@@ -205,7 +204,7 @@ variant is a new class plus one registration in `DroneInstaller`:
   landed drone released, cancelled and superseded requests, decisions on the fleet as it is once authorization completes, the
   drones joining and leaving at any time, the policy on its own, and stats timed by the simulation
   clock.
-- **Dashboard**: 23 tests for the event log, the readout's text (run in a comma-decimal
+- **Dashboard**: 29 tests for the event log, the readout's text (run in a comma-decimal
   culture to keep the formatting invariant), Tab toggling the dashboard, and the control
   panel's pilot and drone choices, labels that follow a takeover, and the status line.
 - **Telemetry**: 14 tests for sampling on simulation time, sink fan-out, a failing sink never breaking the flight,

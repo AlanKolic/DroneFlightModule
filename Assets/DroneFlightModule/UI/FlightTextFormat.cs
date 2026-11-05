@@ -1,11 +1,12 @@
 using System;
 using System.Globalization;
+using DroneFlightModule.Core;
 
-namespace DroneFlightModule.Core
+namespace DroneFlightModule.UI
 {
     /// <summary>
-    /// The wording shared by every flight readout: mode with the failsafe countdown, measured
-    /// height and heading. Invariant culture keeps the decimal point stable.
+    /// How the dashboard words a flight: mode with the failsafe countdown, measured height and
+    /// heading. Invariant culture keeps the decimal point stable.
     /// </summary>
     public sealed class FlightTextFormat
     {

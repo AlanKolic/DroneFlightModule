@@ -99,8 +99,9 @@ flowchart TB
   device and destroyed with it, so enabling or disabling one station's actions never affects
   another. A disposed input provider reports its pilot as disconnected, so the failsafe takes
   over.
-- **Debug view:** a follow camera keeps the drone in frame, and an IMGUI readout shows the mode,
-  hold countdown, pilot link, measured height, speed and heading.
+- **Debug view:** a follow camera keeps the drone in frame, and an IMGUI HUD lists the pilot
+  stations and the controls. Each drone's mode, countdown, height and speed are on the fleet
+  dashboard.
 - **Integration:** semi-implicit Euler over position, velocity, yaw and yaw rate, with gravity,
   linear and angular drag, and ground contact against `ITerrain`. Contact clamps height, cancels
   downward velocity and sets `DroneState.IsGrounded`.
@@ -382,8 +383,7 @@ break the Core boundary. All async code uses `Task` and `CancellationToken`.
   gets its own child scope of the fleet's container: `DroneInstaller` registers that drone's
   loop, router, controller, sensor, supervisor, grant holder and the gate that combines them,
   and the instantiator adds a `FlightLoopRunner`. Shared objects come from the fleet scope. It
-  also builds and binds the drone's view from the prefab, when there is one, and adds its HUD
-  box. A drone starts grounded if it spawns on the terrain under it. Each drone's loop starts at the fleet's
+  also builds and binds the drone's view from the prefab, when there is one. A drone starts grounded if it spawns on the terrain under it. Each drone's loop starts at the fleet's
   simulation time, so a drone added later shares the timebase of those already flying and its
   telemetry lines up with theirs. The fleet scope only wires: it has the instantiator build the
   layout's drones (id and spawn position) from the drone prefab, and points the camera at the
@@ -395,10 +395,10 @@ break the Core boundary. All async code uses `Task` and `CancellationToken`.
 - **Adding drones at runtime.** `DroneInstantiator.AddDrone()` builds a drone from the drone
   prefab, one spawn step past the last drone, with the first free `drone-N` id, and creates its
   child scope like the configured ones. A taken id is refused before anything is built. The Debug/AddDrone key (N) calls it. The new drone is
-  free, so any pilot can request it straight away, and the HUD wraps its boxes into more rows.
+  free, so any pilot can request it straight away.
 - **Removing drones at runtime.** `DroneInstantiator.RemoveDrone(id)` has the coordinator
   remove the drone, which releases it first, so its pilot's flight ends and they're told.
-  Then the drone's child scope is disposed and its view and HUD box are removed. The
+  Then the drone's child scope is disposed and its view is removed. The
   Debug/RemoveDrone key (M) removes the newest drone, and the next added one goes one step past
   the last drone it added.
   Disposing the instantiator, with the fleet, disposes every drone scope and destroys their
@@ -428,8 +428,8 @@ break the Core boundary. All async code uses `Task` and `CancellationToken`.
   - L, Select: cut or restore the station's link
   - N: add a drone (keyboard only, fleet-wide)
   - M: remove the newest drone (keyboard only, fleet-wide)
-- **View:** each drone's cube follows its own loop; the HUD has a box per drone, a line per
-  station and one box for the controls; the camera follows the drone of the station the
+- **View:** each drone's cube follows its own loop; the HUD has a line per station and one
+  box for the controls; the camera follows the drone of the station the
   console has chosen. A station's full status shows in the control panel.
 - **Lifetime:** pending requests use a token linked to the scope's `destroyCancellationToken`
   and `Application.exitCancellationToken`. Destroying the scope cancels them, then the

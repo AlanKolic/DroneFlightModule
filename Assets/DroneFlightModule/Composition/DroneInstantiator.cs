@@ -12,13 +12,12 @@ namespace DroneFlightModule.Composition
     /// <summary>
     /// Adds drones to the running fleet and removes them. Each drone gets its own child scope of
     /// the fleet's container, ticked every fixed update, and joins the fleet as that scope is
-    /// built; a view is built from the drone prefab, when there is one, and bound, and its HUD box
-    /// added. A drone added without an id goes one spawn step past the last drone, with the first
-    /// free drone-N id. Each drone's loop starts at the fleet's simulation time, and it starts
-    /// grounded if it spawns on the terrain. Removing a drone has the coordinator remove it, which
-    /// releases it first, then disposes its scope and destroys its view and HUD box; the next drone
-    /// added goes one step past the last drone it added. Disposing disposes every drone's scope
-    /// and destroys their views.
+    /// built; a view is built from the drone prefab, when there is one, and bound. A drone added
+    /// without an id goes one spawn step past the last drone, with the first free drone-N id. Each
+    /// drone's loop starts at the fleet's simulation time, and it starts grounded if it spawns on
+    /// the terrain. Removing a drone has the coordinator remove it, which releases it first, then
+    /// disposes its scope and destroys its view; the next drone added goes one step past the last
+    /// drone it added. Disposing disposes every drone's scope and destroys their views.
     /// </summary>
     public sealed class DroneInstantiator : IDisposable
     {
@@ -27,7 +26,6 @@ namespace DroneFlightModule.Composition
         private readonly FlightCoordinator coordinator;
         private readonly ISimulationClock clock;
         private readonly DroneView prefab;
-        private readonly FlightDebugHud hud;
         private readonly ITerrain terrain;
         private readonly Vector3 spawnStep;
         private readonly ObjectDestroyer destroyer = new ObjectDestroyer();
@@ -40,7 +38,6 @@ namespace DroneFlightModule.Composition
             FlightCoordinator coordinator,
             ISimulationClock clock,
             DroneView prefab,
-            FlightDebugHud hud,
             ITerrain terrain,
             Vector3 spawnStep)
         {
@@ -49,7 +46,6 @@ namespace DroneFlightModule.Composition
             this.coordinator = coordinator ?? throw new ArgumentNullException(nameof(coordinator));
             this.clock = clock ?? throw new ArgumentNullException(nameof(clock));
             this.prefab = prefab;
-            this.hud = hud;
             this.terrain = terrain ?? throw new ArgumentNullException(nameof(terrain));
             this.spawnStep = spawnStep;
             nextSpawn = FirstSpawn;
@@ -86,10 +82,6 @@ namespace DroneFlightModule.Composition
             {
                 view.Bind(loop);
             }
-            if (hud != null)
-            {
-                hud.AddDrone(loop, scope.Resolve<InputRouter>());
-            }
             nextSpawn = spawnPosition + spawnStep;
         }
 
@@ -101,10 +93,6 @@ namespace DroneFlightModule.Composition
             }
             members.Remove(id);
             coordinator.RemoveDrone(id);
-            if (hud != null)
-            {
-                hud.RemoveDrone(member.Scope.Resolve<FlightLoop>());
-            }
             DestroyView(member.View);
             member.Scope.Dispose();
 
