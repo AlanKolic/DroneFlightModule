@@ -100,8 +100,8 @@ flowchart TB
   another. A disposed input provider reports its pilot as disconnected, so the failsafe takes
   over.
 - **Debug view:** a follow camera keeps the drone in frame, and an IMGUI HUD lists the pilot
-  stations and the controls. Each drone's mode, countdown, height and speed are on the fleet
-  dashboard.
+  stations, with each pilot's authorization state, and the controls. Each drone's authorization
+  state, mode, countdown, height and speed are on the fleet dashboard.
 - **Integration:** semi-implicit Euler over position, velocity, yaw and yaw rate, with gravity,
   linear and angular drag, and ground contact against `ITerrain`. Contact clamps height, cancels
   downward velocity and sets `DroneState.IsGrounded`.
@@ -307,6 +307,10 @@ drone a pilot gets, and whether that means taking a drone from someone else.
 - **Results:** `Assigned { Drone }`, `TookOver { Drone, FromPilot }` or
   `Denied { Denial, Message }`. Denials are `UnknownPilot`, `NotAuthorized`, `PilotDisconnected`,
   `UnknownDrone` and `NoDroneAvailable`.
+- **Authorization state.** `FlightCoordinator.AuthorizationOf(pilot)` gives `Unauthorized`,
+  `Pending`, `Granted`, `Denied` or `Revoked`. `Granted` means a grant in use on a drone, so a
+  pilot in flight stays `Granted` while a further request waits or fails, and a grant left unused
+  because no drone was available counts as `Unauthorized`. The displays read it when they refresh.
 - **Switching drones.** A pilot who flies a drone and asks for another is given it like anyone
   else, and lets go of the first one only once the second is secured, in the same step. A
   denied request leaves them on the drone they fly. The released drone behaves as after any
@@ -434,8 +438,9 @@ break the Core boundary. All async code uses `Task` and `CancellationToken`.
   - R, South: request any drone
   - 1–3, D-pad left, up and right: request `drone-1` to `drone-3`, by id
   - X, East: release
-  - P, Start: seat the next pilot here, then nobody, then round again; the pilot here leaves and
-    lets go of their drone, and a pilot from another desk moves here with theirs
+  - P, Start: seat the next free pilot here, then nobody, then round again; the pilot here leaves
+    and lets go of their drone, and a pilot at another desk is skipped, because moving them is
+    the control panel's explicit choice
   - V, North: the server revokes the current pilot's grant
   - L, Select: cut or restore the station's link
   - N: add a drone (keyboard only, fleet-wide)

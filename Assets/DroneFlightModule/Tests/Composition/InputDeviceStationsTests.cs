@@ -201,6 +201,37 @@ namespace DroneFlightModule.Composition.Tests
         }
 
         [Test]
+        public void TheSwitchKey_SkipsAPilotAtAnotherDesk_AndLeavesTheirFlightAlone()
+        {
+            var pad = InputSystem.AddDevice<Gamepad>();
+            Seat(pad, Ace);
+            Tap(pad.dpad.left);
+            AssertFlownBy(airborne, Ace);
+
+            Tap(keyboard.pKey);
+            Tap(keyboard.pKey);
+
+            Assert.That(KeyboardStation.Session.PilotId, Is.EqualTo(Guest));
+            Assert.That(StationOf(pad).Session.PilotId, Is.EqualTo(Ace));
+            AssertFlownBy(airborne, Ace);
+        }
+
+        [Test]
+        public void TheSwitchKey_LeavesTheDeskEmpty_WhenEveryPilotIsAtAnotherDesk()
+        {
+            var pad = InputSystem.AddDevice<Gamepad>();
+            Seat(pad, Ace);
+
+            Tap(keyboard.pKey);
+            var secondPad = InputSystem.AddDevice<Gamepad>();
+            Seat(secondPad, Guest);
+            Tap(keyboard.pKey);
+
+            Assert.That(KeyboardStation.Session, Is.Null);
+            Assert.That(StationOf(secondPad).Session.PilotId, Is.EqualTo(Guest));
+        }
+
+        [Test]
         public void ChangingThePilot_CancelsAPendingRequest()
         {
             var slow = SlowServerFleet(out var coordinator);
@@ -610,17 +641,17 @@ namespace DroneFlightModule.Composition.Tests
             var pad = InputSystem.AddDevice<Gamepad>();
             Seat(pad, Ace);
             var padStation = stations.Stations[1];
-            Assert.That(KeyboardStation.Describe(), Is.EqualTo("Keyboard: guest, no drone, connected"));
+            Assert.That(KeyboardStation.Describe(), Is.EqualTo("Keyboard: guest, Unauthorized, no drone, connected"));
 
             Tap(pad.dpad.left);
-            Assert.That(padStation.Describe(), Is.EqualTo("Gamepad: ace, flying drone-1, connected"));
+            Assert.That(padStation.Describe(), Is.EqualTo("Gamepad: ace, Granted, flying drone-1, connected"));
 
             Tap(pad.selectButton);
-            Assert.That(padStation.Describe(), Is.EqualTo("Gamepad: ace, flying drone-1, link cut"));
+            Assert.That(padStation.Describe(), Is.EqualTo("Gamepad: ace, Granted, flying drone-1, link cut"));
 
             Tap(pad.selectButton);
             InputSystem.RemoveDevice(pad);
-            Assert.That(padStation.Describe(), Is.EqualTo("Gamepad: ace, flying drone-1, disconnected"));
+            Assert.That(padStation.Describe(), Is.EqualTo("Gamepad: ace, Granted, flying drone-1, disconnected"));
         }
 
         [Test]

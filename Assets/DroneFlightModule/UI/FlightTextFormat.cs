@@ -5,8 +5,8 @@ using DroneFlightModule.Core;
 namespace DroneFlightModule.UI
 {
     /// <summary>
-    /// How the dashboard words a flight: mode with the failsafe countdown, measured height and
-    /// heading. Invariant culture keeps the decimal point stable.
+    /// How the dashboard words a flight: mode with the failsafe countdown, measured height, speed
+    /// and heading. Invariant culture keeps the decimal point stable.
     /// </summary>
     public sealed class FlightTextFormat
     {
@@ -22,6 +22,11 @@ namespace DroneFlightModule.UI
         public string Height(in AltitudeReading altitude)
         {
             return altitude.IsValid ? Invariant($"{altitude.HeightAboveGround:0.00} m") : "out of range";
+        }
+
+        public string Speed(float metersPerSecond)
+        {
+            return Invariant($"{metersPerSecond:0.00} m/s");
         }
 
         public string Heading(float yaw)

@@ -674,6 +674,171 @@ namespace DroneFlightModule.Coordination.Tests
         }
 
         // In Unity the answer is used a frame after it arrives, so the grant can be revoked in between.
+        [Test]
+        public void Authorization_StartsUnauthorized()
+        {
+            Assert.That(coordinator.AuthorizationOf(Alice), Is.EqualTo(AuthorizationState.Unauthorized));
+        }
+
+        [Test]
+        public void Authorization_IsPendingWhileTheProviderAnswers_ThenGranted()
+        {
+            provider.AnswersAtOnce = false;
+            Start(Session(Alice));
+            Assert.That(coordinator.AuthorizationOf(Alice), Is.EqualTo(AuthorizationState.Pending));
+
+            provider.AnswerAll();
+
+            Assert.That(coordinator.AuthorizationOf(Alice), Is.EqualTo(AuthorizationState.Granted));
+        }
+
+        [Test]
+        public void Authorization_IsGranted_WhenTheAssignedEventIsRaised()
+        {
+            var seen = new List<AuthorizationState>();
+            coordinator.Assigned += change => seen.Add(coordinator.AuthorizationOf(change.Pilot));
+
+            Request(Session(Alice));
+
+            Assert.That(seen, Is.EqualTo(new[] { AuthorizationState.Granted }));
+        }
+
+        [Test]
+        public void Authorization_IsDenied_WhenTheProviderRefuses()
+        {
+            provider.IsApproving = false;
+
+            Request(Session(Alice));
+
+            Assert.That(coordinator.AuthorizationOf(Alice), Is.EqualTo(AuthorizationState.Denied));
+        }
+
+        [Test]
+        public void Authorization_IsRevoked_WhenTheGrantIsRevokedInFlight()
+        {
+            Request(Session(Alice));
+
+            provider.Revoke(Alice);
+
+            Assert.That(coordinator.AuthorizationOf(Alice), Is.EqualTo(AuthorizationState.Revoked));
+        }
+
+        [Test]
+        public void Authorization_IsRevoked_WhenTheGrantIsRevokedBeforeItIsUsed()
+        {
+            Request(Session(Alice, new RevokedGrantProvider()));
+
+            Assert.That(coordinator.AuthorizationOf(Alice), Is.EqualTo(AuthorizationState.Revoked));
+        }
+
+        [Test]
+        public void Authorization_GoesBackToUnauthorized_WhenTheRequestIsCancelled()
+        {
+            provider.AnswersAtOnce = false;
+            var session = Session(Alice);
+            Start(session);
+
+            coordinator.CancelRequest(session);
+
+            Assert.That(coordinator.AuthorizationOf(Alice), Is.EqualTo(AuthorizationState.Unauthorized));
+        }
+
+        [Test]
+        public void Authorization_GoesBackToUnauthorized_WhenTheCallerCancels()
+        {
+            provider.AnswersAtOnce = false;
+            using (var caller = new CancellationTokenSource())
+            {
+                var request = coordinator.RequestFlightAsync(Session(Alice), null, caller.Token);
+
+                caller.Cancel();
+
+                Assert.That(request.IsCanceled, Is.True);
+            }
+            Assert.That(coordinator.AuthorizationOf(Alice), Is.EqualTo(AuthorizationState.Unauthorized));
+        }
+
+        [Test]
+        public void Authorization_GoesBackToUnauthorized_WhenNoDroneIsLeftForTheGrant()
+        {
+            Request(Session(Bob), airborne.Id);
+
+            Request(Session(Alice), airborne.Id);
+
+            Assert.That(coordinator.AuthorizationOf(Alice), Is.EqualTo(AuthorizationState.Unauthorized));
+        }
+
+        [Test]
+        public void Authorization_GoesBackToUnauthorized_WhenTheDroneIsReleased()
+        {
+            var session = Session(Alice);
+            Request(session);
+
+            coordinator.Release(session);
+
+            Assert.That(coordinator.AuthorizationOf(Alice), Is.EqualTo(AuthorizationState.Unauthorized));
+        }
+
+        [Test]
+        public void Authorization_MovesToTheNewPilot_OnATakeover()
+        {
+            Request(Session(Alice), airborne.Id);
+
+            Request(Session(Bob), airborne.Id);
+
+            Assert.That(coordinator.AuthorizationOf(Alice), Is.EqualTo(AuthorizationState.Unauthorized));
+            Assert.That(coordinator.AuthorizationOf(Bob), Is.EqualTo(AuthorizationState.Granted));
+        }
+
+        [Test]
+        public void Authorization_StaysGranted_WhileAFlyingPilotAsksForAnotherDrone()
+        {
+            var session = Session(Alice);
+            Request(session, airborne.Id);
+            provider.AnswersAtOnce = false;
+
+            Start(session, grounded.Id);
+
+            Assert.That(coordinator.AuthorizationOf(Alice), Is.EqualTo(AuthorizationState.Granted));
+        }
+
+        [Test]
+        public void Authorization_StaysGranted_WhenAFlyingPilotIsRefusedAnotherDrone()
+        {
+            var session = Session(Alice);
+            Request(session, airborne.Id);
+            provider.IsApproving = false;
+
+            Request(session, grounded.Id);
+
+            Assert.That(coordinator.AuthorizationOf(Alice), Is.EqualTo(AuthorizationState.Granted));
+        }
+
+        [Test]
+        public void Authorization_StaysPending_WhenTheDroneGoesDuringANewRequest()
+        {
+            var session = Session(Alice);
+            Request(session, airborne.Id);
+            provider.AnswersAtOnce = false;
+            Start(session, grounded.Id);
+
+            coordinator.RemoveDrone(airborne.Id);
+
+            Assert.That(coordinator.AuthorizationOf(Alice), Is.EqualTo(AuthorizationState.Pending));
+        }
+
+        [Test]
+        public void EndingASession_ClearsItsAuthorization()
+        {
+            provider.IsApproving = false;
+            var session = Session(Alice);
+            Request(session);
+
+            coordinator.EndSession(session);
+
+            Assert.That(coordinator.AuthorizationOf(Alice), Is.EqualTo(AuthorizationState.Unauthorized));
+        }
+
         private sealed class RevokedGrantProvider : IAuthorizationProvider
         {
             private readonly GrantLedger grants = new GrantLedger("revoking-provider");

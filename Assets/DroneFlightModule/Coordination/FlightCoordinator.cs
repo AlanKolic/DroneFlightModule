@@ -15,9 +15,10 @@ namespace DroneFlightModule.Coordination
     /// and the route change together, so a takeover never closes the gate. A session whose input is
     /// not connected when the answer arrives is refused, so a drone never goes to a pilot who
     /// cannot fly it. A drone that has landed with no connected pilot is released, so a lost
-    /// device does not hold it forever. Each change of who flies what, and each denial, is raised
-    /// as an event once the change is complete; a listener that throws is reported through
-    /// ListenerFailed and cannot undo or interrupt it.
+    /// device does not hold it forever. It keeps each pilot's <see cref="AuthorizationState"/> for
+    /// display; a pilot flying a drone stays Granted whatever becomes of a further request. Each
+    /// change of who flies what, and each denial, is raised as an event once the change is complete;
+    /// a listener that throws is reported through ListenerFailed and cannot undo or interrupt it.
     /// </summary>
     public sealed class FlightCoordinator
     {
@@ -26,6 +27,7 @@ namespace DroneFlightModule.Coordination
         private readonly IAssignmentPolicy policy;
         private readonly Dictionary<DroneId, Assignment> assignments = new Dictionary<DroneId, Assignment>();
         private readonly Dictionary<PilotSession, CancellationTokenSource> pending = new Dictionary<PilotSession, CancellationTokenSource>();
+        private readonly Dictionary<PilotId, AuthorizationState> authorizations = new Dictionary<PilotId, AuthorizationState>();
 
         public FlightCoordinator(IPilotRegistry pilots, DroneRegistry drones, IAssignmentPolicy policy)
         {
@@ -40,6 +42,11 @@ namespace DroneFlightModule.Coordination
         public event Action<DroneMoved> Moved;
         public event Action<FlightDenied> Denied;
         public event Action<Exception> ListenerFailed;
+
+        public AuthorizationState AuthorizationOf(PilotId pilot)
+        {
+            return authorizations.TryGetValue(pilot, out var state) ? state : AuthorizationState.Unauthorized;
+        }
 
         public bool TryGetDrone(PilotId pilot, out DroneId drone)
         {
@@ -100,6 +107,7 @@ namespace DroneFlightModule.Coordination
             {
                 ReleaseDrone(drone, ReleaseReason.SessionEnded);
             }
+            authorizations.Remove(session.PilotId);
         }
 
         // For a session whose input moved: its drone follows, with the grant and the flight untouched.
@@ -174,14 +182,17 @@ namespace DroneFlightModule.Coordination
                     return Deny(session, preferred, FlightDenial.UnknownPilot, $"{session.PilotId} is not a registered pilot.");
                 }
 
+                Settle(session.PilotId, AuthorizationState.Pending);
                 var authorization = await session.Provider.AuthorizeAsync(new AuthorizationRequest(session.PilotId), token);
                 token.ThrowIfCancellationRequested();
                 if (!authorization.IsGranted)
                 {
+                    Settle(session.PilotId, AuthorizationState.Denied);
                     return Deny(session, preferred, FlightDenial.NotAuthorized, authorization.DenialReason);
                 }
                 if (authorization.Grant.IsRevoked)
                 {
+                    Settle(session.PilotId, AuthorizationState.Revoked);
                     return Deny(session, preferred, FlightDenial.NotAuthorized, $"{session.PilotId}'s grant was revoked before it was used.");
                 }
                 // Checked after the wait, because the link can drop while the provider answers.
@@ -198,6 +209,7 @@ namespace DroneFlightModule.Coordination
                 {
                     pending.Remove(session);
                     request.Dispose();
+                    EndPending(session.PilotId);
                 }
             }
         }
@@ -230,6 +242,7 @@ namespace DroneFlightModule.Coordination
             }
             if (decision.Action == AssignmentAction.TakeOver)
             {
+                LoseGrant(fromSession, AuthorizationState.Unauthorized);
                 Raise(TookOver, new DroneTakenOver(target.Id, session.PilotId, fromSession));
                 return new FlightRequestResult(target.Id, fromSession.PilotId);
             }
@@ -277,6 +290,7 @@ namespace DroneFlightModule.Coordination
             drone.Router.Assign(session.PilotId, session.Input);
             var revocation = grant.Revoked.Register(() => ReleaseDrone(drone.Id, ReleaseReason.Revoked));
             assignments[drone.Id] = new Assignment(drone, session, profile, revocation);
+            authorizations[session.PilotId] = AuthorizationState.Granted;
         }
 
         private bool ReleaseDrone(DroneId droneId, ReleaseReason reason)
@@ -286,6 +300,7 @@ namespace DroneFlightModule.Coordination
             {
                 return false;
             }
+            LoseGrant(freed.Session, reason == ReleaseReason.Revoked ? AuthorizationState.Revoked : AuthorizationState.Unauthorized);
             Raise(Released, new DroneReleased(droneId, freed.Session, reason));
             return true;
         }
@@ -313,11 +328,32 @@ namespace DroneFlightModule.Coordination
             pending.Remove(session);
             previous.Cancel();
             previous.Dispose();
+            EndPending(session.PilotId);
             return true;
+        }
+
+        private void Settle(PilotId pilot, AuthorizationState withoutADrone)
+        {
+            authorizations[pilot] = TryGetDrone(pilot, out _) ? AuthorizationState.Granted : withoutADrone;
+        }
+
+        private void EndPending(PilotId pilot)
+        {
+            if (AuthorizationOf(pilot) == AuthorizationState.Pending)
+            {
+                Settle(pilot, AuthorizationState.Unauthorized);
+            }
+        }
+
+        // A request still waiting for its answer outlives the grant in use.
+        private void LoseGrant(PilotSession session, AuthorizationState state)
+        {
+            authorizations[session.PilotId] = pending.ContainsKey(session) ? AuthorizationState.Pending : state;
         }
 
         private FlightRequestResult Deny(PilotSession session, DroneId? preferred, FlightDenial denial, string message)
         {
+            EndPending(session.PilotId);
             Raise(Denied, new FlightDenied(session.PilotId, preferred, denial, message));
             return new FlightRequestResult(denial, message);
         }

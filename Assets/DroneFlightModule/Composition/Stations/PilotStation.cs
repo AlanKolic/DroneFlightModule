@@ -94,7 +94,7 @@ namespace DroneFlightModule.Composition
                 return $"{Name}: empty, {LinkStatus}";
             }
             string flying = TryGetDrone(out var drone) ? $"flying {drone}" : "no drone";
-            return $"{Name}: {Session.PilotId}, {flying}, {LinkStatus}";
+            return $"{Name}: {Session.PilotId}, {coordinator.AuthorizationOf(Session.PilotId)}, {flying}, {LinkStatus}";
         }
 
         public bool HoldsADrone => TryGetDrone(out _);

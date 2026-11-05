@@ -51,7 +51,7 @@ namespace DroneFlightModule.UI.Tests
         {
             var text = readout.Drones();
 
-            StringAssert.StartsWith("drone-1   free\n  no telemetry yet", text);
+            StringAssert.StartsWith("drone-1   free, Unauthorized\n  no telemetry yet", text);
         }
 
         [Test]
@@ -62,8 +62,8 @@ namespace DroneFlightModule.UI.Tests
 
             var text = readout.Drones();
 
-            StringAssert.Contains("drone-1   ace (priority 50)", text);
-            StringAssert.Contains("Piloted, height 2.50 m (true 2.50 m)", text);
+            StringAssert.Contains("drone-1   ace (priority 50), Granted", text);
+            StringAssert.Contains("Piloted, height 2.50 m (true 2.50 m), speed 1.12 m/s", text);
             StringAssert.Contains("position (1.0, 3.5, 2.0), velocity (1.0, -0.5, 0.0), heading 90°", text);
         }
 
@@ -91,8 +91,17 @@ namespace DroneFlightModule.UI.Tests
             fleet.Stats.Save(PilotProfile.Guest.Id, new PilotStats(2, 31.5, 1, 0, 1.0));
 
             Assert.That(readout.Pilots(), Is.EqualTo(
-                "Ace (ace, priority 50): not flying, flights 0, 0.0 s, takeovers 0, preempted 0\n" +
-                "Guest (guest, priority 0): flying drone-2, flights 2, 31.5 s, takeovers 1, preempted 0"));
+                "Ace (ace, priority 50): Unauthorized, not flying, flights 0, 0.0 s, takeovers 0, preempted 0\n" +
+                "Guest (guest, priority 0): Granted, flying drone-2, flights 2, 31.5 s, takeovers 1, preempted 0"));
+        }
+
+        [Test]
+        public void Pilots_ShowARefusedAuthorization()
+        {
+            fleet.Fly(TestFleet.Ace.Id, TestFleet.Drone1);
+            fleet.Server.Revoke(TestFleet.Ace.Id);
+
+            StringAssert.StartsWith("Ace (ace, priority 50): Revoked, not flying", readout.Pilots());
         }
 
         [Test]

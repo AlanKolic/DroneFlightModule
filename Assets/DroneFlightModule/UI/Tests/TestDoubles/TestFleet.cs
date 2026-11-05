@@ -52,6 +52,7 @@ namespace DroneFlightModule.UI.Tests
         public InMemoryTelemetrySink Telemetry { get; }
         public ITerrain Terrain { get; }
         public ManualClock Clock { get; } = new ManualClock();
+        public IRevokingAuthorizationProvider Server => server;
 
         public FlightRequestResult Fly(PilotId pilot, DroneId? drone)
         {

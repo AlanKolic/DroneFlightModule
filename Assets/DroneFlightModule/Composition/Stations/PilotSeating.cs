@@ -73,21 +73,21 @@ namespace DroneFlightModule.Composition
             station.Report($"{session.PilotId} left the desk.");
         }
 
-        // Each pilot in the registry's order, then empty, then round again.
+        // Each free pilot in the registry's order, then empty, then round again. A pilot at another
+        // desk is skipped: moving them is a deliberate choice, and a key press must not end their flight.
         public void SeatNext(PilotStation station)
         {
-            var profiles = pilots.Profiles;
-            if (station.Session == null)
+            bool isPastSeatedPilot = station.Session == null;
+            foreach (var profile in pilots.Profiles)
             {
-                Seat(station, profiles[0].Id);
-                return;
-            }
-            for (int i = 0; i < profiles.Count - 1; i++)
-            {
-                if (profiles[i].Id == station.Session.PilotId)
+                if (isPastSeatedPilot && !seats.ContainsKey(profile.Id))
                 {
-                    Seat(station, profiles[i + 1].Id);
+                    Seat(station, profile.Id);
                     return;
+                }
+                if (station.Session != null && profile.Id == station.Session.PilotId)
+                {
+                    isPastSeatedPilot = true;
                 }
             }
             Vacate(station);

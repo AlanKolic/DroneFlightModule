@@ -8,10 +8,10 @@ using DroneFlightModule.Telemetry;
 namespace DroneFlightModule.UI
 {
     /// <summary>
-    /// Turns the fleet's state into the dashboard's text: each drone with its pilot and their
-    /// priority, mode and countdown, measured height with the true height alongside, position,
-    /// velocity and heading from its latest telemetry; each pilot with their drone and stats; and
-    /// the latest events, newest first. Only reads.
+    /// Turns the fleet's state into the dashboard's text: each drone with its pilot, their priority
+    /// and authorization, mode and countdown, measured height with the true height alongside,
+    /// speed, position, velocity and heading from its latest telemetry; each pilot with their
+    /// authorization, drone and stats; and the latest events, newest first. Only reads.
     /// </summary>
     public sealed class FleetDashboardReadout
     {
@@ -72,7 +72,7 @@ namespace DroneFlightModule.UI
                 var record = stats.Get(profile.Id);
                 string flying = coordinator.TryGetDrone(profile.Id, out var drone) ? $"flying {drone}" : "not flying";
                 text.Append(format.Invariant(
-                    $"{profile.DisplayName} ({profile.Id}, priority {profile.Priority}): {flying}, flights {record.Flights}, {record.FlightTime:0.0} s, takeovers {record.Takeovers}, preempted {record.TimesPreempted}\n"));
+                    $"{profile.DisplayName} ({profile.Id}, priority {profile.Priority}): {coordinator.AuthorizationOf(profile.Id)}, {flying}, flights {record.Flights}, {record.FlightTime:0.0} s, takeovers {record.Takeovers}, preempted {record.TimesPreempted}\n"));
             }
             return text.ToString().TrimEnd('\n');
         }
@@ -96,9 +96,10 @@ namespace DroneFlightModule.UI
         {
             if (!coordinator.TryGetPilot(drone, out var pilot))
             {
-                return "free";
+                return $"free, {AuthorizationState.Unauthorized}";
             }
-            return pilots.TryGet(pilot, out var profile) ? $"{pilot} (priority {profile.Priority})" : pilot.ToString();
+            string name = pilots.TryGet(pilot, out var profile) ? $"{pilot} (priority {profile.Priority})" : pilot.ToString();
+            return $"{name}, {coordinator.AuthorizationOf(pilot)}";
         }
 
         private void AppendTelemetry(StringBuilder text, in FlightFrame sample)
@@ -106,7 +107,7 @@ namespace DroneFlightModule.UI
             var state = sample.State;
             float trueHeight = state.Position.Y - terrain.HeightAt(state.Position.X, state.Position.Z);
 
-            text.Append("  ").Append(format.Mode(sample)).Append(format.Invariant($", height {format.Height(sample.Altitude)} (true {trueHeight:0.00} m)\n"));
+            text.Append("  ").Append(format.Mode(sample)).Append(format.Invariant($", height {format.Height(sample.Altitude)} (true {trueHeight:0.00} m), speed {format.Speed(state.Velocity.Magnitude)}\n"));
             text.Append(format.Invariant($"  position {Format(state.Position)}, velocity {Format(state.Velocity)}, heading {format.Heading(state.Yaw)}\n"));
         }
 

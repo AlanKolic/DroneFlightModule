@@ -30,7 +30,7 @@ The full design is in
 | Request any drone | R | South button |
 | Request drone 1, 2 or 3 | 1 / 2 / 3 | D-pad left / up / right |
 | Release the drone | X | East button |
-| Seat the next pilot here (the pilot here leaves and lets go of their drone) | P | Start |
+| Seat the next free pilot here (the pilot here leaves and lets go of their drone) | P | Start |
 | Make the server revoke your grant | V | North button |
 | Cut or restore the station's link | L | Select |
 | Add a drone | N | |
@@ -58,7 +58,7 @@ it. A mouse holds one button at a time, so moves can't be combined.
 
 You start as the **guest**, authorized at once by local guest mode, without a drone. Each device
 is a desk with at most one pilot. **P** seats the next pilot here: first nobody, then **John** (60),
-**Ace** (50) and the guest, in turn. John and Ace sign in through a simulated server that answers
+**Ace** (50) and the guest, in turn, skipping a pilot at another desk. John and Ace sign in through a simulated server that answers
 after 0.5 s. Changing the pilot at a desk means the old pilot leaves: their drone is released and
 holds, their pending request is cancelled, and the new pilot requests a drone like anyone else.
 Requesting any drone while you fly one keeps you on it. A pilot with no link can't request a drone
@@ -102,9 +102,9 @@ where the latest outcome shows: what you asked for, a denial, or that someone to
     then **R** on the keyboard and **South** on the pad, and the two fly separate drones at once.
     Unplug the pad and its drone holds, then lands; plug it back in within the hold to take over
     again.
-11. Watch the fleet dashboard on the right: every drone's pilot, mode, measured and true
-   height, position and heading; each pilot's stats; and the latest events, denials
-   included. **Tab** hides it.
+11. Watch the fleet dashboard on the right: every drone's pilot, authorization state, mode,
+   measured and true height, speed, position and heading; each pilot's authorization state
+   and stats; and the latest events, denials included. **Tab** hides it.
 12. Or skip the keys: in the control panel, pick a pilot and a drone and press **Request**.
 
 ## How it fits together
@@ -213,7 +213,7 @@ Three others are added elsewhere:
   never opens the gate for another), guest mode, and the server's latency, policy changes,
   cancellation and disposal. Async code runs with no synchronization context and a hand-completed
   delay, so the tests are synchronous and never sleep.
-- **Coordination**: 63 tests on real flight loops: assignment preferring grounded drones, priority
+- **Coordination**: 78 tests on real flight loops: assignment preferring grounded drones, priority
   takeover with the gate open on every tick, equal priority never taking over, switching drones,
   denied switches, keeping your drone on "any drone", a second session for the same pilot, ending
   and re-routing sessions, a throwing listener that can't interrupt a switch or reach a revoker,
@@ -221,7 +221,7 @@ Three others are added elsewhere:
   landed drone released, cancelled and superseded requests, decisions on the fleet as it is once
   authorization completes, the drones joining and leaving at any time, the policy on its own, and
   stats timed by the simulation clock.
-- **Dashboard**: 36 tests for the event log, the readout's text (run in a comma-decimal culture to
+- **Dashboard**: 37 tests for the event log, the readout's text (run in a comma-decimal culture to
   keep the formatting invariant), Tab toggling the dashboard, and the control panel's pilot and
   drone choices, labels that follow a takeover, the status line, and the screen panel's virtual
   gamepad.
