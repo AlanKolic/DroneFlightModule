@@ -34,12 +34,12 @@ namespace DroneFlightModule.Composition
             this.lifetime = lifetime;
         }
 
-        public PilotStation Create(string name, InputDevice device, string bindingGroup, PilotId startPilot)
+        public PilotStation Create(string name, InputDevice device, InputDeviceGroup group, PilotId startPilot)
         {
             var controls = Object.Instantiate(template);
             controls.devices = new[] { device };
-            controls.bindingMask = InputBinding.MaskByGroup(bindingGroup);
-            return new PilotStation(name, device, controls, coordinator, pilots, providers, startPilot, lifetime);
+            controls.bindingMask = InputBinding.MaskByGroup(group.BindingGroup);
+            return new PilotStation(name, device, controls, group.SilenceTimeout, coordinator, pilots, providers, startPilot, lifetime);
         }
     }
 }

@@ -44,10 +44,11 @@ Centred sticks hold position and altitude, so the drone hovers hands-off.
 plugged in while the scene runs, fly as separate pilots on separate drones, and none reads the
 others' buttons. A station starts as the lowest-ranked pilot no other station flies as, so the
 keyboard is the guest, the first gamepad Ace and the second John. Unplugging a gamepad is link
-loss: its drone holds and lands, and plugging it back in resumes, even if a wireless pad comes
-back as a new device. A drone that lands with no link is released, and a gone device with no drone
-loses its station. Adding and removing drones and the dashboard stay on the keyboard, since they
-act on the whole fleet. The HUD lists the stations.
+loss: its drone holds and lands, and plugging it back in resumes, with the same pilot and station.
+A pad silent for 15 s counts as unplugged until it next sends something, because macOS can drop a
+Bluetooth pad without reporting it. A drone that lands with no link is released, and a gone device
+with no drone loses its station. Adding and removing drones and the dashboard stay on the
+keyboard, since they act on the whole fleet. The HUD lists the stations.
 
 You start as the **guest**, authorized at once by local guest mode, without a drone. **P**
 switches to the next pilot in the registry, highest priority first: **John** (60), then **Ace**
@@ -253,9 +254,13 @@ Every planned commit is done.
 
 - The number keys and D-pad ask for `drone-1` to `drone-3` by id, so they don't reach drones with
   other ids; the control panel reaches every drone.
-- A gamepad is matched to a waiting station by model, because a wireless pad can come back as a
-  new device with no reliable way to tell it from another. If two identical pads drop, either
-  can take either station.
+- macOS can drop a Bluetooth pad without reporting it, and a silent pad can't be told from an
+  idle one. So a pad that sends nothing for its silence timeout (15 s, in
+  `Config/InputDevices.asset`) counts as disconnected until it next sends something. A pilot who
+  leaves the pad untouched that long sees the drone hold and descend, and a grounded drone is
+  released; touching the pad restores the link. Until then a dropped pad's last input stays in
+  force, and a stick held perfectly still may count as silence.
+- A pad with no serial that returns as a new device gets a new station.
 - The roster has two registered pilots, so a third gamepad starts as the guest, the same pilot
   as the keyboard: whichever requests last flies the guest's drone. Adding pilots to the roster
   asset gives every device its own.

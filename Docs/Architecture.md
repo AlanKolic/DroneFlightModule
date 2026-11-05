@@ -548,11 +548,22 @@ matters only to the composition root that built it.
   device's controls resolve. The Input System drops a removed device from every asset's device
   list, which leaves the station's list empty, so no other pad can drive it. Unplugging a pad
   closes the pilot gate, so its drone holds and then lands, and the sessions stay.
+- **Silent drops.** macOS sometimes drops a Bluetooth pad with no `Removed` event: the device stays
+  in `InputSystem.devices` and simply stops updating, seen on a real Xbox pad, and an idle pad looks
+  the same. So `SilentDeviceInputProvider` reports a device as disconnected once it has sent nothing
+  for its group's `SilenceTimeout` (15 s for gamepads, zero and never for keyboards), and any input
+  reconnects it. It only closes the gate, so the pilot keeps the drone: the failsafe holds and
+  lands it, and a landed drone is released. A pilot who leaves the pad untouched that long sees the
+  same thing, the price of catching a real drop; a false hold can be recovered and a missed drop
+  flies on stale input. A station whose device is merely silent stays, because a live pad would
+  raise no event to bring it back.
+- **One pad, one station.** A physical pad is known by its layout and serial, not its device
+  object. After a silent drop the old device stays listed, as a stale entry, and the pad connects
+  as a second device, which takes over the stale entry's station, at start or when it connects.
 - **Coming back.** While a gone device's pilots still hold a drone, its station waits. The same
-  device object returning takes it back. The Input System only revives the old object when six
-  description fields match exactly, so a Bluetooth pad can return as a new device; a device of the
-  same layout and product takes a waiting station too. Either way the flight resumes within the
-  hold budget, with the same pilot and station name.
+  pad returning takes it back, whether as the same device object, which is what the Input System
+  normally revives, or as a new one with the same serial. The flight resumes within the hold
+  budget, with the same pilot and station name.
 - **Removing a station.** `FleetRunner` calls `InputDeviceStations.RemoveUnattended` every fixed
   tick: a station whose device is gone and that holds no drone, flying or parked, is disposed and
   leaves the HUD and the console, whose chosen station falls back to the first. That frees its
@@ -636,7 +647,10 @@ matters only to the composition root that built it.
   - two pads stay independent
   - unplugging a pad holds and then lands its drone, and plugging it back in resumes it
   - another pad never stands in for an unplugged one
-  - a pad that comes back as a new device resumes its station, and a different model doesn't
+  - a pad that comes back as a new device resumes its station, and a different pad doesn't
+  - a stale entry of a pad is replaced when the pad connects, and shares its station at start
+  - a silent pad counts as disconnected and any input restores it; a new pad gets the full timeout,
+    and a keyboard never times out
   - a gone device loses its station once it holds no drone, not before, and the console falls back
   - the same pilot on two devices moves their one drone to the latest request
   - a pad pilot takes over the keyboard pilot's drone by priority, and the keyboard is told

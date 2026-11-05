@@ -19,15 +19,16 @@ namespace DroneFlightModule.Composition
     /// the drone its own session steers. Switching keeps the previous pilot on their drone with
     /// their hands off the sticks, so the next pilot can outrank and take it over, and cancels the
     /// previous pilot's pending request, so nobody is given a drone after they were switched away
-    /// from. Its link can be cut, and it reports no pilot while its device is unplugged. It keeps
-    /// the latest outcome for display, including a pilot here losing their drone. Disposing stops
-    /// listening and destroys its controls.
+    /// from. Its link can be cut, and it reports no pilot while its device is unplugged or silent.
+    /// It keeps the latest outcome for display, including a pilot here losing their drone.
+    /// Disposing stops listening and destroys its controls.
     /// </summary>
     public sealed class PilotStation : IStationStatus, IDisposable
     {
         private readonly FlightCoordinator coordinator;
         private readonly InputActionAsset controls;
         private readonly InputActionInputProvider input;
+        private readonly SilentDeviceInputProvider silenceWatch;
         private readonly StationKeys keys;
         private readonly ObjectDestroyer destroyer = new ObjectDestroyer();
         private readonly List<PilotSession> sessions = new List<PilotSession>();
@@ -37,6 +38,7 @@ namespace DroneFlightModule.Composition
             string name,
             InputDevice device,
             InputActionAsset controls,
+            float silenceTimeout,
             FlightCoordinator coordinator,
             IPilotRegistry pilots,
             IAuthorizationProviderSelector providers,
@@ -54,7 +56,8 @@ namespace DroneFlightModule.Composition
             this.lifetime = lifetime;
 
             input = new InputActionInputProvider(controls);
-            Link = new DisconnectableInputProvider(input);
+            silenceWatch = new SilentDeviceInputProvider(input, device, silenceTimeout);
+            Link = new DisconnectableInputProvider(silenceWatch);
             foreach (var profile in pilots.Profiles)
             {
                 sessions.Add(new PilotSession(profile.Id, providers.For(profile), new LocalPilotInput(Link)));
@@ -107,6 +110,7 @@ namespace DroneFlightModule.Composition
         {
             Device = device ?? throw new ArgumentNullException(nameof(device));
             controls.devices = new[] { device };
+            silenceWatch.Attach(device);
         }
 
         // Never faults: a superseded or cancelled request ends quietly, and anything else is logged and reported.

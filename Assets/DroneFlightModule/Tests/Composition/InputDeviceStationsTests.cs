@@ -29,6 +29,11 @@ namespace DroneFlightModule.Composition.Tests
 
         private FleetRunner Runner => new FleetRunner(fleet.Resolve<SimulationClock>(), fleet.Resolve<FlightCoordinator>(), stations);
 
+        private Gamepad AddPad(string serial)
+        {
+            return (Gamepad)InputSystem.AddDevice(new InputDeviceDescription { deviceClass = "Gamepad", serial = serial });
+        }
+
         private PilotStation KeyboardStation => stations.Stations[0];
 
         private void RunBoth(float seconds)
@@ -147,13 +152,13 @@ namespace DroneFlightModule.Composition.Tests
         [Test]
         public void APadThatComesBackAsANewDevice_ResumesItsStation()
         {
-            var pad = InputSystem.AddDevice<Gamepad>();
+            var pad = AddPad("pad-1");
             Tap(pad.dpad.left);
             var padStation = stations.Stations[1];
             InputSystem.RemoveDevice(pad);
             Assert.That(airborne.Resolve<IFlightGate>().IsFlightAllowed, Is.False);
 
-            var returned = InputSystem.AddDevice<Gamepad>();
+            var returned = AddPad("pad-1");
 
             Assert.That(stations.Stations, Has.Count.EqualTo(2), "The new device takes the waiting station.");
             Assert.That(padStation.Device, Is.SameAs(returned));
@@ -166,13 +171,94 @@ namespace DroneFlightModule.Composition.Tests
         }
 
         [Test]
-        public void ADifferentModel_DoesNotTakeAWaitingStation()
+        public void APadThatGoesSilent_CountsAsDisconnected_AndAnyInputRestoresIt()
         {
             var pad = InputSystem.AddDevice<Gamepad>();
             Tap(pad.dpad.left);
+            AssertFlownBy(airborne, Ace);
+
+            currentTime += TestFleetSettings.SilenceTimeout + 1f;
+
+            Assert.That(airborne.Resolve<IFlightGate>().IsFlightAllowed, Is.False);
+            Assert.That(stations.Stations[1].LinkStatus, Is.EqualTo("disconnected"));
+            RunBoth(1f);
+            Assert.That(airborne.Resolve<FlightLoop>().Mode, Is.EqualTo(FlightMode.Holding));
+
+            Press(pad.buttonWest);
+            RunBoth(DeltaTime);
+
+            AssertFlownBy(airborne, Ace);
+            Assert.That(airborne.Resolve<FlightLoop>().Mode, Is.EqualTo(FlightMode.Piloted));
+        }
+
+        [Test]
+        public void APadWithinTheTimeout_StaysConnected()
+        {
+            var pad = InputSystem.AddDevice<Gamepad>();
+            Tap(pad.dpad.left);
+
+            currentTime += TestFleetSettings.SilenceTimeout - 1f;
+
+            AssertFlownBy(airborne, Ace);
+        }
+
+        [Test]
+        public void ANewPad_GetsTheFullTimeoutBeforeItsFirstInput()
+        {
+            currentTime += 1000.0;
+
+            InputSystem.AddDevice<Gamepad>();
+
+            Assert.That(stations.Stations[1].Link.IsConnected, Is.True);
+        }
+
+        [Test]
+        public void AKeyboard_NeverTimesOut()
+        {
+            Tap(keyboard.rKey);
+
+            currentTime += 1000.0;
+
+            AssertFlownBy(grounded, Guest);
+        }
+
+        [Test]
+        public void AStaleEntryOfThePad_IsReplaced_WhenThePadConnects()
+        {
+            var stale = AddPad("pad-1");
+            var padStation = stations.Stations[1];
+
+            var live = AddPad("pad-1");
+
+            Assert.That(stale.added, Is.True, "The Input System still lists it, as it does after a lost disconnect.");
+            Assert.That(stations.Stations, Has.Count.EqualTo(2), "One physical pad, one station.");
+            Assert.That(padStation.Device, Is.SameAs(live));
+
+            Tap(live.dpad.left);
+            AssertFlownBy(airborne, Ace);
+        }
+
+        [Test]
+        public void AStaleEntryPresentAtStart_SharesTheLivePadsStation()
+        {
+            AddPad("pad-1");
+            var live = AddPad("pad-1");
+
+            var fresh = Stations(fleet.Resolve<IPilotRegistry>(), new InputDeviceGroup("Gamepad", "Gamepad"));
+
+            Assert.That(fresh.Stations, Has.Count.EqualTo(1));
+            Assert.That(fresh.Stations[0].Device, Is.SameAs(live));
+            fresh.Dispose();
+        }
+
+        [Test]
+        public void ADifferentPad_DoesNotTakeAWaitingStation()
+        {
+            var pad = AddPad("pad-1");
+            Tap(pad.dpad.left);
             InputSystem.RemoveDevice(pad);
 
-            InputSystem.AddDevice(new InputDeviceDescription { deviceClass = "Gamepad", product = "Other Pad" });
+            AddPad("pad-2");
 
             Assert.That(stations.Stations, Has.Count.EqualTo(3));
             Assert.That(airborne.Resolve<IFlightGate>().IsFlightAllowed, Is.False);

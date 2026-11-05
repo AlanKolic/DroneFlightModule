@@ -16,6 +16,7 @@ namespace DroneFlightModule.Composition.Tests
     /// </summary>
     internal sealed class TestFleetSettings
     {
+        public const float SilenceTimeout = 15f;
         public const string ControlsPath = "Assets/DroneFlightModule/Unity/Input/DroneControls.inputactions";
 
         public static readonly PilotProfile RegisteredPilot = new PilotProfile(new PilotId("ace"), "Ace", 50);
@@ -30,7 +31,7 @@ namespace DroneFlightModule.Composition.Tests
             return Create(groundHeight, serverLatency, spawnStep, new[]
             {
                 new InputDeviceGroup("Keyboard", "Keyboard"),
-                new InputDeviceGroup("Gamepad", "Gamepad"),
+                new InputDeviceGroup("Gamepad", "Gamepad", SilenceTimeout),
             });
         }
 

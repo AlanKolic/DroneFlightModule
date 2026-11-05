@@ -10,15 +10,17 @@ namespace DroneFlightModule.Composition
     /// <summary>
     /// Gives every pilot input device its own <see cref="PilotStation"/>: each device of a
     /// configured <see cref="InputDeviceGroup"/> present at start, in the groups' order, and each
-    /// one plugged in later; a device matching no group, such as a mouse by default, gets none.
-    /// A group's layout must be known to the Input System and its binding group must be one of the
-    /// controls' control schemes. Unplugging a device is link loss: its controls resolve to nothing
-    /// and the failsafe takes over. While a gone device's pilots still hold a drone its station
-    /// waits, and the device resumes it on returning. A wireless pad can come back as a new device,
-    /// so a device of the same model takes a waiting station too. Once a gone device holds no drone
-    /// its station is removed. A new station starts as the lowest-ranked pilot no other station
-    /// flies as, so the guest first and an unknown device is never the strongest pilot, or as the
-    /// guest when everyone is taken. Disposing disposes every station.
+    /// one plugged in later; a device matching no group, such as a mouse by default, gets none. A
+    /// group's layout must be known to the Input System and its binding group must be one of the
+    /// controls' control schemes. A physical pad is known by its layout and serial, not by its
+    /// device object: the Editor can keep a stale entry of a pad that disconnected unseen, and the
+    /// pad then connects as a second device, which takes over the stale entry's station. Unplugging
+    /// a device, or its going silent past its group's timeout, is link loss, and the failsafe takes
+    /// over. While a gone device's pilots still hold a drone its station waits, and the pad resumes
+    /// it on returning. Once a gone device holds no drone its station is removed. A new station
+    /// starts as the lowest-ranked pilot no other station flies as, so the guest first and an
+    /// unknown device is never the strongest pilot, or as the guest when everyone is taken.
+    /// Disposing disposes every station.
     /// </summary>
     public sealed class InputDeviceStations : IDisposable
     {
@@ -49,7 +51,7 @@ namespace DroneFlightModule.Composition
                 {
                     if (GroupOf(device) == deviceGroup)
                     {
-                        Add(device);
+                        Connect(device);
                     }
                 }
             }
@@ -91,11 +93,15 @@ namespace DroneFlightModule.Composition
             {
                 return;
             }
-            var waiting = stations.Find(station => station.Device == device)
-                ?? stations.Find(station => !station.Device.added && IsSameModel(station.Device, device));
-            if (waiting != null)
+            Connect(device);
+        }
+
+        private void Connect(InputDevice device)
+        {
+            var known = stations.Find(station => IsSamePad(station.Device, device));
+            if (known != null)
             {
-                waiting.Attach(device);
+                known.Attach(device);
                 return;
             }
             Add(device);
@@ -108,16 +114,19 @@ namespace DroneFlightModule.Composition
             {
                 return;
             }
-            string group = deviceGroup.BindingGroup;
-            var station = factory.Create(FreeName(group), device, group, StartPilot());
+            var station = factory.Create(FreeName(deviceGroup.BindingGroup), device, deviceGroup, StartPilot());
             stations.Add(station);
             StationAdded?.Invoke(station);
         }
 
-        // The serial can't be relied on: it is one of the things that can differ when a wireless pad comes back.
-        private bool IsSameModel(InputDevice first, InputDevice second)
+        private bool IsSamePad(InputDevice first, InputDevice second)
         {
-            return first.layout == second.layout && first.description.product == second.description.product;
+            if (first == second)
+            {
+                return true;
+            }
+            string serial = first.description.serial;
+            return !string.IsNullOrEmpty(serial) && serial == second.description.serial && first.layout == second.layout;
         }
 
         private string FreeName(string group)

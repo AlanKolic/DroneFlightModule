@@ -15,5 +15,7 @@ MonoBehaviour:
   devices:
   - layout: Keyboard
     bindingGroup: Keyboard
+    silenceTimeout: 0
   - layout: Gamepad
     bindingGroup: Gamepad
+    silenceTimeout: 15
