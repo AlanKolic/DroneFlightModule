@@ -163,23 +163,14 @@ namespace DroneFlightModule.Composition.Tests
         }
 
         [Test]
-        public void SwitchKey_KeepsThePreviousPilotsDrone_AndTheRegisteredPilotSignsInThroughTheServer()
+        public void TheRegisteredPilot_SignsInThroughTheServer()
         {
-            Tap(keyboard.rKey);
-
-            Tap(keyboard.pKey);
-            AssertFlownBy(grounded, PilotProfile.Guest.Id);
-            Assert.That(Pilot.Session.PilotId, Is.EqualTo(TestFleetSettings.RegisteredPilot.Id));
-            Assert.That(Pilot.LastMessage, Does.EndWith("guest keeps drone-2, hands off."));
+            Pilot.SelectPilot(TestFleetSettings.RegisteredPilot.Id);
 
             Tap(keyboard.rKey);
-            AssertFlownBy(airborne, TestFleetSettings.RegisteredPilot.Id);
-            Assert.That(airborne.Resolve<DroneGrantHolder>().Grant.ProviderId, Is.EqualTo(SimulatedServerAuthorizationProvider.ProviderId));
 
-            Tap(keyboard.pKey);
-            Assert.That(Pilot.Session.PilotId, Is.EqualTo(PilotProfile.Guest.Id));
-            Assert.That(Pilot.TryGetDrone(out var drone), Is.True);
-            Assert.That(drone, Is.EqualTo(GroundedDrone));
+            AssertFlownBy(grounded, TestFleetSettings.RegisteredPilot.Id);
+            Assert.That(grounded.Resolve<DroneGrantHolder>().Grant.ProviderId, Is.EqualTo(SimulatedServerAuthorizationProvider.ProviderId));
         }
 
         [Test]
@@ -194,7 +185,6 @@ namespace DroneFlightModule.Composition.Tests
             Assert.That(request.IsCompleted, Is.False, "The server answers after its latency.");
             pilot.SelectPilot(PilotProfile.Guest.Id);
 
-            Assert.That(pilot.LastMessage, Does.Contain("ace's request was cancelled."));
             Assert.That(slowFleet.Resolve<FlightCoordinator>().CancelRequest(ace), Is.False, "Nothing is left pending.");
             Assert.That(slowFleet.Resolve<FlightCoordinator>().TryGetDrone(ace.PilotId, out _), Is.False);
             slowFleet.Dispose();
@@ -253,24 +243,6 @@ namespace DroneFlightModule.Composition.Tests
         }
 
         [Test]
-        public void TheRegisteredPilot_TakesOverTheGuestsDrone_AndBothAreTracked()
-        {
-            Tap(keyboard.rKey);
-            Tap(keyboard.pKey);
-
-            Tap(keyboard.digit2Key);
-
-            AssertFlownBy(grounded, TestFleetSettings.RegisteredPilot.Id);
-            Assert.That(Pilot.LastMessage, Is.EqualTo("Took over drone-2 from guest."));
-            var stats = fleet.Resolve<IPilotStatsStore>();
-            Assert.That(stats.Get(TestFleetSettings.RegisteredPilot.Id).Takeovers, Is.EqualTo(1));
-            Assert.That(stats.Get(PilotProfile.Guest.Id).TimesPreempted, Is.EqualTo(1));
-
-            Tap(keyboard.pKey);
-            Assert.That(Pilot.TryGetDrone(out _), Is.False);
-        }
-
-        [Test]
         public void TheSelectedPilot_HearsWhenTheyArePreempted()
         {
             Tap(keyboard.rKey);
@@ -287,23 +259,9 @@ namespace DroneFlightModule.Composition.Tests
         }
 
         [Test]
-        public void AParkedPilotsDrone_IgnoresTheKeyboard()
-        {
-            Tap(keyboard.rKey);
-            Tap(keyboard.pKey);
-
-            Press(keyboard.spaceKey);
-            Run(grounded, 1f);
-            Release(keyboard.spaceKey);
-
-            Assert.That(grounded.Resolve<FlightLoop>().State.IsGrounded, Is.True);
-            AssertFlownBy(grounded, PilotProfile.Guest.Id);
-        }
-
-        [Test]
         public void RevokeKey_ReleasesTheRegisteredPilotsDrone()
         {
-            Tap(keyboard.pKey);
+            Pilot.SelectPilot(TestFleetSettings.RegisteredPilot.Id);
             Tap(keyboard.rKey);
 
             Tap(keyboard.vKey);
@@ -320,7 +278,7 @@ namespace DroneFlightModule.Composition.Tests
             Pilot.SelectPilot(TestFleetSettings.RegisteredPilot.Id);
 
             Assert.That(Pilot.Session.PilotId, Is.EqualTo(TestFleetSettings.RegisteredPilot.Id));
-            AssertFlownBy(grounded, PilotProfile.Guest.Id);
+            AssertFree(grounded);
             Assert.Throws<ArgumentException>(() => Pilot.SelectPilot(new PilotId("stranger")));
         }
 

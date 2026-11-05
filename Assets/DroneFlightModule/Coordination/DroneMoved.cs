@@ -3,20 +3,20 @@ using DroneFlightModule.Core;
 namespace DroneFlightModule.Coordination
 {
     /// <summary>
-    /// A pilot moved their drone to another of their sessions, such as another device. The flight
-    /// goes on; FromSession just no longer steers it.
+    /// A pilot moved to another input device, and their session and its drone went with them. The
+    /// flight goes on.
     /// </summary>
     public readonly struct DroneMoved
     {
         public readonly DroneId Drone;
-        public readonly PilotSession FromSession;
+        public readonly PilotSession Session;
 
-        public DroneMoved(DroneId drone, PilotSession fromSession)
+        public DroneMoved(DroneId drone, PilotSession session)
         {
             Drone = drone;
-            FromSession = fromSession;
+            Session = session;
         }
 
-        public PilotId Pilot => FromSession.PilotId;
+        public PilotId Pilot => Session.PilotId;
     }
 }

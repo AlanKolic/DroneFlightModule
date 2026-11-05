@@ -103,6 +103,27 @@ namespace DroneFlightModule.UI.Tests
         }
 
         [Test]
+        public void Status_OfAnEmptyDesk_SaysSo()
+        {
+            Assert.That(
+                choices.Status("Gamepad", default, null, "connected", "Nobody is at this desk."),
+                Is.EqualTo("Gamepad: empty, connected\nNobody is at this desk."));
+        }
+
+        [Test]
+        public void TheLabelForNoPilot_IsNobody()
+        {
+            Assert.That(choices.Label(default(PilotId)), Is.EqualTo("Nobody"));
+        }
+
+        [Test]
+        public void APilotAtAnotherDesk_IsMarked()
+        {
+            Assert.That(choices.Label(TestFleet.Ace.Id, "Gamepad"), Is.EqualTo("Ace (priority 50), at Gamepad"));
+            Assert.That(choices.Label(TestFleet.Ace.Id, string.Empty), Is.EqualTo("Ace (priority 50)"));
+        }
+
+        [Test]
         public void Status_WithoutAStation_IsJustTheMessage()
         {
             Assert.That(choices.Status(string.Empty, default, null, string.Empty, "No input device is connected."), Is.EqualTo("No input device is connected."));

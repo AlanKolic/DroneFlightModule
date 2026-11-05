@@ -99,6 +99,9 @@ namespace DroneFlightModule.Coordination.Tests
             Assert.Throws<ArgumentException>(() => Start(Session(Alice), default(DroneId)));
             Assert.Throws<ArgumentNullException>(() => coordinator.Release(null));
             Assert.Throws<ArgumentNullException>(() => coordinator.CancelRequest(null));
+            Assert.Throws<ArgumentNullException>(() => coordinator.EndSession(null));
+            Assert.Throws<ArgumentNullException>(() => coordinator.Reroute(null));
+            Assert.Throws<ArgumentNullException>(() => Session(Alice).MoveTo(null));
             Assert.Throws<ArgumentException>(() => new PilotSession(default, provider, new ScriptedInput()));
             Assert.Throws<ArgumentNullException>(() => new PilotSession(Alice, null, new ScriptedInput()));
             Assert.Throws<ArgumentNullException>(() => new PilotSession(Alice, provider, null));
@@ -443,13 +446,9 @@ namespace DroneFlightModule.Coordination.Tests
             Assert.That(airborne.Router.Read().Move, Is.EqualTo(Vec3.Forward));
             Assert.That(assigned, Has.Count.EqualTo(1), "The flight goes on, so nothing new starts.");
 
-            Assert.That(moved, Has.Count.EqualTo(1));
-            Assert.That(moved[0].FromSession, Is.SameAs(first));
+            Assert.That(moved, Is.Empty, "Moved is for a session changing device, not a new session.");
             Assert.That(coordinator.Release(first), Is.False, "The first session no longer steers it.");
             AssertFlying(Alice, airborne);
-            Assert.That(coordinator.TryGetDrone(first, out _), Is.False);
-            Assert.That(coordinator.TryGetDrone(second, out var steered), Is.True);
-            Assert.That(steered, Is.EqualTo(airborne.Id));
         }
 
         [Test]
@@ -487,6 +486,49 @@ namespace DroneFlightModule.Coordination.Tests
             AssertFree(airborne);
             Assert.That(released[0].Reason, Is.EqualTo(ReleaseReason.Released));
             Assert.That(coordinator.Release(session), Is.False);
+        }
+
+        [Test]
+        public void EndSession_CancelsThePendingRequestAndReleases()
+        {
+            var session = Session(Alice);
+            Request(session, airborne.Id);
+            provider.AnswersAtOnce = false;
+            var pending = Start(session, grounded.Id);
+
+            coordinator.EndSession(session);
+            provider.AnswerAll();
+
+            Assert.That(pending.IsCanceled, Is.True);
+            AssertFree(airborne);
+            AssertFree(grounded);
+            Assert.That(released[0].Reason, Is.EqualTo(ReleaseReason.SessionEnded));
+        }
+
+        [Test]
+        public void Reroute_MovesTheDroneToTheSessionsNewInput_WithTheFlightGoingOn()
+        {
+            var session = new PilotSession(Alice, provider, new ScriptedInput());
+            Request(session, airborne.Id);
+            var pad = new ScriptedInput { Current = new ControlInput(Vec3.Forward, 0f) };
+
+            session.MoveTo(pad);
+            coordinator.Reroute(session);
+
+            Assert.That(airborne.Router.Read().Move, Is.EqualTo(Vec3.Forward));
+            AssertFlying(Alice, airborne);
+            Assert.That(assigned, Has.Count.EqualTo(1), "The flight goes on, so nothing new starts.");
+            Assert.That(released, Is.Empty);
+            Assert.That(moved, Has.Count.EqualTo(1));
+            Assert.That(moved[0].Session, Is.SameAs(session));
+        }
+
+        [Test]
+        public void Reroute_OfASessionWithNoDrone_DoesNothing()
+        {
+            coordinator.Reroute(Session(Alice));
+
+            Assert.That(moved, Is.Empty);
         }
 
         [Test]

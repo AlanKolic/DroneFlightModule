@@ -71,6 +71,8 @@ namespace DroneFlightModule.UI
         {
             switch (released.Reason)
             {
+                case ReleaseReason.SessionEnded:
+                    return $"{released.Pilot} left the desk, releasing {released.Drone}";
                 case ReleaseReason.LinkLost:
                     return $"{released.Pilot} lost {released.Drone}: it landed with no link";
                 case ReleaseReason.Revoked:

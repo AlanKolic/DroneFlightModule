@@ -27,6 +27,11 @@ namespace DroneFlightModule.UI.Tests
                 Station = station;
             }
 
+            public string SeatOf(PilotId pilot)
+            {
+                return string.Empty;
+            }
+
             public bool IsChosen(InputDevice device)
             {
                 return device == Chosen;

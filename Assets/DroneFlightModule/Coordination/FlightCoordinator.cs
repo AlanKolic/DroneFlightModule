@@ -55,21 +55,6 @@ namespace DroneFlightModule.Coordination
             return false;
         }
 
-        // The drone this exact session steers; the same pilot may have other sessions that do not.
-        public bool TryGetDrone(PilotSession session, out DroneId drone)
-        {
-            foreach (var assignment in assignments.Values)
-            {
-                if (assignment.Session == session)
-                {
-                    drone = assignment.Drone.Id;
-                    return true;
-                }
-            }
-            drone = default;
-            return false;
-        }
-
         public bool TryGetPilot(DroneId drone, out PilotId pilot)
         {
             if (assignments.TryGetValue(drone, out var assignment))
@@ -104,6 +89,33 @@ namespace DroneFlightModule.Coordination
             return TryGetDrone(session, out var drone) && ReleaseDrone(drone, ReleaseReason.Released);
         }
 
+        public void EndSession(PilotSession session)
+        {
+            if (session == null)
+            {
+                throw new ArgumentNullException(nameof(session));
+            }
+            CancelPending(session);
+            if (TryGetDrone(session, out var drone))
+            {
+                ReleaseDrone(drone, ReleaseReason.SessionEnded);
+            }
+        }
+
+        // For a session whose input moved: its drone follows, with the grant and the flight untouched.
+        public void Reroute(PilotSession session)
+        {
+            if (session == null)
+            {
+                throw new ArgumentNullException(nameof(session));
+            }
+            if (TryGetDrone(session, out var drone))
+            {
+                assignments[drone].Drone.Router.Assign(session.PilotId, session.Input);
+                Raise(Moved, new DroneMoved(drone, session));
+            }
+        }
+
         // At most one per call, which allocates nothing; called every tick, the next drone goes on the next tick.
         public void ReleaseLandedWithoutPilot()
         {
@@ -132,6 +144,20 @@ namespace DroneFlightModule.Coordination
                 throw new ArgumentNullException(nameof(session));
             }
             return CancelPending(session);
+        }
+
+        private bool TryGetDrone(PilotSession session, out DroneId drone)
+        {
+            foreach (var assignment in assignments.Values)
+            {
+                if (assignment.Session == session)
+                {
+                    drone = assignment.Drone.Id;
+                    return true;
+                }
+            }
+            drone = default;
+            return false;
         }
 
         private async Task<FlightRequestResult> RequestAsync(PilotSession session, DroneId? preferred, CancellationToken cancellationToken)
@@ -182,12 +208,7 @@ namespace DroneFlightModule.Coordination
             // Any drone will do for a pilot who already flies one, so they keep it.
             if (current.HasValue && (!preferred.HasValue || preferred == current))
             {
-                var previous = assignments[current.Value];
-                Route(previous.Drone, session, profile, grant);
-                if (previous.Session != session)
-                {
-                    Raise(Moved, new DroneMoved(current.Value, previous.Session));
-                }
+                Route(assignments[current.Value].Drone, session, profile, grant);
                 return new FlightRequestResult(current.Value);
             }
 

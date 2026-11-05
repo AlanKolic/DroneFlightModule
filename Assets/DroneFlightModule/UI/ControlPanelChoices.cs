@@ -51,8 +51,17 @@ namespace DroneFlightModule.UI
             return coordinator.TryGetPilot(drone.Value, out var pilot) ? $"{drone.Value}, flown by {pilot}" : $"{drone.Value}, free";
         }
 
+        public string Label(PilotId pilot, string seatedAt)
+        {
+            return string.IsNullOrEmpty(seatedAt) ? Label(pilot) : $"{Label(pilot)}, at {seatedAt}";
+        }
+
         public string Label(PilotId pilot)
         {
+            if (pilot.IsEmpty)
+            {
+                return "Nobody";
+            }
             string name = pilots.TryGet(pilot, out var profile) ? $"{profile.DisplayName} (priority {profile.Priority})" : pilot.ToString();
             return coordinator.TryGetDrone(pilot, out var drone) ? $"{name}, flying {drone}" : name;
         }
@@ -62,6 +71,10 @@ namespace DroneFlightModule.UI
             if (string.IsNullOrEmpty(station))
             {
                 return lastMessage;
+            }
+            if (pilot.IsEmpty)
+            {
+                return $"{station}: empty, {link}\n{lastMessage}";
             }
             var record = stats.Get(pilot);
             string flying = drone.HasValue ? $"flying {drone.Value}" : "no drone";

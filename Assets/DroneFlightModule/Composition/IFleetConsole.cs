@@ -25,6 +25,8 @@ namespace DroneFlightModule.Composition
 
         bool IsChosen(InputDevice device);
 
+        string SeatOf(PilotId pilot);
+
         bool TryGetDrone(out DroneId drone);
 
         void SelectPilot(PilotId pilot);

@@ -13,7 +13,8 @@ namespace DroneFlightModule.Unity
     /// over. Attached to one device, it reads only that device, and with a silence timeout it also
     /// reports that device as lost once it has sent nothing for that long, because macOS can drop a
     /// Bluetooth pad without telling the Input System. An idle pad looks the same, so any input
-    /// reconnects it at once, and a device gets the full timeout from the moment it is attached.
+    /// reconnects it at once, and a device gets the full timeout from the moment it is attached or
+    /// someone sits down at it.
     /// </summary>
     public sealed class InputActionInputProvider : IInputProvider, IDisposable
     {
@@ -25,7 +26,7 @@ namespace DroneFlightModule.Unity
         private readonly InputAction climb;
         private readonly InputAction yaw;
         private InputDevice device;
-        private double attachedAt;
+        private double silenceStart;
 
         public InputActionInputProvider(InputActionAsset actions, float silenceTimeout = 0f)
         {
@@ -52,7 +53,7 @@ namespace DroneFlightModule.Unity
                 {
                     return false;
                 }
-                return InputState.currentTime - Math.Max(device.lastUpdateTime, attachedAt) > silenceTimeout;
+                return InputState.currentTime - Math.Max(device.lastUpdateTime, silenceStart) > silenceTimeout;
             }
         }
 
@@ -61,7 +62,12 @@ namespace DroneFlightModule.Unity
         {
             this.device = device ?? throw new ArgumentNullException(nameof(device));
             actions.devices = new[] { device };
-            attachedAt = InputState.currentTime;
+            ResetSilence();
+        }
+
+        public void ResetSilence()
+        {
+            silenceStart = InputState.currentTime;
         }
 
         public ControlInput Read()

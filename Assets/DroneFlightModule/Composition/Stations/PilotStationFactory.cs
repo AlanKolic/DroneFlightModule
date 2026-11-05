@@ -1,8 +1,6 @@
 using System;
 using System.Threading;
 using DroneFlightModule.Coordination;
-using DroneFlightModule.Core;
-using DroneFlightModule.Pilots;
 using UnityEngine.InputSystem;
 using Object = UnityEngine.Object;
 
@@ -16,29 +14,26 @@ namespace DroneFlightModule.Composition
     {
         private readonly InputActionAsset template;
         private readonly FlightCoordinator coordinator;
-        private readonly IPilotRegistry pilots;
-        private readonly IAuthorizationProviderSelector providers;
+        private readonly PilotSeating seating;
         private readonly CancellationToken lifetime;
 
         public PilotStationFactory(
             InputActionAsset template,
             FlightCoordinator coordinator,
-            IPilotRegistry pilots,
-            IAuthorizationProviderSelector providers,
+            PilotSeating seating,
             CancellationToken lifetime)
         {
             this.template = template ?? throw new ArgumentNullException(nameof(template));
             this.coordinator = coordinator ?? throw new ArgumentNullException(nameof(coordinator));
-            this.pilots = pilots ?? throw new ArgumentNullException(nameof(pilots));
-            this.providers = providers ?? throw new ArgumentNullException(nameof(providers));
+            this.seating = seating ?? throw new ArgumentNullException(nameof(seating));
             this.lifetime = lifetime;
         }
 
-        public PilotStation Create(string name, InputDevice device, InputDeviceGroup group, PilotId startPilot)
+        public PilotStation Create(string name, InputDevice device, InputDeviceGroup group)
         {
             var controls = Object.Instantiate(template);
             controls.bindingMask = InputBinding.MaskByGroup(group.BindingGroup);
-            return new PilotStation(name, device, controls, group.SilenceTimeout, coordinator, pilots, providers, startPilot, lifetime);
+            return new PilotStation(name, device, controls, group.SilenceTimeout, coordinator, seating, lifetime);
         }
     }
 }

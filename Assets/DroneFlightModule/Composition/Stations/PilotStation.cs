@@ -1,11 +1,9 @@
 using System;
-using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using DroneFlightModule.Authorization;
 using DroneFlightModule.Coordination;
 using DroneFlightModule.Core;
-using DroneFlightModule.Pilots;
 using DroneFlightModule.Unity;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -13,24 +11,23 @@ using UnityEngine.InputSystem;
 namespace DroneFlightModule.Composition
 {
     /// <summary>
-    /// One input device and whoever flies with it. It owns the device's controls, input and keys,
-    /// and holds a session for every pilot in the registry, so a pilot can fly as anyone from it.
-    /// It knows nothing of other stations; they meet only in the coordinator, so it reports only
-    /// the drone its own session steers. Switching keeps the previous pilot on their drone with
-    /// their hands off the sticks, so the next pilot can outrank and take it over, and cancels the
-    /// previous pilot's pending request, so nobody is given a drone after they were switched away
-    /// from. Its link can be cut, and it reports no pilot while its device is unplugged or silent.
-    /// It keeps the latest outcome for display, including a pilot here losing their drone.
-    /// Disposing stops listening and destroys its controls.
+    /// One desk: an input device and at most one pilot. It owns the device's controls, input and
+    /// keys. Who sits here is <see cref="PilotSeating"/>'s to decide, and while nobody does there
+    /// is no session and the flying actions only say so. It knows nothing of other stations; they
+    /// meet only in the coordinator. Its link can be cut, and it reports no pilot while its device
+    /// is unplugged or silent. It keeps the latest outcome for display, including the pilot here
+    /// losing their drone. Disposing stops listening and destroys its controls.
     /// </summary>
     public sealed class PilotStation : IStationStatus, IDisposable
     {
+        private const string NobodyHere = "Nobody is at this desk.";
+
         private readonly FlightCoordinator coordinator;
         private readonly InputActionAsset controls;
         private readonly InputActionInputProvider input;
         private readonly StationKeys keys;
         private readonly ObjectDestroyer destroyer = new ObjectDestroyer();
-        private readonly List<PilotSession> sessions = new List<PilotSession>();
+        private readonly PilotSeating seating;
         private readonly CancellationToken lifetime;
 
         public PilotStation(
@@ -39,9 +36,7 @@ namespace DroneFlightModule.Composition
             InputActionAsset controls,
             float silenceTimeout,
             FlightCoordinator coordinator,
-            IPilotRegistry pilots,
-            IAuthorizationProviderSelector providers,
-            PilotId startPilot,
+            PilotSeating seating,
             CancellationToken lifetime)
         {
             if (string.IsNullOrWhiteSpace(name))
@@ -52,57 +47,57 @@ namespace DroneFlightModule.Composition
             Device = device ?? throw new ArgumentNullException(nameof(device));
             this.controls = controls ?? throw new ArgumentNullException(nameof(controls));
             this.coordinator = coordinator ?? throw new ArgumentNullException(nameof(coordinator));
+            this.seating = seating ?? throw new ArgumentNullException(nameof(seating));
             this.lifetime = lifetime;
 
             input = new InputActionInputProvider(controls, silenceTimeout);
             input.Attach(device);
             Link = new DisconnectableInputProvider(input);
-            foreach (var profile in pilots.Profiles)
-            {
-                sessions.Add(new PilotSession(profile.Id, providers.For(profile), new LocalPilotInput(Link)));
-            }
-            Session = sessions.Find(session => session.PilotId == startPilot)
-                ?? throw new ArgumentException($"{startPilot} is not in the pilot registry.", nameof(startPilot));
-            SetSelected(Session, true);
             keys = new StationKeys(controls, this);
 
             coordinator.Released += OnReleased;
             coordinator.TookOver += OnTookOver;
-            coordinator.Moved += OnMoved;
         }
 
         public string Name { get; }
         public InputDevice Device { get; private set; }
         public DisconnectableInputProvider Link { get; }
         public PilotSession Session { get; private set; }
-        public string LastMessage { get; private set; } = "Request a drone to fly.";
+        public string LastMessage { get; private set; } = "Pick a pilot for this desk.";
         public string LinkStatus => Link.IsLinkCut ? "link cut" : Link.IsConnected ? "connected" : "disconnected";
 
         public bool TryGetDrone(out DroneId drone)
         {
-            return coordinator.TryGetDrone(Session, out drone);
+            drone = default;
+            return Session != null && coordinator.TryGetDrone(Session.PilotId, out drone);
+        }
+
+        internal void Occupy(PilotSession session)
+        {
+            Session = session;
+            // A pilot sitting down hasn't touched the device yet, and an idle pad would count as silent.
+            if (session != null)
+            {
+                input.ResetSilence();
+            }
+        }
+
+        internal void Report(string message)
+        {
+            LastMessage = message;
         }
 
         public string Describe()
         {
+            if (Session == null)
+            {
+                return $"{Name}: empty, {LinkStatus}";
+            }
             string flying = TryGetDrone(out var drone) ? $"flying {drone}" : "no drone";
             return $"{Name}: {Session.PilotId}, {flying}, {LinkStatus}";
         }
 
-        public bool HoldsADrone
-        {
-            get
-            {
-                foreach (var session in sessions)
-                {
-                    if (coordinator.TryGetDrone(session, out _))
-                    {
-                        return true;
-                    }
-                }
-                return false;
-            }
-        }
+        public bool HoldsADrone => TryGetDrone(out _);
 
         public void Attach(InputDevice device)
         {
@@ -114,6 +109,11 @@ namespace DroneFlightModule.Composition
         public async Task RequestFlightAsync(DroneId? drone)
         {
             var session = Session;
+            if (session == null)
+            {
+                LastMessage = NobodyHere;
+                return;
+            }
             LastMessage = $"Asking {session.Provider.Id} for {(drone.HasValue ? drone.Value.ToString() : "any drone")}...";
             try
             {
@@ -137,6 +137,11 @@ namespace DroneFlightModule.Composition
 
         public bool Release()
         {
+            if (Session == null)
+            {
+                LastMessage = NobodyHere;
+                return false;
+            }
             bool released = coordinator.Release(Session);
             LastMessage = released ? "Released the drone." : "Not flying a drone.";
             return released;
@@ -144,31 +149,29 @@ namespace DroneFlightModule.Composition
 
         public void SwitchPilot()
         {
-            int next = (sessions.IndexOf(Session) + 1) % sessions.Count;
-            SelectPilot(sessions[next].PilotId);
+            seating.SeatNext(this);
         }
 
+        // No pilot empties the desk.
         public void SelectPilot(PilotId pilot)
         {
-            var session = sessions.Find(candidate => candidate.PilotId == pilot)
-                ?? throw new ArgumentException($"{pilot} is not in the pilot registry.", nameof(pilot));
-            if (session == Session)
+            if (pilot.IsEmpty)
             {
-                return;
+                seating.Vacate(this);
             }
-            var previous = Session;
-            SetSelected(previous, false);
-            SetSelected(session, true);
-            Session = session;
-            string cancelled = coordinator.CancelRequest(previous) ? $" {previous.PilotId}'s request was cancelled." : "";
-            string kept = coordinator.TryGetDrone(previous, out var parked)
-                ? $" {previous.PilotId} keeps {parked}, hands off."
-                : "";
-            LastMessage = $"Now flying as {Session.PilotId}, authorized by {Session.Provider.Id}.{cancelled}{kept}";
+            else
+            {
+                seating.Seat(this, pilot);
+            }
         }
 
         public bool RevokeServerGrant()
         {
+            if (Session == null)
+            {
+                LastMessage = NobodyHere;
+                return false;
+            }
             var pilot = Session.PilotId;
             bool revoked = Session.Provider is IRevokingAuthorizationProvider server && server.Revoke(pilot);
             LastMessage = revoked ? $"The server revoked {pilot}'s grant." : $"{pilot} holds no server grant.";
@@ -185,20 +188,14 @@ namespace DroneFlightModule.Composition
         {
             coordinator.Released -= OnReleased;
             coordinator.TookOver -= OnTookOver;
-            coordinator.Moved -= OnMoved;
             keys.Dispose();
             input.Dispose();
             destroyer.Destroy(controls);
         }
 
-        private void SetSelected(PilotSession session, bool isSelected)
-        {
-            ((LocalPilotInput)session.Input).IsSelected = isSelected;
-        }
-
         private void OnReleased(DroneReleased released)
         {
-            if (!sessions.Contains(released.Session))
+            if (released.Session != Session)
             {
                 return;
             }
@@ -212,20 +209,12 @@ namespace DroneFlightModule.Composition
             }
         }
 
-        // The pilot who took over hears it from their own request; a pilot here, flying or parked, hears here that they lost a drone.
+        // The pilot who took over hears it from their own request; the pilot here hears that they lost a drone.
         private void OnTookOver(DroneTakenOver takenOver)
         {
-            if (sessions.Contains(takenOver.FromSession))
+            if (takenOver.FromSession == Session)
             {
                 LastMessage = $"{takenOver.Pilot} took {takenOver.Drone} over from {takenOver.FromPilot}.";
-            }
-        }
-
-        private void OnMoved(DroneMoved moved)
-        {
-            if (sessions.Contains(moved.FromSession))
-            {
-                LastMessage = $"{moved.Pilot} moved {moved.Drone} to another device.";
             }
         }
     }

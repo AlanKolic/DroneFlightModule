@@ -285,7 +285,7 @@ drone a pilot gets, and whether that means taking a drone from someone else.
   drone that is no longer in the fleet. `FlightLoopStatus` reads the
   status (grounded or not) straight from a drone's `FlightLoop`.
 - **One pilot, one drone.** A pilot flies at most one drone, whichever session they use: a
-  second session for the same pilot, say on a gamepad, moves their one drone or takes it over. The
+  second session for the same pilot moves their one drone. The
   coordinator's assignments are the only record of it; grant holders only gate and the stats
   recorder only times flights.
 - **`RequestFlightAsync(session, DroneId? preferred, CancellationToken)`** runs this pipeline:
@@ -301,9 +301,9 @@ drone a pilot gets, and whether that means taking a drone from someone else.
   takeover never closes the gate.
 - A new request from the same session cancels its pending one, and so do `Release(session)`
   and `CancelRequest(session)`.
-- **Two ways to ask who flies.** `TryGetDrone(pilot)` answers for the pilot, whichever session
-  they use; `TryGetDrone(session)` answers for the exact session, and is what a station shows,
-  so after a pilot moves to another device only the station that steers says it flies.
+- **`EndSession(session)`** cancels the pending request and releases the drone as `SessionEnded`.
+  **`Reroute(session)`** follows a session whose input moved: the drone's router takes the new
+  input, the grant and assignment stay, and `Moved` is raised.
 - **Results:** `Assigned { Drone }`, `TookOver { Drone, FromPilot }` or
   `Denied { Denial, Message }`. Denials are `UnknownPilot`, `NotAuthorized`, `PilotDisconnected`,
   `UnknownDrone` and `NoDroneAvailable`.
@@ -311,17 +311,16 @@ drone a pilot gets, and whether that means taking a drone from someone else.
   else, and lets go of the first one only once the second is secured, in the same step. A
   denied request leaves them on the drone they fly. The released drone behaves as after any
   release: an airborne one holds, then lands. Asking for the drone they already fly, or for any
-  drone, only routes it to the requesting session, for example when they pick up a gamepad; the
+  drone, only routes it to the requesting session, the
   flight goes on.
 - **Events:** `Assigned`, `Released { Drone, Session, Pilot, Reason }`, `TookOver { Drone, Pilot,
-  FromSession, FromPilot }`, `Moved { Drone, FromSession, Pilot }` (the same pilot's drone moved
-  to another session; the flight goes on) and `Denied { Pilot, Preferred, Denial, Message }`. A
-  cancelled request raises none. Release reasons are `Released`, `LinkLost`, `Revoked`, `Switched`
-  and `Removed`. A takeover is not a release: the preempted pilot is `FromPilot`. Pilot stats,
-  telemetry and the dashboard subscribe to them. Events are raised only once a change is complete,
-  so a listener always sees the new state, and each listener is called on its own: one that throws
-  is reported through `ListenerFailed`, which the composition logs, and can neither interrupt a
-  switch nor reach whoever revoked a grant.
+  FromSession, FromPilot }`, `Moved { Drone, Session, Pilot }` (a pilot moved desks; the flight goes on) and `Denied { Pilot, Preferred, Denial, Message }`. A
+  cancelled request raises none. Release reasons are `Released`, `SessionEnded`, `LinkLost`,
+  `Revoked`, `Switched` and `Removed`. A takeover is not a release: the preempted pilot is
+  `FromPilot`. Pilot stats, telemetry and the dashboard subscribe to them. Events are raised only
+  once a change is complete, so a listener always sees the new state, and each listener is called
+  on its own: one that throws is reported through `ListenerFailed`, which the composition logs,
+  and can neither interrupt a switch nor reach whoever revoked a grant.
 
 **`IAssignmentPolicy`**, first implementation `PriorityAssignmentPolicy`:
 1. **A specific drone is requested:** assign it if it's free, take it over if its pilot ranks
@@ -346,6 +345,7 @@ of leaving a pilot half switched.
 - The pilot releases it (a key, or a button in the control panel).
 - The provider revokes the pilot's grant.
 - The pilot switches to another drone.
+- The pilot leaves the desk.
 - The drone leaves the fleet. A request still waiting for it is then denied as `UnknownDrone`.
 - The drone has landed with no connected pilot (`ReleaseLandedWithoutPilot`, which
   `FleetRunner` calls every fixed tick), so a device that never comes back doesn't
@@ -411,18 +411,22 @@ break the Core boundary. All async code uses `Task` and `CancellationToken`.
 - **Input belongs to a pilot station**, not to a drone: one station per input device (see
   "Input devices" below), each with its own copy of the controls, its device's input and a link
   that can be cut wrapping it.
-- **`PilotStation`** owns its device's controls, input and keys, and is built by
-  `PilotStationFactory`. It holds a session on that input for every pilot in the registry: the
-  guest through local guest mode, everyone else through the simulated server (0.5 s latency by
-  default). Each session gets its own `LocalPilotInput` over the station's device: only the
-  selected pilot's reads it, and the others stay connected with their hands off, so a pilot you
-  switch away from keeps their drone, hovering, and the next pilot can take it over. A cut link
-  cuts them all. A pilot at a station, flying or parked, is told when they are preempted and by
-  whom, when their drone is removed or released for lost link, and when they move to another
-  device; the pilot who took the drone hears it from their own request. Switching away from a
-  pilot cancels their pending request, so they are never handed a drone nobody steers. It keeps
-  the latest outcome for the control panel. Requests never fault: a superseded or cancelled one
-  ends quietly, and anything else is logged.
+- **`PilotStation`** is a desk: it owns its device's controls, input and keys, is built by
+  `PilotStationFactory`, and has at most one session, null while the desk is empty. The session's
+  input is the station's link. An empty desk's flying actions only say nobody is there. The pilot
+  here is told when they are preempted and by whom, and when their drone is removed or released for
+  lost link. Requests never fault: a superseded or cancelled one ends quietly, and anything else
+  is logged.
+- **`PilotSeating`** is the only place that decides who sits where, so a pilot is never at two
+  desks. A pilot sitting down gets a new session, authorized through
+  `IAuthorizationProviderSelector` when they request. Leaving ends it (`EndSession`), which
+  cancels their pending request and releases their drone. Changing the pilot at a desk is the old
+  pilot leaving and the new one sitting down; the new pilot requests a drone like anyone else, and
+  no takeover is counted. A pilot who sits down at another desk moves there: their session changes
+  input (`MoveTo`), the coordinator re-routes its drone (`Reroute`), and the flight goes on with
+  the same grant and no gap in the gate. The desk they left is empty. A pending request is lost in
+  a move, because its outcome would report to that desk. A pilot can move onto a desk with a cut
+  link or a gone device; the failsafe then handles the drone as for any lost link.
 - **`StationKeys`** binds a station's Fleet map and its link toggle on the station's own
   controls; **`FleetKeys`** binds the fleet-wide Debug keys that add and remove drones, on the
   fleet's copy. Both use `ActionBindings`. The dashboard's Tab stays with the dashboard.
@@ -430,7 +434,8 @@ break the Core boundary. All async code uses `Task` and `CancellationToken`.
   - R, South: request any drone
   - 1–3, D-pad left, up and right: request `drone-1` to `drone-3`, by id
   - X, East: release
-  - P, Start: switch to the next pilot (the previous one keeps their drone, hands off)
+  - P, Start: seat the next pilot here, then nobody, then round again; the pilot here leaves and
+    lets go of their drone, and a pilot from another desk moves here with theirs
   - V, North: the server revokes the current pilot's grant
   - L, Select: cut or restore the station's link
   - N: add a drone (keyboard only, fleet-wide)
@@ -481,16 +486,16 @@ break the Core boundary. All async code uses `Task` and `CancellationToken`.
 - **The control panel** (`ControlPanel`), docked bottom right in the same child scope, offers
   everything the keys do: a station dropdown (one per input device; everything but adding and
   removing drones acts on the chosen station), a pilot dropdown (every registered pilot and the
-  drone they fly; picking one switches to them), a drone dropdown (any drone or one of the fleet
-  with who flies it, through `ControlPanelChoices`, which falls back to any drone when the chosen
-  one leaves), a status line with the station, its current pilot, their takeovers and preemptions
-  and the latest outcome, and Request, Release, Revoke grant, Cut/Restore link, Add drone and
-  Remove drone. Its text is built a few times a second and at once after a click, the status sizes
-  itself to fit, and the panel scrolls when it would not fit the screen. The dashboard reads the
-  panel's height to stop above it. It drives the fleet only through `IFleetConsole`, a small
-  contract in Composition, next to `FleetConsole`, which implements it on top of the pilot
-  stations and the drone instantiator; the UI references Composition, never the other way, so the
-  panel stays deletable with the rest of the UI.
+  drone they fly; picking one seats them at the chosen station, and "Nobody" empties it), a drone
+  dropdown (any drone or one of the fleet with who flies it, through `ControlPanelChoices`, which
+  falls back to any drone when the chosen one leaves), a status line with the station, its current
+  pilot, their takeovers and preemptions and the latest outcome, and Request, Release, Revoke
+  grant, Cut/Restore link, Add drone and Remove drone. Its text is built a few times a second and
+  at once after a click, the status sizes itself to fit, and the panel scrolls when it would not
+  fit the screen. The dashboard reads the panel's height to stop above it. It drives the fleet
+  only through `IFleetConsole`, a small contract in Composition, next to `FleetConsole`, which
+  implements it on top of the pilot stations and the drone instantiator; the UI references
+  Composition, never the other way, so the panel stays deletable with the rest of the UI.
 - **Deletion check:** delete the UI folder, which holds the UI's tests too, confirm Unity
   compiles, the drones fly, and all remaining tests pass. The dashboard's GameObject is left with
   missing scripts, which Unity only warns about; rebuilding the scene drops it.
@@ -530,20 +535,19 @@ matters only to the composition root that built it.
 
 - **One pilot station per input device.** `PilotStation` (Composition) has its own copy of the
   controls asset restricted to its device (`InputActionAsset.devices` and the device's binding
-  group as the binding mask), its own cuttable link, its own sessions for every registered
-  pilot and its own selected pilot. Stations never see each other. Two stations meet only in
-  the coordinator, under its usual rules, so a gamepad pilot taking over the keyboard pilot's
-  drone is an ordinary takeover.
+  group as the binding mask), its own cuttable link, its own pilot, if any. Stations never see
+  each other. Two stations meet only in the coordinator, under its usual rules, so a gamepad pilot
+  taking over the keyboard pilot's drone is an ordinary takeover.
 - **`InputDeviceStations`** (Composition) creates a station for every device of a configured
   `InputDeviceGroup` (from `InputDevicesAsset`; the keyboard and gamepads by default) present at
   start, group by group, and for each one plugged in later (`InputSystem.onDeviceChange`). A
   device matches the first group whose layout its own layout is, or is based on, so a group for
   `Gamepad` takes every kind of gamepad; a device matching no group, like the mouse, gets no
   station. Each group's layout must be known to the Input System and its binding group must be one
-  of the controls' control schemes, or the stations fail to start. A station takes its entry's name, numbered from the
-  second on, such as `Gamepad` and `Gamepad 2`. A new station starts as the lowest-ranked pilot no
-  other station flies as, or as the guest when every pilot is taken, so an unknown device is never
-  the strongest pilot: the keyboard is the guest and each later device the next free pilot up the ranks.
+  of the controls' control schemes, or the stations fail to start. A station takes its entry's
+  name, numbered from the second on, such as `Gamepad` and `Gamepad 2`. A new station takes the
+  guest if nobody has them, and otherwise starts empty, so the keyboard starts ready to fly and an
+  unknown device never takes a pilot by itself.
 - **Unplugging is link loss.** A station's input reports its pilot as connected only while its
   device's controls resolve. The Input System drops a removed device from every asset's device
   list, which leaves the station's list empty, so no other pad can drive it. Unplugging a pad
@@ -565,13 +569,12 @@ matters only to the composition root that built it.
   normally revives, or as a new one with the same serial. The flight resumes within the hold
   budget, with the same pilot and station name.
 - **Removing a station.** `FleetRunner` calls `InputDeviceStations.RemoveUnattended` every fixed
-  tick: a station whose device is gone and that holds no drone, flying or parked, is disposed and
+  tick: a station whose device is gone and that holds no drone is disposed and
   leaves the HUD and the console, whose chosen station falls back to the first. That frees its
   name and its pilot. A drone that lands with no link is released, so this follows.
 - **Disposing** the fleet disposes every station, destroys their controls and stops watching
   devices.
-- **Same pilot on two devices:** the coordinator's one-pilot-one-drone rule applies, so the
-  latest request moves the pilot's drone to that device.
+- **One pilot, one desk:** enforced by `PilotSeating`, so the same pilot can't be on two devices.
 - **Station keys and fleet keys.** Each station binds the Flight and Fleet maps and its link
   toggle to its own device. Adding and removing drones and the dashboard are fleet-wide and stay
   on the keyboard. Gamepad bindings: sticks as today, South to request any drone, D-pad left, up
@@ -620,22 +623,20 @@ matters only to the composition root that built it.
   - drones join and leave at any time; removing a flown drone releases it first
   - a new request cancels the pending one
   - "any drone" while flying keeps the current drone
-  - a second session for a pilot moves their one drone, says so, and only that session reports it
+  - a second session for a pilot moves their one drone
+  - ending a session releases its drone, and re-routing a session keeps the flight going
   - a pilot with no link is denied, also when it drops during authorization
   - a drone that landed with no connected pilot is released, an airborne one is not
   - a throwing listener is reported, can't interrupt a switch and can't reach a revoker
 - **Config assets:** new assets matching the Core defaults, edits and invalid values reaching
   the Core types, a missing part named, and the shipped settings making a valid fleet.
-- **Fleet** (the real container, two drone scopes, real key presses through the Input System
-  test fixture): drones join the fleet in order, one added while the fleet is in use can be
-  flown, a taken id is refused, removing the guest's drone releases it and tells them, free
-  drones hold and land, number keys switch drones, signing in through the server, switching
-  pilots keeping the previous pilot's drone and cancelling their pending request, a parked
-  pilot's drone ignoring the keyboard, a
-  takeover from the same keyboard counted for both pilots, a preempted pilot being told, revocation,
-  link loss, stats on the fleet's simulation time, a drone added later sharing the fleet's
-  timebase, telemetry from every drone reaching the
-  fleet sink and ending with the drone, and disposal disabling the controls.
+- **Fleet** (the real container, two drone scopes, real key presses through the Input System test
+  fixture): drones join the fleet in order, one added while the fleet is in use can be flown, a
+  taken id is refused, removing the guest's drone releases it and tells them, free drones hold and
+  land, number keys switch drones, signing in through the server, changing the pilot cancelling
+  their pending request, a preempted pilot being told, revocation, link loss, stats on the fleet's
+  simulation time, a drone added later sharing the fleet's timebase, telemetry from every drone
+  reaching the fleet sink and ending with the drone, and disposal disabling the controls.
 - **Drone instantiator:** prefab ids and spawn spots, refused ids, a late drone starting at the
   fleet's time, removal destroying views (also when another drone joined the registry directly),
   the row restarting, grounded at spawn following the terrain, a drone without a view when there
@@ -651,7 +652,7 @@ matters only to the composition root that built it.
   sink's latest samples.
 - **Input devices** (the Input System test fixture adding and removing virtual gamepads):
   - the keyboard gets a station as the guest, the mouse none
-  - a pad plugged in gets its own station as the next free pilot, and the guest once all are taken
+  - a pad plugged in gets its own station
   - the keyboard and a pad fly two drones at once, each moving only its own
   - two pads stay independent
   - unplugging a pad holds and then lands its drone, and plugging it back in resumes it
@@ -667,8 +668,10 @@ matters only to the composition root that built it.
   - a pad pilot takes over the keyboard pilot's drone by priority, and the keyboard is told
   - each station cuts only its own link
   - a request from an unplugged pad is refused, and a drone it landed is freed
-  - a new station starts as the lowest-ranked free pilot
-  - stations report only their own sessions' drones, flying or parked
+  - a pilot change releases the drone and needs a new request, with no takeover counted
+  - moving desks keeps the drone flying and empties the first desk, also onto an occupied desk
+  - new devices start empty unless the guest is free, and an empty desk's actions only report
+  - leaving or moving desks cancels a pending request
   - the station line, the console's no-station fallback, and the camera following the chosen station
   - only configured devices get stations, and an unknown layout or binding group is refused
   - the console chooses a station and acts for it

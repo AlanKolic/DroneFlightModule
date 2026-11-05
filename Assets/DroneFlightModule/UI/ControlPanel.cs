@@ -11,8 +11,8 @@ namespace DroneFlightModule.UI
     /// station, who flies from it, their drone, the link, their takeovers and preemptions and the
     /// latest outcome. Below it a station dropdown (one per input device), a pilot dropdown, a drone
     /// dropdown and buttons for what the keys do; everything but the drone buttons acts on the
-    /// chosen station. Picking a pilot switches to them, leaving the previous pilot on their drone,
-    /// hands off, so a higher-priority pilot can take it over; both dropdowns say who flies what.
+    /// chosen station. Picking a pilot seats them at the chosen station, and the pilot there leaves
+    /// and lets go of their drone; both dropdowns say who flies what.
     /// The drone dropdown chooses what Request and Remove act on. It drives the fleet only through
     /// <see cref="IFleetConsole"/>. Text is built a few times a second in Update, and at once after
     /// a click; OnGUI only draws. IMGUI has no dropdown, so one at a time opens as a list in place,
@@ -95,9 +95,10 @@ namespace DroneFlightModule.UI
                     }
                     break;
                 case Dropdown.Pilot:
+                    options.Add((choices.Label(default(PilotId)), () => console.SelectPilot(default)));
                     foreach (var profile in choices.Pilots)
                     {
-                        options.Add((choices.Label(profile.Id), () => console.SelectPilot(profile.Id)));
+                        options.Add((choices.Label(profile.Id, console.SeatOf(profile.Id)), () => console.SelectPilot(profile.Id)));
                     }
                     break;
                 case Dropdown.Drone:

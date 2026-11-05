@@ -1,8 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using DroneFlightModule.Core;
-using DroneFlightModule.Pilots;
 using UnityEngine.InputSystem;
 
 namespace DroneFlightModule.Composition
@@ -16,28 +14,27 @@ namespace DroneFlightModule.Composition
     /// device object: the Editor can keep a stale entry of a pad that disconnected unseen, and the
     /// pad then connects as a second device, which takes over the stale entry's station. Unplugging
     /// a device, or its going silent past its group's timeout, is link loss, and the failsafe takes
-    /// over. While a gone device's pilots still hold a drone its station waits, and the pad resumes
-    /// it on returning. Once a gone device holds no drone its station is removed. A new station
-    /// starts as the lowest-ranked pilot no other station flies as, so the guest first and an
-    /// unknown device is never the strongest pilot, or as the guest when everyone is taken.
+    /// over. While a gone device's pilot still holds a drone its station waits, and the pad resumes
+    /// it on returning. Once a gone device holds no drone its pilot leaves and its station is
+    /// removed. A new station takes the guest if nobody has them, and otherwise starts empty.
     /// Disposing disposes every station.
     /// </summary>
     public sealed class InputDeviceStations : IDisposable
     {
         private readonly IReadOnlyList<InputDeviceGroup> deviceGroups;
         private readonly PilotStationFactory factory;
-        private readonly IPilotRegistry pilots;
+        private readonly PilotSeating seating;
         private readonly List<PilotStation> stations = new List<PilotStation>();
 
         public InputDeviceStations(
             IReadOnlyList<InputDeviceGroup> deviceGroups,
             InputActionAsset controls,
             PilotStationFactory factory,
-            IPilotRegistry pilots)
+            PilotSeating seating)
         {
             this.deviceGroups = deviceGroups ?? throw new ArgumentNullException(nameof(deviceGroups));
             this.factory = factory ?? throw new ArgumentNullException(nameof(factory));
-            this.pilots = pilots ?? throw new ArgumentNullException(nameof(pilots));
+            this.seating = seating ?? throw new ArgumentNullException(nameof(seating));
             if (controls == null)
             {
                 throw new ArgumentNullException(nameof(controls));
@@ -69,6 +66,7 @@ namespace DroneFlightModule.Composition
                 if (!station.Device.added && !station.HoldsADrone)
                 {
                     stations.RemoveAt(i);
+                    seating.Vacate(station);
                     station.Dispose();
                     StationRemoved?.Invoke(station);
                 }
@@ -113,8 +111,9 @@ namespace DroneFlightModule.Composition
             {
                 return;
             }
-            var station = factory.Create(FreeName(deviceGroup.StationName), device, deviceGroup, StartPilot());
+            var station = factory.Create(FreeName(deviceGroup.StationName), device, deviceGroup);
             stations.Add(station);
+            station.SelectPilot(seating.StartPilot());
             StationAdded?.Invoke(station);
         }
 
@@ -169,20 +168,6 @@ namespace DroneFlightModule.Composition
                     throw new ArgumentException($"{controls.name} has no control scheme with the binding group '{deviceGroup.BindingGroup}'.", nameof(deviceGroups));
                 }
             }
-        }
-
-        private PilotId StartPilot()
-        {
-            var taken = new HashSet<PilotId>(stations.Select(station => station.Session.PilotId));
-            // Profiles are listed highest priority first, with the guest last.
-            for (int i = pilots.Profiles.Count - 1; i >= 0; i--)
-            {
-                if (!taken.Contains(pilots.Profiles[i].Id))
-                {
-                    return pilots.Profiles[i].Id;
-                }
-            }
-            return PilotProfile.Guest.Id;
         }
     }
 }

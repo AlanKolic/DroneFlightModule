@@ -14,18 +14,20 @@ namespace DroneFlightModule.Composition
     public sealed class FleetConsole : IFleetConsole
     {
         private readonly InputDeviceStations stations;
+        private readonly PilotSeating seating;
         private readonly DroneInstantiator drones;
         private PilotStation chosen;
 
-        public FleetConsole(InputDeviceStations stations, DroneInstantiator drones)
+        public FleetConsole(InputDeviceStations stations, PilotSeating seating, DroneInstantiator drones)
         {
             this.stations = stations ?? throw new ArgumentNullException(nameof(stations));
+            this.seating = seating ?? throw new ArgumentNullException(nameof(seating));
             this.drones = drones ?? throw new ArgumentNullException(nameof(drones));
         }
 
         public IReadOnlyList<string> Stations => stations.Stations.Select(station => station.Name).ToList();
         public string Station => Selected?.Name ?? string.Empty;
-        public PilotId Pilot => Selected?.Session.PilotId ?? default;
+        public PilotId Pilot => Selected?.Session?.PilotId ?? default;
         public string LastMessage => Selected?.LastMessage ?? "No input device is connected.";
         public bool IsLinkCut => Selected != null && Selected.Link.IsLinkCut;
         public string LinkStatus => Selected?.LinkStatus ?? string.Empty;
@@ -52,6 +54,11 @@ namespace DroneFlightModule.Composition
         public bool IsChosen(InputDevice device)
         {
             return Selected != null && Selected.Device == device;
+        }
+
+        public string SeatOf(PilotId pilot)
+        {
+            return seating.SeatOf(pilot);
         }
 
         public bool TryGetDrone(out DroneId drone)

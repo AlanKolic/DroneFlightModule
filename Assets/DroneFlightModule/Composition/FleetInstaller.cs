@@ -77,6 +77,7 @@ namespace DroneFlightModule.Composition
 
             builder.RegisterInstance(controls);
             builder.Register<IAuthorizationProviderSelector, GuestOrServerSelector>(Lifetime.Singleton);
+            builder.Register<PilotSeating>(Lifetime.Singleton);
             builder.Register<PilotStationFactory>(Lifetime.Singleton)
                 .WithParameter("lifetime", lifetime);
             builder.Register<InputDeviceStations>(Lifetime.Singleton)

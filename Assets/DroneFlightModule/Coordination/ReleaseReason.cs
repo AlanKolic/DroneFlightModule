@@ -6,6 +6,7 @@ namespace DroneFlightModule.Coordination
     public enum ReleaseReason
     {
         Released,
+        SessionEnded,
         LinkLost,
         Revoked,
         Switched,
