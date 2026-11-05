@@ -70,7 +70,7 @@ namespace DroneFlightModule.Composition
         }
 
         public string Name { get; }
-        public InputDevice Device { get; }
+        public InputDevice Device { get; private set; }
         public DisconnectableInputProvider Link { get; }
         public PilotSession Session { get; private set; }
         public string LastMessage { get; private set; } = "Request a drone to fly.";
@@ -87,10 +87,26 @@ namespace DroneFlightModule.Composition
             return $"{Name}: {Session.PilotId}, {flying}, {LinkStatus}";
         }
 
-        // Removing a device also takes it out of its controls' device list, so it is put back when it returns.
-        public void RestoreDevice()
+        public bool HoldsADrone
         {
-            controls.devices = new[] { Device };
+            get
+            {
+                foreach (var session in sessions)
+                {
+                    if (coordinator.TryGetDrone(session, out _))
+                    {
+                        return true;
+                    }
+                }
+                return false;
+            }
+        }
+
+        // Also for the same device returning: removing it took it out of the controls' device list.
+        public void Attach(InputDevice device)
+        {
+            Device = device ?? throw new ArgumentNullException(nameof(device));
+            controls.devices = new[] { device };
         }
 
         // Never faults: a superseded or cancelled request ends quietly, and anything else is logged and reported.

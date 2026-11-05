@@ -40,14 +40,14 @@ The full design is in
 Bindings live in `Assets/DroneFlightModule/Unity/Input/DroneControls.inputactions`, not in code.
 Centred sticks hold position and altitude, so the drone hovers hands-off.
 
-*Every input device is its own pilot station.** The keyboard and each gamepad, including one
- plugged in while the scene runs, fly as separate pilots on separate drones, and none reads the
- others' buttons. A station starts as the lowest-ranked pilot no other station flies as, so the
- keyboard is the guest, the first gamepad Ace and the second John. Unplugging a gamepad is link
- loss: its drone holds and lands, and plugging it back in resumes. A drone that lands with no link
- is released, so a gamepad that never comes back doesn't keep it. Adding and removing drones and
- the dashboard stay on the keyboard, since they act on the whole fleet. The HUD lists the
- stations.
+**Every input device is its own pilot station.** The keyboard and each gamepad, including one
+plugged in while the scene runs, fly as separate pilots on separate drones, and none reads the
+others' buttons. A station starts as the lowest-ranked pilot no other station flies as, so the
+keyboard is the guest, the first gamepad Ace and the second John. Unplugging a gamepad is link
+loss: its drone holds and lands, and plugging it back in resumes, even if a wireless pad comes
+back as a new device. A drone that lands with no link is released, and a gone device with no drone
+loses its station. Adding and removing drones and the dashboard stay on the keyboard, since they
+act on the whole fleet. The HUD lists the stations.
 
 You start as the **guest**, authorized at once by local guest mode, without a drone. **P**
 switches to the next pilot in the registry, highest priority first: **John** (60), then **Ace**
@@ -253,8 +253,9 @@ Every planned commit is done.
 
 - The number keys and D-pad ask for `drone-1` to `drone-3` by id, so they don't reach drones with
   other ids; the control panel reaches every drone.
-- A gamepad that comes back as a new device rather than the same one, which the Input System
-  decides, gets a new station; the old one stays disconnected, its drone landed.
+- A gamepad is matched to a waiting station by model, because a wireless pad can come back as a
+  new device with no reliable way to tell it from another. If two identical pads drop, either
+  can take either station.
 - The roster has two registered pilots, so a third gamepad starts as the guest, the same pilot
   as the keyboard: whichever requests last flies the guest's drone. Adding pilots to the roster
   asset gives every device its own.

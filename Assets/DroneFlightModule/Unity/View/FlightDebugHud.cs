@@ -58,6 +58,16 @@ namespace DroneFlightModule.Unity
             stationTexts.Add(station.Describe());
         }
 
+        public void RemoveStation(IStationStatus station)
+        {
+            int index = stations.IndexOf(station);
+            if (index >= 0)
+            {
+                stations.RemoveAt(index);
+                stationTexts.RemoveAt(index);
+            }
+        }
+
         private void Update()
         {
             if (Time.unscaledTime < nextStationRefresh)

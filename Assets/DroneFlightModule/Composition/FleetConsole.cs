@@ -29,8 +29,18 @@ namespace DroneFlightModule.Composition
         public bool IsLinkCut => Selected != null && Selected.Link.IsLinkCut;
         public string LinkStatus => Selected?.LinkStatus ?? string.Empty;
 
-        // Read each time, so a station plugged in when there was none is picked up.
-        private PilotStation Selected => chosen ?? (chosen = stations.Stations.FirstOrDefault());
+        // Read each time, so the first station stands in when none was chosen or the chosen one is gone.
+        private PilotStation Selected
+        {
+            get
+            {
+                if (chosen == null || !stations.Stations.Contains(chosen))
+                {
+                    chosen = stations.Stations.FirstOrDefault();
+                }
+                return chosen;
+            }
+        }
 
         public void SelectStation(string station)
         {

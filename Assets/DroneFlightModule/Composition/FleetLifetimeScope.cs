@@ -96,6 +96,7 @@ namespace DroneFlightModule.Composition
                 debugHud.AddStation(station);
             }
             stations.StationAdded += debugHud.AddStation;
+            stations.StationRemoved += debugHud.RemoveStation;
         }
 
         private void PlaceGround(float groundHeight)

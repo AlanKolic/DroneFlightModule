@@ -546,12 +546,19 @@ matters only to the composition root that built it.
   the strongest pilot: the keyboard is the guest, the first pad Ace and the second John.
 - **Unplugging is link loss.** A station's input reports its pilot as connected only while its
   device's controls resolve. The Input System drops a removed device from every asset's device
-  list, which leaves the station's list empty, so no other pad can stand in for it, and the
-  station restores the list when that device comes back. Unplugging a pad closes the pilot gate,
-  so its drone holds and then lands, and the sessions stay; plugging the same pad back in finds
-  its station again and resumes within the hold budget. Once the drone has landed with no link it
-  is released. Disposing the fleet disposes every station, destroys their controls and stops
-  watching devices.
+  list, which leaves the station's list empty, so no other pad can drive it. Unplugging a pad
+  closes the pilot gate, so its drone holds and then lands, and the sessions stay.
+- **Coming back.** While a gone device's pilots still hold a drone, its station waits. The same
+  device object returning takes it back. The Input System only revives the old object when six
+  description fields match exactly, so a Bluetooth pad can return as a new device; a device of the
+  same layout and product takes a waiting station too. Either way the flight resumes within the
+  hold budget, with the same pilot and station name.
+- **Removing a station.** `FleetRunner` calls `InputDeviceStations.RemoveUnattended` every fixed
+  tick: a station whose device is gone and that holds no drone, flying or parked, is disposed and
+  leaves the HUD and the console, whose chosen station falls back to the first. That frees its
+  name and its pilot. A drone that lands with no link is released, so this follows.
+- **Disposing** the fleet disposes every station, destroys their controls and stops watching
+  devices.
 - **Same pilot on two devices:** the coordinator's one-pilot-one-drone rule applies, so the
   latest request moves the pilot's drone to that device.
 - **Station keys and fleet keys.** Each station binds the Flight and Fleet maps and its link
@@ -629,6 +636,8 @@ matters only to the composition root that built it.
   - two pads stay independent
   - unplugging a pad holds and then lands its drone, and plugging it back in resumes it
   - another pad never stands in for an unplugged one
+  - a pad that comes back as a new device resumes its station, and a different model doesn't
+  - a gone device loses its station once it holds no drone, not before, and the console falls back
   - the same pilot on two devices moves their one drone to the latest request
   - a pad pilot takes over the keyboard pilot's drone by priority, and the keyboard is told
   - each station cuts only its own link

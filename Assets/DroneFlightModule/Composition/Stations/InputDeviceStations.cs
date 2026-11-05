@@ -12,11 +12,13 @@ namespace DroneFlightModule.Composition
     /// configured <see cref="InputDeviceGroup"/> present at start, in the groups' order, and each
     /// one plugged in later; a device matching no group, such as a mouse by default, gets none.
     /// A group's layout must be known to the Input System and its binding group must be one of the
-    /// controls' control schemes. Unplugging a device is link loss: its controls resolve to nothing,
-    /// no other device can stand in for it, and the failsafe takes over; plugging the same device
-    /// back in resumes it. A new station starts as the lowest-ranked pilot no other station flies
-    /// as, so the guest first and an unknown device is never the strongest pilot, or as the guest
-    /// when everyone is taken. Disposing disposes every station.
+    /// controls' control schemes. Unplugging a device is link loss: its controls resolve to nothing
+    /// and the failsafe takes over. While a gone device's pilots still hold a drone its station
+    /// waits, and the device resumes it on returning. A wireless pad can come back as a new device,
+    /// so a device of the same model takes a waiting station too. Once a gone device holds no drone
+    /// its station is removed. A new station starts as the lowest-ranked pilot no other station
+    /// flies as, so the guest first and an unknown device is never the strongest pilot, or as the
+    /// guest when everyone is taken. Disposing disposes every station.
     /// </summary>
     public sealed class InputDeviceStations : IDisposable
     {
@@ -24,7 +26,6 @@ namespace DroneFlightModule.Composition
         private readonly PilotStationFactory factory;
         private readonly IPilotRegistry pilots;
         private readonly List<PilotStation> stations = new List<PilotStation>();
-        private readonly Dictionary<string, int> stationCounts = new Dictionary<string, int>();
 
         public InputDeviceStations(
             IReadOnlyList<InputDeviceGroup> deviceGroups,
@@ -57,6 +58,21 @@ namespace DroneFlightModule.Composition
 
         public IReadOnlyList<PilotStation> Stations => stations;
         public event Action<PilotStation> StationAdded;
+        public event Action<PilotStation> StationRemoved;
+
+        public void RemoveUnattended()
+        {
+            for (int i = stations.Count - 1; i >= 0; i--)
+            {
+                var station = stations[i];
+                if (!station.Device.added && !station.HoldsADrone)
+                {
+                    stations.RemoveAt(i);
+                    station.Dispose();
+                    StationRemoved?.Invoke(station);
+                }
+            }
+        }
 
         public void Dispose()
         {
@@ -75,10 +91,11 @@ namespace DroneFlightModule.Composition
             {
                 return;
             }
-            var returning = stations.Find(station => station.Device == device);
-            if (returning != null)
+            var waiting = stations.Find(station => station.Device == device)
+                ?? stations.Find(station => !station.Device.added && IsSameModel(station.Device, device));
+            if (waiting != null)
             {
-                returning.RestoreDevice();
+                waiting.Attach(device);
                 return;
             }
             Add(device);
@@ -92,12 +109,25 @@ namespace DroneFlightModule.Composition
                 return;
             }
             string group = deviceGroup.BindingGroup;
-            stationCounts.TryGetValue(group, out int count);
-            stationCounts[group] = count + 1;
-
-            var station = factory.Create($"{group} {count + 1}", device, group, StartPilot());
+            var station = factory.Create(FreeName(group), device, group, StartPilot());
             stations.Add(station);
             StationAdded?.Invoke(station);
+        }
+
+        // The serial can't be relied on: it is one of the things that can differ when a wireless pad comes back.
+        private bool IsSameModel(InputDevice first, InputDevice second)
+        {
+            return first.layout == second.layout && first.description.product == second.description.product;
+        }
+
+        private string FreeName(string group)
+        {
+            int number = 1;
+            while (stations.Exists(station => station.Name == $"{group} {number}"))
+            {
+                number++;
+            }
+            return $"{group} {number}";
         }
 
         // The first group whose layout the device's layout is, or is based on.

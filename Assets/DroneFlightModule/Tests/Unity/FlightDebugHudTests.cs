@@ -51,6 +51,17 @@ namespace DroneFlightModule.Unity.Tests
         }
 
         [Test]
+        public void ARemovedStation_LeavesTheList()
+        {
+            var station = new FixedStatus();
+            hud.AddStation(station);
+
+            hud.RemoveStation(station);
+
+            Assert.That(hud.StationTexts, Is.Empty);
+        }
+
+        [Test]
         public void Arguments_AreRequired()
         {
             Assert.Throws<ArgumentNullException>(() => hud.Bind(null));

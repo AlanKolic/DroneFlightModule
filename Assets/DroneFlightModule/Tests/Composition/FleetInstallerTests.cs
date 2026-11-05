@@ -14,7 +14,7 @@ namespace DroneFlightModule.Composition.Tests
 {
     public class FleetInstallerTests : FleetTestFixture
     {
-        private FleetRunner Runner => new FleetRunner(fleet.Resolve<SimulationClock>(), fleet.Resolve<FlightCoordinator>());
+        private FleetRunner Runner => new FleetRunner(fleet.Resolve<SimulationClock>(), fleet.Resolve<FlightCoordinator>(), fleet.Resolve<InputDeviceStations>());
 
         private PilotStation Pilot => fleet.Resolve<InputDeviceStations>().Stations[0];
 

@@ -9,6 +9,7 @@ using DroneFlightModule.Unity;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.InputSystem.Layouts;
 using VContainer;
 
 namespace DroneFlightModule.Composition.Tests
@@ -25,6 +26,8 @@ namespace DroneFlightModule.Composition.Tests
             base.Setup();
             stations = fleet.Resolve<InputDeviceStations>();
         }
+
+        private FleetRunner Runner => new FleetRunner(fleet.Resolve<SimulationClock>(), fleet.Resolve<FlightCoordinator>(), stations);
 
         private PilotStation KeyboardStation => stations.Stations[0];
 
@@ -139,6 +142,84 @@ namespace DroneFlightModule.Composition.Tests
             InputSystem.RemoveDevice(pad);
             RunBoth(30f);
             Assert.That(airborne.Resolve<FlightLoop>().State.IsGrounded, Is.True);
+        }
+
+        [Test]
+        public void APadThatComesBackAsANewDevice_ResumesItsStation()
+        {
+            var pad = InputSystem.AddDevice<Gamepad>();
+            Tap(pad.dpad.left);
+            var padStation = stations.Stations[1];
+            InputSystem.RemoveDevice(pad);
+            Assert.That(airborne.Resolve<IFlightGate>().IsFlightAllowed, Is.False);
+
+            var returned = InputSystem.AddDevice<Gamepad>();
+
+            Assert.That(stations.Stations, Has.Count.EqualTo(2), "The new device takes the waiting station.");
+            Assert.That(padStation.Device, Is.SameAs(returned));
+            AssertFlownBy(airborne, Ace);
+
+            float start = Height(airborne);
+            Set(returned.leftStick, new Vector2(0f, 1f));
+            RunBoth(1f);
+            Assert.That(Height(airborne), Is.GreaterThan(start + 0.5f), "The new device steers the drone.");
+        }
+
+        [Test]
+        public void ADifferentModel_DoesNotTakeAWaitingStation()
+        {
+            var pad = InputSystem.AddDevice<Gamepad>();
+            Tap(pad.dpad.left);
+            InputSystem.RemoveDevice(pad);
+
+            InputSystem.AddDevice(new InputDeviceDescription { deviceClass = "Gamepad", product = "Other Pad" });
+
+            Assert.That(stations.Stations, Has.Count.EqualTo(3));
+            Assert.That(airborne.Resolve<IFlightGate>().IsFlightAllowed, Is.False);
+        }
+
+        [Test]
+        public void AGoneDeviceWithNoDrone_LosesItsStation_AndItsNameAndPilotAreFree()
+        {
+            var pad = InputSystem.AddDevice<Gamepad>();
+
+            InputSystem.RemoveDevice(pad);
+            Runner.FixedTick();
+
+            Assert.That(stations.Stations, Has.Count.EqualTo(1));
+
+            InputSystem.AddDevice<Gamepad>();
+            Assert.That(stations.Stations[1].Name, Is.EqualTo("Gamepad 1"));
+            Assert.That(stations.Stations[1].Session.PilotId, Is.EqualTo(Ace));
+        }
+
+        [Test]
+        public void AGoneDevice_KeepsItsStationWhileItsDroneIsInTheAir()
+        {
+            var pad = InputSystem.AddDevice<Gamepad>();
+            Tap(pad.dpad.left);
+
+            InputSystem.RemoveDevice(pad);
+            Runner.FixedTick();
+            Assert.That(stations.Stations, Has.Count.EqualTo(2));
+
+            RunBoth(30f);
+            Runner.FixedTick();
+            Assert.That(stations.Stations, Has.Count.EqualTo(1), "Its drone landed, so nothing waits for the device.");
+            AssertFree(airborne);
+        }
+
+        [Test]
+        public void TheConsole_FallsBackWhenItsStationIsRemoved()
+        {
+            var pad = InputSystem.AddDevice<Gamepad>();
+            var console = fleet.Resolve<IFleetConsole>();
+            console.SelectStation("Gamepad 1");
+
+            InputSystem.RemoveDevice(pad);
+            Runner.FixedTick();
+
+            Assert.That(console.Station, Is.EqualTo("Keyboard 1"));
         }
 
         [Test]
@@ -260,7 +341,7 @@ namespace DroneFlightModule.Composition.Tests
             AssertFlownBy(grounded, Ace);
 
             InputSystem.RemoveDevice(pad);
-            new FleetRunner(fleet.Resolve<SimulationClock>(), fleet.Resolve<FlightCoordinator>()).FixedTick();
+            Runner.FixedTick();
             AssertFree(grounded);
 
             Tap(keyboard.digit2Key);
