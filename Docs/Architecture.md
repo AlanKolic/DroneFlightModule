@@ -550,7 +550,7 @@ matters only to the composition root that built it.
   closes the pilot gate, so its drone holds and then lands, and the sessions stay.
 - **Silent drops.** macOS sometimes drops a Bluetooth pad with no `Removed` event: the device stays
   in `InputSystem.devices` and simply stops updating, seen on a real Xbox pad, and an idle pad looks
-  the same. So `SilentDeviceInputProvider` reports a device as disconnected once it has sent nothing
+  the same. So `InputActionInputProvider` reports a device as disconnected once it has sent nothing
   for its group's `SilenceTimeout` (15 s for gamepads, zero and never for keyboards), and any input
   reconnects it. It only closes the gate, so the pilot keeps the drone: the failsafe holds and
   lands it, and a landed drone is released. A pilot who leaves the pad untouched that long sees the

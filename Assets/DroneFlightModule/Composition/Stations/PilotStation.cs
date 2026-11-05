@@ -28,7 +28,6 @@ namespace DroneFlightModule.Composition
         private readonly FlightCoordinator coordinator;
         private readonly InputActionAsset controls;
         private readonly InputActionInputProvider input;
-        private readonly SilentDeviceInputProvider silenceWatch;
         private readonly StationKeys keys;
         private readonly ObjectDestroyer destroyer = new ObjectDestroyer();
         private readonly List<PilotSession> sessions = new List<PilotSession>();
@@ -55,9 +54,9 @@ namespace DroneFlightModule.Composition
             this.coordinator = coordinator ?? throw new ArgumentNullException(nameof(coordinator));
             this.lifetime = lifetime;
 
-            input = new InputActionInputProvider(controls);
-            silenceWatch = new SilentDeviceInputProvider(input, device, silenceTimeout);
-            Link = new DisconnectableInputProvider(silenceWatch);
+            input = new InputActionInputProvider(controls, silenceTimeout);
+            input.Attach(device);
+            Link = new DisconnectableInputProvider(input);
             foreach (var profile in pilots.Profiles)
             {
                 sessions.Add(new PilotSession(profile.Id, providers.For(profile), new LocalPilotInput(Link)));
@@ -105,12 +104,10 @@ namespace DroneFlightModule.Composition
             }
         }
 
-        // Also for the same device returning: removing it took it out of the controls' device list.
         public void Attach(InputDevice device)
         {
-            Device = device ?? throw new ArgumentNullException(nameof(device));
-            controls.devices = new[] { device };
-            silenceWatch.Attach(device);
+            input.Attach(device);
+            Device = device;
         }
 
         // Never faults: a superseded or cancelled request ends quietly, and anything else is logged and reported.

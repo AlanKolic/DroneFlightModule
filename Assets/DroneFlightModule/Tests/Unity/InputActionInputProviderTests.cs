@@ -133,6 +133,42 @@ namespace DroneFlightModule.Unity.Tests
         }
 
         [Test]
+        public void Attached_ReadsOnlyThatDevice()
+        {
+            var attached = InputSystem.AddDevice<Gamepad>();
+            var other = InputSystem.AddDevice<Gamepad>();
+
+            provider.Attach(attached);
+            Set(other.rightStick, new Vector2(0f, 1f));
+            AssertMove(Vec3.Zero);
+
+            Set(attached.rightStick, new Vector2(0f, 1f));
+            Assert.That(provider.Read().Move.Z, Is.GreaterThan(0.5f));
+        }
+
+        [Test]
+        public void ADeviceSilentPastTheTimeout_ReportsDisconnected_UntilItSendsSomething()
+        {
+            var pad = InputSystem.AddDevice<Gamepad>();
+            var watching = new InputActionInputProvider(InputActionAsset.FromJson(File.ReadAllText(ControlsPath)), silenceTimeout: 15f);
+            watching.Attach(pad);
+            Assert.That(watching.IsConnected, Is.True);
+
+            currentTime += 16.0;
+            Assert.That(watching.IsConnected, Is.False);
+
+            Press(pad.buttonSouth);
+            Assert.That(watching.IsConnected, Is.True);
+            watching.Dispose();
+        }
+
+        [Test]
+        public void ANegativeTimeout_IsRefused()
+        {
+            Assert.Throws<System.ArgumentOutOfRangeException>(() => new InputActionInputProvider(actions, silenceTimeout: -1f));
+        }
+
+        [Test]
         public void AfterDispose_ReadsZeroAndReportsDisconnected()
         {
             Press(keyboard.wKey);

@@ -9,8 +9,8 @@ using Object = UnityEngine.Object;
 namespace DroneFlightModule.Composition
 {
     /// <summary>
-    /// Builds a station for a device: its own copy of the controls, restricted to that device and
-    /// its binding group, so devices never read each other's buttons.
+    /// Builds a station for a device: its own copy of the controls, masked to the device's binding
+    /// group and attached to that device, so devices never read each other's buttons.
     /// </summary>
     public sealed class PilotStationFactory
     {
@@ -37,7 +37,6 @@ namespace DroneFlightModule.Composition
         public PilotStation Create(string name, InputDevice device, InputDeviceGroup group, PilotId startPilot)
         {
             var controls = Object.Instantiate(template);
-            controls.devices = new[] { device };
             controls.bindingMask = InputBinding.MaskByGroup(group.BindingGroup);
             return new PilotStation(name, device, controls, group.SilenceTimeout, coordinator, pilots, providers, startPilot, lifetime);
         }
