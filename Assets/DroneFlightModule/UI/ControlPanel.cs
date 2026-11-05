@@ -1,28 +1,38 @@
 using System;
-using DroneFlightModule.Coordination;
+using System.Collections.Generic;
+using DroneFlightModule.Composition;
 using DroneFlightModule.Core;
 using UnityEngine;
 
 namespace DroneFlightModule.UI
 {
     /// <summary>
-    /// The control panel, docked bottom right: a pilot dropdown, a drone dropdown and buttons for
-    /// what the keys do, so nobody has to remember them. Picking a pilot switches to them, leaving
-    /// the previous pilot on their drone, hands off, so a higher-priority pilot can take it over;
-    /// both dropdowns say who flies what, and the status shows the pilot's takeovers and
-    /// preemptions. The drone dropdown chooses what Request and Remove act on. It
-    /// drives the fleet only through <see cref="IFleetConsole"/>. IMGUI has no dropdown, so each
+    /// The control panel, docked bottom right, and the one place the local pilot's status shows:
+    /// who they fly as, their drone, their takeovers and preemptions and the latest outcome. Below
+    /// it a pilot dropdown, a drone dropdown and buttons for what the keys do. Picking a pilot
+    /// switches to them, leaving the previous pilot on their drone, hands off, so a higher-priority
+    /// pilot can take it over; both dropdowns say who flies what. The drone dropdown chooses what
+    /// Request and Remove act on. It drives the fleet only through <see cref="IFleetConsole"/>.
+    /// Text is built once per frame in Update and OnGUI only draws. IMGUI has no dropdown, so each
     /// opens as a list in place.
     /// </summary>
     public sealed class ControlPanel : MonoBehaviour
     {
         private const float RowHeight = 24f;
+        private const float Padding = 16f;
 
         [SerializeField] private float width = 340f;
         [SerializeField] private float margin = 12f;
 
+        private readonly GUIContent status = new GUIContent(string.Empty);
+        private readonly List<string> pilotOptions = new List<string>();
+        private readonly List<(DroneId? Drone, string Label)> droneOptions = new List<(DroneId? Drone, string Label)>();
         private IFleetConsole console;
         private ControlPanelChoices choices;
+        private string pilotLabel = string.Empty;
+        private string droneLabel = string.Empty;
+        private string linkLabel = string.Empty;
+        private float statusHeight;
         private bool isPilotListOpen;
         private bool isDroneListOpen;
 
@@ -32,18 +42,57 @@ namespace DroneFlightModule.UI
             this.choices = choices ?? throw new ArgumentNullException(nameof(choices));
         }
 
+        private void Update()
+        {
+            if (console == null)
+            {
+                return;
+            }
+            string flying = console.TryGetDrone(out var drone) ? $"flying {drone}" : "no drone";
+            string text = $"You: {console.Pilot}, {flying}, {choices.Record(console.Pilot)}\n{console.LastMessage}";
+            if (text != status.text)
+            {
+                status.text = text;
+                statusHeight = 0f;
+            }
+            pilotLabel = choices.Label(console.Pilot);
+            droneLabel = choices.Label(choices.SelectedDrone);
+            linkLabel = console.IsLinkCut ? "Restore link" : "Cut link";
+
+            pilotOptions.Clear();
+            if (isPilotListOpen)
+            {
+                foreach (var profile in choices.Pilots)
+                {
+                    pilotOptions.Add(choices.Label(profile.Id));
+                }
+            }
+            droneOptions.Clear();
+            if (isDroneListOpen)
+            {
+                droneOptions.Add((null, choices.Label((DroneId?)null)));
+                foreach (var fleetDrone in choices.Drones)
+                {
+                    droneOptions.Add((fleetDrone.Id, choices.Label(fleetDrone.Id)));
+                }
+            }
+        }
+
         private void OnGUI()
         {
             if (console == null)
             {
                 return;
             }
-            int rows = 7 + (isPilotListOpen ? choices.Pilots.Count : 0) + (isDroneListOpen ? choices.Drones.Count + 1 : 0);
-            float height = rows * RowHeight + 16f;
+            // Measured here because the GUI skin is only available inside OnGUI; once per new text.
+            if (statusHeight <= 0f)
+            {
+                statusHeight = GUI.skin.label.CalcHeight(status, width - Padding);
+            }
+            float height = statusHeight + (5 + pilotOptions.Count + droneOptions.Count) * RowHeight + Padding;
             GUILayout.BeginArea(new Rect(Screen.width - width - margin, Screen.height - height - margin, width, height), GUI.skin.box);
 
-            string flying = console.TryGetDrone(out var drone) ? $"flying {drone}" : "no drone";
-            GUILayout.Label($"You: {console.Pilot}, {flying}, {choices.Record(console.Pilot)}\n{console.LastMessage}", GUILayout.Height(2 * RowHeight));
+            GUILayout.Label(status, GUILayout.Height(statusHeight));
             PilotDropdown();
             DroneDropdown();
             Buttons();
@@ -55,21 +104,18 @@ namespace DroneFlightModule.UI
         {
             GUILayout.BeginHorizontal();
             GUILayout.Label("Pilot", GUILayout.Width(50f));
-            if (GUILayout.Button(choices.Label(console.Pilot)))
+            if (GUILayout.Button(pilotLabel))
             {
                 isPilotListOpen = !isPilotListOpen;
                 isDroneListOpen = false;
             }
             GUILayout.EndHorizontal();
-            if (!isPilotListOpen)
+            // Options are listed in the order Update built them, which is the registry's order.
+            for (int i = 0; i < pilotOptions.Count && i < choices.Pilots.Count; i++)
             {
-                return;
-            }
-            foreach (var profile in choices.Pilots)
-            {
-                if (GUILayout.Button(choices.Label(profile.Id)))
+                if (GUILayout.Button(pilotOptions[i]))
                 {
-                    console.SelectPilot(profile.Id);
+                    console.SelectPilot(choices.Pilots[i].Id);
                     isPilotListOpen = false;
                 }
             }
@@ -79,29 +125,19 @@ namespace DroneFlightModule.UI
         {
             GUILayout.BeginHorizontal();
             GUILayout.Label("Drone", GUILayout.Width(50f));
-            if (GUILayout.Button(choices.Label(choices.SelectedDrone)))
+            if (GUILayout.Button(droneLabel))
             {
                 isDroneListOpen = !isDroneListOpen;
                 isPilotListOpen = false;
             }
             GUILayout.EndHorizontal();
-            if (!isDroneListOpen)
+            foreach (var option in droneOptions)
             {
-                return;
-            }
-            DroneOption(null);
-            foreach (var drone in choices.Drones)
-            {
-                DroneOption(drone.Id);
-            }
-        }
-
-        private void DroneOption(DroneId? drone)
-        {
-            if (GUILayout.Button(choices.Label(drone)))
-            {
-                choices.SelectDrone(drone);
-                isDroneListOpen = false;
+                if (GUILayout.Button(option.Label))
+                {
+                    choices.SelectDrone(option.Drone);
+                    isDroneListOpen = false;
+                }
             }
         }
 
@@ -124,7 +160,7 @@ namespace DroneFlightModule.UI
             GUILayout.EndHorizontal();
 
             GUILayout.BeginHorizontal();
-            if (GUILayout.Button(console.IsLinkCut ? "Restore link" : "Cut link"))
+            if (GUILayout.Button(linkLabel))
             {
                 console.ToggleLink();
             }

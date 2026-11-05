@@ -134,6 +134,35 @@ namespace DroneFlightModule.Core.Tests
         }
 
         [Test]
+        public void Holding_BrakesHorizontalDrift()
+        {
+            gate.IsFlightAllowed = false;
+            var drifting = new DroneState(new Vec3(0f, 5f, 0f), new Vec3(8f, 0f, -3f), 0f, 0f, isGrounded: false);
+
+            var command = Supervise(drifting);
+
+            Assert.That(command.Force.X, Is.LessThan(0f));
+            Assert.That(command.Force.Z, Is.GreaterThan(0f));
+        }
+
+        [Test]
+        public void Holding_StopsADroneFlyingAtFullSpeedWithinAFewMetres()
+        {
+            gate.IsFlightAllowed = false;
+            var integrator = new DroneIntegrator(drone, new FlatTerrain());
+            var state = new DroneState(new Vec3(0f, 5f, 0f), new Vec3(8f, 0f, 0f), 0f, 0f, isGrounded: false);
+
+            for (int i = 0; i < 150; i++)
+            {
+                state = integrator.Step(state, Supervise(state), DeltaTime);
+            }
+
+            Assert.That(supervisor.Mode, Is.EqualTo(FlightMode.Holding));
+            Assert.That(state.Position.X, Is.LessThan(4f));
+            Assert.That(Math.Abs(state.Velocity.X), Is.LessThan(0.01f));
+        }
+
+        [Test]
         public void Holding_PushesBackTowardsZeroVerticalSpeed()
         {
             gate.IsFlightAllowed = false;

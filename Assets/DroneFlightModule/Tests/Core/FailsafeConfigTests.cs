@@ -11,7 +11,7 @@ namespace DroneFlightModule.Core.Tests
             float touchdownSinkRate = 0.3f,
             float flareHeight = 2f,
             float fallbackSinkRate = 0.5f,
-            float verticalSpeedGain = 4f)
+            float speedGain = 4f)
         {
             return new FailsafeConfig(
                 holdDuration,
@@ -19,7 +19,7 @@ namespace DroneFlightModule.Core.Tests
                 touchdownSinkRate,
                 flareHeight,
                 fallbackSinkRate,
-                verticalSpeedGain);
+                speedGain);
         }
 
         [Test]
@@ -42,7 +42,7 @@ namespace DroneFlightModule.Core.Tests
             Assert.Throws<ArgumentOutOfRangeException>(() => Create(touchdownSinkRate: float.NaN));
             Assert.Throws<ArgumentOutOfRangeException>(() => Create(flareHeight: float.PositiveInfinity));
             Assert.Throws<ArgumentOutOfRangeException>(() => Create(fallbackSinkRate: -0.5f));
-            Assert.Throws<ArgumentOutOfRangeException>(() => Create(verticalSpeedGain: 0f));
+            Assert.Throws<ArgumentOutOfRangeException>(() => Create(speedGain: 0f));
         }
 
         [Test]

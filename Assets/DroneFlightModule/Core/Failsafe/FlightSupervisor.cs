@@ -4,8 +4,9 @@ namespace DroneFlightModule.Core
 {
     /// <summary>
     /// Decides each tick whether the pilot's command reaches the actuators. While the gate is open
-    /// the pilot flies. When it closes in the air the drone holds for the hold duration, then
-    /// descends, flaring near the ground, until touchdown cuts the motors. Holding spends a hold
+    /// the pilot flies. When it closes in the air the drone brakes to a stop and holds for the hold
+    /// duration, then descends straight down, flaring near the ground, until touchdown cuts the
+    /// motors. Holding spends a hold
     /// budget that flying earns back at the same rate and landing refills, so a link that drops
     /// again soon after it returns resumes the hold where it left off instead of restarting it,
     /// and a flapping link cannot keep the drone in the air forever.
@@ -16,6 +17,7 @@ namespace DroneFlightModule.Core
 
         private readonly IFlightGate gate;
         private readonly FailsafeConfig config;
+        private readonly HorizontalSpeedController horizontalSpeed;
         private readonly VerticalSpeedController verticalSpeed;
         private double holdBudget;
 
@@ -27,7 +29,8 @@ namespace DroneFlightModule.Core
         {
             this.gate = gate ?? throw new ArgumentNullException(nameof(gate));
             this.config = config ?? throw new ArgumentNullException(nameof(config));
-            verticalSpeed = new VerticalSpeedController(droneConfig, config.VerticalSpeedGain, gravity);
+            horizontalSpeed = new HorizontalSpeedController(droneConfig, config.SpeedGain);
+            verticalSpeed = new VerticalSpeedController(droneConfig, config.SpeedGain, gravity);
             holdBudget = config.HoldDuration;
         }
 
@@ -73,10 +76,10 @@ namespace DroneFlightModule.Core
                 holdBudget = HoldTimeRemaining;
             }
 
-            // Lateral force and yaw torque are zero; drag brings any drift to rest.
+            // Yaw torque is zero: angular drag stops any spin, and turning does not move the drone.
             float targetVerticalSpeed = Mode == FlightMode.Holding ? 0f : -SinkRate(altitude);
             float thrust = verticalSpeed.Thrust(targetVerticalSpeed, state.Velocity.Y);
-            return new ForceCommand(new Vec3(0f, thrust, 0f), 0f);
+            return new ForceCommand(horizontalSpeed.Force(Vec3.Zero, state.Velocity).WithY(thrust), 0f);
         }
 
         private float SinkRate(in AltitudeReading altitude)

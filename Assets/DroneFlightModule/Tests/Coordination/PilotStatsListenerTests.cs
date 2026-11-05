@@ -24,9 +24,8 @@ namespace DroneFlightModule.Coordination.Tests
         public void SetUp()
         {
             provider = new ScriptedAuthorizationProvider("test-provider");
-            var claims = new PilotClaims();
-            drone1 = new TestDrone("drone-1", claims, isAirborne: true);
-            drone2 = new TestDrone("drone-2", claims, isAirborne: true);
+            drone1 = new TestDrone("drone-1", isAirborne: true);
+            drone2 = new TestDrone("drone-2", isAirborne: true);
             coordinator = new FlightCoordinator(
                 new InMemoryPilotRegistry(new[] { new PilotProfile(Alice, "Alice", 10), new PilotProfile(Bob, "Bob", 20) }),
                 new DroneRegistry(new[] { drone1.Fleet, drone2.Fleet }),

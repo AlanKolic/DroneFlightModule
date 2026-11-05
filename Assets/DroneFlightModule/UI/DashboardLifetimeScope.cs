@@ -1,4 +1,4 @@
-using DroneFlightModule.Coordination;
+using DroneFlightModule.Composition;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using VContainer;

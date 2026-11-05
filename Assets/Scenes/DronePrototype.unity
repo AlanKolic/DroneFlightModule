@@ -675,7 +675,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: DroneFlightModule.Unity::DroneFlightModule.Unity.FlightDebugHud
   origin: {x: 12, y: 12}
   droneBoxSize: {x: 240, y: 116}
-  pilotBoxSize: {x: 400, y: 272}
+  controlsBoxSize: {x: 400, y: 230}
   spacing: 8
 --- !u!4 &745619428
 Transform:

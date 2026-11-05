@@ -107,6 +107,26 @@ namespace DroneFlightModule.Core.Tests
             Assert.That(samples, Is.EqualTo(10));
         }
 
+        [Test]
+        public void AStepThatDoesNotDivideThePeriod_StillAveragesTheRate()
+        {
+            var sensor = new RangefinderAltitudeSensor(new FlatTerrain(), updateRate: 10f);
+            int samples = 0;
+            double lastTimestamp = -1.0;
+
+            for (int i = 0; i < 100; i++)
+            {
+                var reading = sensor.Read(DroneState.At(new Vec3(0f, 1f, 0f)), i * 0.03);
+                if (reading.Timestamp != lastTimestamp)
+                {
+                    samples++;
+                    lastTimestamp = reading.Timestamp;
+                }
+            }
+
+            Assert.That(samples, Is.EqualTo(30), "3 s at 10 readings per second.");
+        }
+
         [TestCase(0f, 20f)]
         [TestCase(-1f, 20f)]
         [TestCase(float.PositiveInfinity, 20f)]

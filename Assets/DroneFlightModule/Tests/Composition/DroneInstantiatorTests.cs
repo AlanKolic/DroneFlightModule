@@ -28,7 +28,7 @@ namespace DroneFlightModule.Composition.Tests
         {
             controls = InputActionAsset.FromJson(File.ReadAllText(ControlsPath));
             var builder = new ContainerBuilder();
-            new FleetInstaller(GroundHeight, controls, TimeSpan.Zero, CancellationToken.None).Install(builder);
+            new FleetInstaller(GroundHeight, controls, TimeSpan.Zero, CancellationToken.None, null, null, SpawnStep).Install(builder);
             fleet = builder.Build();
             prefab = new GameObject("Drone Prefab", typeof(DroneView)).GetComponent<DroneView>();
             drones = Instantiator(prefab);
@@ -46,7 +46,7 @@ namespace DroneFlightModule.Composition.Tests
         private DroneInstantiator Instantiator(DroneView dronePrefab)
         {
             return new DroneInstantiator(
-                fleet, fleet.Resolve<DroneRegistry>(), fleet.Resolve<FlightCoordinator>(), dronePrefab, null, GroundHeight, SpawnStep);
+                fleet, fleet.Resolve<DroneRegistry>(), fleet.Resolve<FlightCoordinator>(), fleet.Resolve<ISimulationClock>(), dronePrefab, null, GroundHeight, SpawnStep);
         }
 
         private DroneRegistry Registry => fleet.Resolve<DroneRegistry>();
@@ -62,10 +62,12 @@ namespace DroneFlightModule.Composition.Tests
         {
             var registry = Registry;
             var coordinator = fleet.Resolve<FlightCoordinator>();
+            var clock = fleet.Resolve<ISimulationClock>();
 
-            Assert.Throws<ArgumentNullException>(() => new DroneInstantiator(null, registry, coordinator, prefab, null, 0f, SpawnStep));
-            Assert.Throws<ArgumentNullException>(() => new DroneInstantiator(fleet, null, coordinator, prefab, null, 0f, SpawnStep));
-            Assert.Throws<ArgumentNullException>(() => new DroneInstantiator(fleet, registry, null, prefab, null, 0f, SpawnStep));
+            Assert.Throws<ArgumentNullException>(() => new DroneInstantiator(null, registry, coordinator, clock, prefab, null, 0f, SpawnStep));
+            Assert.Throws<ArgumentNullException>(() => new DroneInstantiator(fleet, null, coordinator, clock, prefab, null, 0f, SpawnStep));
+            Assert.Throws<ArgumentNullException>(() => new DroneInstantiator(fleet, registry, null, clock, prefab, null, 0f, SpawnStep));
+            Assert.Throws<ArgumentNullException>(() => new DroneInstantiator(fleet, registry, coordinator, null, prefab, null, 0f, SpawnStep));
         }
 
         [Test]
@@ -122,6 +124,28 @@ namespace DroneFlightModule.Composition.Tests
 
             Assert.Throws<ArgumentException>(() => drones.AddDrone(id, Vector3.zero, null));
             Assert.That(Registry.Drones, Has.Count.EqualTo(1));
+        }
+
+        [Test]
+        public void ADroneAddedLater_StartsAtTheFleetsTime()
+        {
+            fleet.Resolve<SimulationClock>().Advance(2.5f);
+
+            var id = drones.AddDrone();
+
+            Assert.That(Loop(id).Time, Is.EqualTo(2.5).Within(1e-6));
+        }
+
+        [Test]
+        public void RemovingADrone_WorksWhenAnotherDroneJoinedTheRegistryDirectly()
+        {
+            var id = drones.AddDrone();
+            var other = Instantiator(prefab);
+            var stranger = other.AddDrone();
+
+            Assert.DoesNotThrow(() => drones.RemoveDrone(id));
+            Assert.That(Registry.TryGet(stranger, out _), Is.True);
+            other.Dispose();
         }
 
         [Test]

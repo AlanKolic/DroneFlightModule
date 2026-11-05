@@ -7,47 +7,37 @@ using DroneFlightModule.Coordination;
 using DroneFlightModule.Core;
 using DroneFlightModule.Pilots;
 using UnityEngine;
-using UnityEngine.InputSystem;
 
 namespace DroneFlightModule.Composition
 {
     /// <summary>
-    /// The pilot at this machine's keyboard or gamepad, driven by the Fleet action map. They can fly
-    /// as any pilot in the registry: the guest through local guest mode, everyone else signing in
-    /// through the simulated server. They start as the guest. Their keys request any drone or
-    /// drone 1 to 3, release it, switch to the next pilot and make the server revoke the current
-    /// pilot's grant. Switching keeps the previous pilot on their drone with their hands off the
-    /// sticks, so the next pilot can outrank and take it over. The latest outcome, including a
-    /// local pilot being preempted, is kept for the HUD, and StatusChanged fires whenever it or
-    /// the fleet changes.
+    /// The pilot at this machine. They can fly as any pilot in the registry: the guest through
+    /// local guest mode, everyone else signing in through the server. They start as the guest.
+    /// Switching keeps the previous pilot on their drone with their hands off the sticks, so the
+    /// next pilot can outrank and take it over, and cancels the previous pilot's pending request,
+    /// so nobody is given a drone after they were switched away from. The latest outcome,
+    /// including a local pilot being preempted, is kept for display, and StatusChanged fires
+    /// whenever it or the fleet changes.
     /// </summary>
     public sealed class LocalPilotControls : IDisposable
     {
         private readonly FlightCoordinator coordinator;
         private readonly DroneRegistry drones;
-        private readonly SimulatedServerAuthorizationProvider server;
+        private readonly IRevokingAuthorizationProvider server;
         private readonly List<PilotSession> sessions = new List<PilotSession>();
         private readonly Dictionary<PilotSession, LocalPilotInput> inputs = new Dictionary<PilotSession, LocalPilotInput>();
         private readonly CancellationToken lifetime;
-        private readonly InputActionMap map;
-        private readonly List<(InputAction Action, Action<InputAction.CallbackContext> Handler)> keys =
-            new List<(InputAction Action, Action<InputAction.CallbackContext> Handler)>();
         private bool isDisposed;
 
         public LocalPilotControls(
-            InputActionAsset actions,
             FlightCoordinator coordinator,
             DroneRegistry drones,
             IPilotRegistry pilots,
             LocalGuestAuthorizationProvider guestProvider,
-            SimulatedServerAuthorizationProvider server,
+            IRevokingAuthorizationProvider server,
             DisconnectableInputProvider input,
             CancellationToken lifetime)
         {
-            if (actions == null)
-            {
-                throw new ArgumentNullException(nameof(actions));
-            }
             this.coordinator = coordinator ?? throw new ArgumentNullException(nameof(coordinator));
             this.drones = drones ?? throw new ArgumentNullException(nameof(drones));
             this.server = server ?? throw new ArgumentNullException(nameof(server));
@@ -73,16 +63,6 @@ namespace DroneFlightModule.Composition
                 throw new ArgumentException("The pilot registry has no guest to start as.", nameof(pilots));
             }
             inputs[Session].IsSelected = true;
-
-            map = actions.FindActionMap("Fleet", throwIfNotFound: true);
-            OnRequestKey("RequestAny", () => RequestFlightAsync(null));
-            OnRequestKey("RequestDrone1", () => RequestDroneAsync(1));
-            OnRequestKey("RequestDrone2", () => RequestDroneAsync(2));
-            OnRequestKey("RequestDrone3", () => RequestDroneAsync(3));
-            OnKey("Release", () => Release());
-            OnKey("SwitchPilot", SwitchPilot);
-            OnKey("RevokeGrant", () => RevokeServerGrant());
-            map.Enable();
 
             coordinator.Assigned += OnAssigned;
             coordinator.Released += OnReleased;
@@ -153,10 +133,11 @@ namespace DroneFlightModule.Composition
             inputs[previous].IsSelected = false;
             inputs[session].IsSelected = true;
             Session = session;
+            string cancelled = coordinator.CancelRequest(previous) ? $" {previous.PilotId}'s request was cancelled." : "";
             string kept = coordinator.TryGetDrone(previous.PilotId, out var parked)
                 ? $" {previous.PilotId} keeps {parked}, hands off."
                 : "";
-            Report($"Now flying as {Session.PilotId}, authorized by {Session.Provider.Id}.{kept}");
+            Report($"Now flying as {Session.PilotId}, authorized by {Session.Provider.Id}.{cancelled}{kept}");
         }
 
         public bool RevokeServerGrant()
@@ -174,28 +155,9 @@ namespace DroneFlightModule.Composition
                 return;
             }
             isDisposed = true;
-            foreach (var key in keys)
-            {
-                key.Action.performed -= key.Handler;
-            }
-            map.Disable();
             coordinator.Assigned -= OnAssigned;
             coordinator.Released -= OnReleased;
             coordinator.TookOver -= OnTookOver;
-        }
-
-        private void OnKey(string action, Action press)
-        {
-            Action<InputAction.CallbackContext> handler = _ => press();
-            var inputAction = map.FindAction(action, throwIfNotFound: true);
-            inputAction.performed += handler;
-            keys.Add((inputAction, handler));
-        }
-
-        private void OnRequestKey(string action, Func<Task> request)
-        {
-            // The request never faults, so nothing is lost by not awaiting it.
-            OnKey(action, () => { _ = request(); });
         }
 
         private void Report(string message)

@@ -20,7 +20,6 @@ namespace DroneFlightModule.Coordination.Tests
         private ScriptedAuthorizationProvider provider;
         private TestDrone airborne;
         private TestDrone grounded;
-        private PilotClaims claims;
         private DroneRegistry registry;
         private FlightCoordinator coordinator;
         private List<DroneAssigned> assigned;
@@ -32,9 +31,8 @@ namespace DroneFlightModule.Coordination.Tests
         public void SetUp()
         {
             provider = new ScriptedAuthorizationProvider("test-provider");
-            claims = new PilotClaims();
-            airborne = new TestDrone("drone-1", claims, isAirborne: true);
-            grounded = new TestDrone("drone-2", claims, isAirborne: false);
+            airborne = new TestDrone("drone-1", isAirborne: true);
+            grounded = new TestDrone("drone-2", isAirborne: false);
             var pilots = new InMemoryPilotRegistry(new[]
             {
                 new PilotProfile(Alice, "Alice", 10),
@@ -98,6 +96,7 @@ namespace DroneFlightModule.Coordination.Tests
             Assert.Throws<ArgumentException>(() => Start(Session(Alice), default(DroneId)));
             Assert.Throws<ArgumentNullException>(() => coordinator.Release(null));
             Assert.Throws<ArgumentNullException>(() => coordinator.EndSession(null));
+            Assert.Throws<ArgumentNullException>(() => coordinator.CancelRequest(null));
             Assert.Throws<ArgumentException>(() => new PilotSession(default, PilotOrigin.Local, provider, new ScriptedInput()));
             Assert.Throws<ArgumentNullException>(() => new PilotSession(Alice, PilotOrigin.Local, null, new ScriptedInput()));
             Assert.Throws<ArgumentNullException>(() => new PilotSession(Alice, PilotOrigin.Local, provider, null));
@@ -233,7 +232,7 @@ namespace DroneFlightModule.Coordination.Tests
             Request(Session(Alice), airborne.Id);
             Request(Session(Carol), grounded.Id);
             Assert.That(Request(Session(Dave)).Denial, Is.EqualTo(FlightDenial.NoDroneAvailable));
-            var late = new TestDrone("drone-3", claims, isAirborne: false);
+            var late = new TestDrone("drone-3", isAirborne: false);
 
             registry.Add(late.Fleet);
             var result = Request(Session(Dave));
@@ -249,7 +248,7 @@ namespace DroneFlightModule.Coordination.Tests
             Request(Session(Carol), grounded.Id);
             var slow = new ScriptedAuthorizationProvider("slow-provider") { AnswersAtOnce = false };
             var pending = Start(Session(Dave, slow));
-            var late = new TestDrone("drone-3", claims, isAirborne: false);
+            var late = new TestDrone("drone-3", isAirborne: false);
 
             registry.Add(late.Fleet);
             slow.AnswerAll();
@@ -333,13 +332,98 @@ namespace DroneFlightModule.Coordination.Tests
         }
 
         [Test]
-        public void AnyDroneWhileFlying_LooksOnlyAtTheOthers()
+        public void AnyDroneWhileFlying_KeepsTheCurrentOne()
         {
-            Request(Session(Alice), grounded.Id);
+            Request(Session(Bob), airborne.Id);
+            var session = Session(Carol);
+            Request(session, grounded.Id);
 
-            var result = Request(Session(Alice));
+            var result = Request(session);
 
-            Assert.That(result.Drone, Is.EqualTo(airborne.Id));
+            Assert.That(result.Outcome, Is.EqualTo(FlightRequestOutcome.Assigned));
+            Assert.That(result.Drone, Is.EqualTo(grounded.Id));
+            AssertFlying(Carol, grounded);
+            AssertFlying(Bob, airborne);
+            Assert.That(released, Is.Empty);
+            Assert.That(tookOver, Is.Empty);
+        }
+
+        [Test]
+        public void ASecondSessionForAPilot_MovesTheirOneDrone()
+        {
+            var local = Session(Alice);
+            Request(local, airborne.Id);
+            var phone = new PilotSession(Alice, PilotOrigin.Remote, provider, new ScriptedInput());
+
+            Request(phone, grounded.Id);
+
+            AssertFlying(Alice, grounded);
+            AssertFree(airborne);
+            Assert.That(coordinator.Release(local), Is.False, "The local session no longer routes a drone.");
+            Assert.That(coordinator.Release(phone), Is.True);
+        }
+
+        [Test]
+        public void AThrowingListener_IsReported_AndTheSwitchStillCompletes()
+        {
+            var failures = new List<Exception>();
+            coordinator.ListenerFailed += failures.Add;
+            var session = Session(Alice);
+            Request(session, airborne.Id);
+            coordinator.Released += _ => throw new InvalidOperationException("listener failed");
+            int heardAfterTheThrow = 0;
+            coordinator.Released += _ => heardAfterTheThrow++;
+
+            var result = Request(session, grounded.Id);
+
+            Assert.That(result.Drone, Is.EqualTo(grounded.Id));
+            AssertFlying(Alice, grounded);
+            AssertFree(airborne);
+            Assert.That(failures, Has.Count.EqualTo(1));
+            Assert.That(heardAfterTheThrow, Is.EqualTo(1));
+            Assert.That(assigned, Has.Count.EqualTo(2), "The switch still raises its assignment.");
+        }
+
+        [Test]
+        public void AThrowingListener_DuringRevocation_DoesNotReachTheRevoker()
+        {
+            var ledger = new GrantLedger("ledger-provider");
+            var session = Session(Alice, new LedgerProvider(ledger));
+            Request(session, airborne.Id);
+            coordinator.Released += _ => throw new InvalidOperationException("listener failed");
+
+            Assert.DoesNotThrow(() => ledger.Revoke(Alice));
+            AssertFree(airborne);
+        }
+
+        [Test]
+        public void TheEventsOfASwitch_SeeItComplete()
+        {
+            var session = Session(Alice);
+            Request(session, airborne.Id);
+            bool sawTheNewDrone = false;
+            coordinator.Released += _ => sawTheNewDrone = coordinator.TryGetDrone(Alice, out var drone) && drone == grounded.Id;
+
+            Request(session, grounded.Id);
+
+            Assert.That(sawTheNewDrone, Is.True);
+        }
+
+        [Test]
+        public void CancelRequest_EndsThePendingRequestQuietly()
+        {
+            provider.AnswersAtOnce = false;
+            var session = Session(Alice);
+            var pending = Start(session);
+
+            Assert.That(coordinator.CancelRequest(session), Is.True);
+            provider.AnswerAll();
+
+            Assert.That(pending.IsCanceled, Is.True);
+            Assert.That(coordinator.CancelRequest(session), Is.False);
+            Assert.That(assigned, Is.Empty);
+            Assert.That(denied, Is.Empty);
+            AssertFree(airborne);
             AssertFree(grounded);
         }
 
@@ -465,6 +549,23 @@ namespace DroneFlightModule.Coordination.Tests
             Assert.That(result.Denial, Is.EqualTo(FlightDenial.NotAuthorized));
             AssertFree(airborne);
             AssertFree(grounded);
+        }
+
+        private sealed class LedgerProvider : IAuthorizationProvider
+        {
+            private readonly GrantLedger grants;
+
+            public LedgerProvider(GrantLedger grants)
+            {
+                this.grants = grants;
+            }
+
+            public string Id => "ledger-provider";
+
+            public Task<AuthorizationResult> AuthorizeAsync(AuthorizationRequest request, CancellationToken cancellationToken)
+            {
+                return Task.FromResult(AuthorizationResult.Granted(grants.Issue(request.PilotId)));
+            }
         }
 
         // In Unity the answer is used a frame after it arrives, so the grant can be revoked in between.

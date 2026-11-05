@@ -1,5 +1,3 @@
-using System;
-using System.Linq;
 using DroneFlightModule.Core;
 using NUnit.Framework;
 
@@ -15,19 +13,13 @@ namespace DroneFlightModule.Telemetry.Tests
         [SetUp]
         public void SetUp()
         {
-            sink = new InMemoryTelemetrySink(new TelemetryConfig(sampleRate: 10f, droneHistoryLength: 10, fleetHistoryLength: 3));
+            sink = new InMemoryTelemetrySink();
         }
 
         private FlightFrame Sample(DroneId drone, double time)
         {
             return new FlightFrame(drone, time, ControlInput.Zero, ForceCommand.None, DroneState.At(Vec3.Zero),
                 AltitudeReading.Invalid(time), FlightMode.Grounded, 0.0);
-        }
-
-        [Test]
-        public void Constructor_RequiresAConfig()
-        {
-            Assert.Throws<ArgumentNullException>(() => new InMemoryTelemetrySink(null));
         }
 
         [Test]
@@ -43,18 +35,7 @@ namespace DroneFlightModule.Telemetry.Tests
         }
 
         [Test]
-        public void KeepsTheFleetsMostRecentSamples_OldestFirst()
-        {
-            for (int i = 1; i <= 5; i++)
-            {
-                sink.Write(Sample(i % 2 == 0 ? Drone2 : Drone1, i));
-            }
-
-            Assert.That(sink.History.Select(sample => sample.Time), Is.EqualTo(new[] { 3.0, 4.0, 5.0 }));
-        }
-
-        [Test]
-        public void AnEndedStream_DropsOutOfTheLatest_ButStaysInTheHistory()
+        public void AnEndedStream_DropsOut()
         {
             sink.Write(Sample(Drone1, 1.0));
 
@@ -62,7 +43,6 @@ namespace DroneFlightModule.Telemetry.Tests
 
             Assert.That(sink.TryGetLatest(Drone1, out _), Is.False);
             Assert.That(sink.Drones, Is.Empty);
-            Assert.That(sink.History, Has.Count.EqualTo(1));
         }
     }
 }

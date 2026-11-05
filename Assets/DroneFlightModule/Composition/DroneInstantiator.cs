@@ -14,8 +14,9 @@ namespace DroneFlightModule.Composition
     /// the fleet's container, ticked every fixed update, and joins the fleet as that scope is
     /// built; its view is bound and its HUD box added. A drone added without a view is built from
     /// the drone prefab, one spawn step past the last drone, with the first free drone-N id.
-    /// Removing a drone has the coordinator remove it, which releases it first, then disposes its
-    /// scope and destroys its view and HUD box; the next drone added takes its spot. Disposing
+    /// Each drone's loop starts at the fleet's simulation time. Removing a drone has the coordinator
+    /// remove it, which releases it first, then disposes its scope and destroys its view and HUD
+    /// box; the next drone added goes one step past the last drone it added. Disposing
     /// disposes every drone's scope and destroys the views built from the prefab.
     /// </summary>
     public sealed class DroneInstantiator : IDisposable
@@ -23,6 +24,7 @@ namespace DroneFlightModule.Composition
         private readonly IObjectResolver fleet;
         private readonly DroneRegistry registry;
         private readonly FlightCoordinator coordinator;
+        private readonly ISimulationClock clock;
         private readonly DroneView prefab;
         private readonly FlightDebugHud hud;
         private readonly float groundHeight;
@@ -34,6 +36,7 @@ namespace DroneFlightModule.Composition
             IObjectResolver fleet,
             DroneRegistry registry,
             FlightCoordinator coordinator,
+            ISimulationClock clock,
             DroneView prefab,
             FlightDebugHud hud,
             float groundHeight,
@@ -42,6 +45,7 @@ namespace DroneFlightModule.Composition
             this.fleet = fleet ?? throw new ArgumentNullException(nameof(fleet));
             this.registry = registry ?? throw new ArgumentNullException(nameof(registry));
             this.coordinator = coordinator ?? throw new ArgumentNullException(nameof(coordinator));
+            this.clock = clock ?? throw new ArgumentNullException(nameof(clock));
             this.prefab = prefab;
             this.hud = hud;
             this.groundHeight = groundHeight;
@@ -84,10 +88,14 @@ namespace DroneFlightModule.Composition
             DestroyView(member.View);
             member.Scope.Dispose();
 
-            var remaining = registry.Drones;
-            nextSpawn = remaining.Count > 0
-                ? members[remaining[remaining.Count - 1].Id].SpawnPosition + spawnStep
-                : FirstSpawn;
+            nextSpawn = FirstSpawn;
+            foreach (var drone in registry.Drones)
+            {
+                if (members.TryGetValue(drone.Id, out var remaining))
+                {
+                    nextSpawn = remaining.SpawnPosition + spawnStep;
+                }
+            }
             return true;
         }
 
@@ -135,7 +143,7 @@ namespace DroneFlightModule.Composition
             var initialState = new DroneState(spawn, Vec3.Zero, 0f, 0f, isGrounded: spawn.Y <= groundHeight);
             var scope = fleet.CreateScope(builder =>
             {
-                new DroneInstaller(id, initialState).Install(builder);
+                new DroneInstaller(id, initialState, clock.Time).Install(builder);
                 builder.RegisterEntryPoint<FlightLoopRunner>();
             });
             members.Add(id, new Member(scope, view, ownsView, spawnPosition));

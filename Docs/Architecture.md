@@ -56,13 +56,13 @@ flowchart TB
 | `DroneFlightModule.Core` | nothing | Math, state, `DroneId`, `PilotId`, terrain, altitude sensor, input contract, router, gates, supervisor, controller, integrator, `FlightLoop` |
 | `DroneFlightModule.Pilots` | Core | Pilot profiles and priorities, pilot registry, pilot stats |
 | `DroneFlightModule.Authorization` | Core | Providers, revocable grants, per-drone grant holder and gate |
-| `DroneFlightModule.Coordination` | Core, Pilots, Authorization | `FlightCoordinator`, pilot sessions, drone registry, assignment policy, stats recording, the `IFleetConsole` contract a control panel drives |
-| `DroneFlightModule.Telemetry` | Core | Recorder per drone sampling `FlightLoop.Ticked`, ring buffer, `ITelemetrySink` and the in-memory sink |
+| `DroneFlightModule.Coordination` | Core, Pilots, Authorization | `FlightCoordinator`, pilot sessions, drone registry, assignment policy, stats recording |
+| `DroneFlightModule.Telemetry` | Core | Recorder per drone sampling `FlightLoop.Ticked`, ring buffer, `ITelemetrySink` and the in-memory sink of the latest samples |
 | `DroneFlightModule.Remote.Protocol` | nothing | Messages, binary codec, `ITransport`, loopback transport |
 | `DroneFlightModule.Remote.Host` | Core, Coordination, Remote.Protocol | Remote pilot sessions, `RemoteInputProvider`, link-loss timeout (network telemetry sink later) |
-| `DroneFlightModule.Unity` | Core, Remote.Protocol, Input System | Input-actions provider (keyboard and gamepad), link-loss debug toggle, smoothed drone view, debug HUD, follow camera, Core-to-Unity conversions, UDP transport |
-| `DroneFlightModule.Composition` | everything except UI, plus VContainer and Input System | Fleet `LifetimeScope`, one child scope per drone, installers, the local pilot's keys, `FlightLoopRunner` and `SimulationClockRunner` (the only places Unity's clock reaches the simulation) |
-| `DroneFlightModule.UI` | Core, Coordination, Pilots, Telemetry, VContainer, Input System | Fleet dashboard (IMGUI) in its own child scope |
+| `DroneFlightModule.Unity` | Core, Remote.Protocol, Input System | Input-actions provider (keyboard and gamepad), smoothed drone view, debug HUD, follow camera, Core-to-Unity conversions, UDP transport |
+| `DroneFlightModule.Composition` | everything except UI, plus VContainer and Input System | Fleet `LifetimeScope`, one child scope per drone, installers, the local pilot, `FleetKeys` (every non-flight key), the `IFleetConsole` contract a control panel drives, `FlightLoopRunner` and `SimulationClockRunner` (the only places Unity's clock reaches the simulation) |
+| `DroneFlightModule.UI` | Core, Coordination, Pilots, Telemetry, Composition, VContainer, Input System | Fleet dashboard and control panel (IMGUI) in their own child scope |
 | `DroneFlightModule.Editor` | Core, Unity, Composition, VContainer | Editor-only tools, such as the menu item that builds the prototype scene |
 | `*.Tests` (one per assembly) | Its target + NUnit | Edit-mode tests |
 
@@ -96,9 +96,9 @@ flowchart TB
   `VelocityFlightController`: the sticks set target velocities in the drone's heading frame
   (up to 8 m/s across, 3 m/s climb and 1.5 rad/s yaw), and centred sticks hold position and
   altitude. Each axis is a proportional controller that cancels drag, and the vertical one also
-  cancels weight; `VerticalSpeedController` is shared with the failsafe. The simpler
-  `ForceFlightController` (input scales force directly, no gravity compensation) is kept as a
-  second implementation.
+  cancels weight; `HorizontalSpeedController` and `VerticalSpeedController` are shared with the
+  failsafe. The loop tests use a raw force controller of their own, so the loop's physics stays
+  visible there.
 - **Controls** live in `DroneControls.inputactions`, not in code: WASD or the right stick to
   move, Space and Ctrl or the left stick's Y to climb and descend, Q and E or the left stick's X
   to yaw. `L` or Select cuts and restores the local pilot's link, so the failsafe can be
@@ -152,11 +152,12 @@ stateDiagram-v2
 
 - `FlightSupervisor` (Core) owns the mode, the countdown and the hold/descent command. Each tick
   it takes the pilot's force command and either passes it on or replaces it with its own.
-- **Holding** hovers in place: a proportional controller targets zero vertical speed, and
-  lateral force and yaw torque are zero, so drag brings any drift to rest. Pilot input is
-  ignored. The controller also cancels weight and vertical drag, so the drone settles exactly on
-  the target speed.
-- **Descending** uses the same controller with a target sink rate: 1 m/s higher up, easing to
+- **Holding** brakes to a stop and hovers: proportional controllers target zero horizontal and
+  vertical speed, cancelling drag and weight, so the drone settles exactly; a drone that loses
+  its link at 8 m/s stops within a few metres. Yaw torque is zero, since angular drag stops a
+  spin and turning doesn't move the drone. Pilot input is ignored. Both controllers share one
+  gain, `FailsafeConfig.SpeedGain`.
+- **Descending** uses the same controllers, still braking drift, with a target sink rate: 1 m/s higher up, easing to
   0.3 m/s as the measured altitude drops below the 2 m flare height, so the drone touches down
   gently.
 - **Invalid altitude reading** (out of range or failed): the drone keeps descending at a constant
@@ -245,13 +246,12 @@ flowchart TB
   `Revoked` token. Anyone holding it can check `IsRevoked` or register a callback.
 - `GrantLedger` is shared by providers: at most one live grant per pilot, and a repeat request
   returns it. A request after a revocation gets a new grant.
-- **One pilot controls one drone.** `PilotClaims`, shared by every grant holder, records which
-  drone each pilot controls. Installing a grant claims the drone, and installing a grant for a
-  pilot who already controls another drone throws. Clearing, replacing or revoking the grant
-  releases the claim, and a revocation also empties the holder's `Grant`. A drone has one grant holder, so it has one pilot at a time as well.
-  `PilotStatsRecorder` follows the same rule: a pilot has at most one open flight.
-- `DroneGrantHolder(DroneId, InputRouter, PilotClaims) : IFlightGate`, one per drone, holds the grant of the pilot assigned to that
-  drone. It passes only while the grant is unrevoked and its `PilotId` matches the router's
+- `IRevokingAuthorizationProvider : IAuthorizationProvider { bool Revoke(PilotId) }` is a
+  provider that can take back a grant, as the simulated server does; the local pilot revokes
+  through it, not through the concrete server.
+- `DroneGrantHolder(InputRouter) : IFlightGate`, one per drone, holds the grant of the pilot
+  assigned to that drone. It only gates; who flies which drone is the coordinator's record
+  alone. It passes only while the grant is unrevoked and its `PilotId` matches the router's
   `ActivePilotId`, so a grant for one pilot never lets another pilot fly. Combined with
   `PilotInControlGate` through `AllOfFlightGate`, flight needs both a connected pilot and a valid
   grant.
@@ -291,6 +291,10 @@ drone a pilot gets, and whether that means taking a drone from someone else.
   `FlightCoordinator.RemoveDrone`, which releases the drone first, so nobody is left flying a
   drone that is no longer in the fleet. `FlightLoopStatus` reads the
   status (grounded or not) straight from a drone's `FlightLoop`.
+- **One pilot, one drone.** A pilot flies at most one drone, whichever session they use: a
+  second session for the same pilot, say a phone, moves their one drone or takes it over. The
+  coordinator's assignments are the only record of it; grant holders only gate and the stats
+  recorder only times flights.
 - **`RequestFlightAsync(session, DroneId? preferred, CancellationToken)`** runs this pipeline:
   1. Look up the pilot's profile in the registry. Unknown pilots are denied, without asking a
      provider.
@@ -298,20 +302,25 @@ drone a pilot gets, and whether that means taking a drone from someone else.
   3. Ask the assignment policy for a decision, using a fresh snapshot of the fleet taken after
      authorization completes. The pilot's own drone is left out of the snapshot.
   4. Carry out the decision: assign, take over or deny.
-- A new request from the same session cancels its pending one, and so does ending the session.
+- A new request from the same session cancels its pending one, and so do ending the session
+  and `CancelRequest(session)`.
 - **Results:** `Assigned { Drone }`, `TookOver { Drone, FromPilot }` or
   `Denied { Denial, Message }`. Denials are `UnknownPilot`, `NotAuthorized`, `UnknownDrone` and
   `NoDroneAvailable`.
 - **Switching drones.** A pilot who flies a drone and asks for another is given it like anyone
   else, and lets go of the first one only once the second is secured, in the same step. A
   denied request leaves them on the drone they fly. The released drone behaves as after any
-  release: an airborne one holds, then lands. Asking for the drone they already fly only routes
-  it to the requesting session, for example after a phone reconnects; the flight goes on.
+  release: an airborne one holds, then lands. Asking for the drone they already fly, or for any
+  drone, only routes it to the requesting session, for example after a phone reconnects; the
+  flight goes on.
 - **Events:** `Assigned`, `Released { Drone, Pilot, Reason }`,
   `TookOver { Drone, Pilot, FromPilot }` and `Denied { Pilot, Preferred, Denial, Message }`. A
   cancelled request raises none. Release reasons are `Released`, `SessionEnded`,
   `Revoked`, `Switched` and `Removed`. A takeover is not a release: the preempted pilot is `FromPilot`.
-  Pilot stats, telemetry, the dashboard and the remote host subscribe to them.
+  Pilot stats, telemetry, the dashboard and the remote host subscribe to them. Events are
+  raised only once a change is complete, so a listener always sees the new state, and each
+  listener is called on its own: one that throws is reported through `ListenerFailed`, which
+  the composition logs, and can neither interrupt a switch nor reach whoever revoked a grant.
 
 **`IAssignmentPolicy`**, first implementation `PriorityAssignmentPolicy`:
 1. **A specific drone is requested:** assign it if it's free, take it over if its pilot ranks
@@ -365,16 +374,18 @@ break the Core boundary. All async code uses `Task` and `CancellationToken`.
 
 - **`FleetLifetimeScope`** is the scene's composition root. `FleetInstaller` registers what the
   fleet shares: frame and failsafe configs, the ground, the pilot registry (the guest plus one
-  registered pilot, Ace), stats, both providers, `PilotClaims`, the coordinator, a fleet-wide
-  `SimulationClock` and the local pilot's input. The installer is kept apart from the scope,
-  so tests build the whole fleet without a scene.
-- **`DroneInstantiator`** (registered in the fleet scope) adds and removes drones. Each drone
+  registered pilot, Ace), stats, both providers, the coordinator, a fleet-wide
+  `SimulationClock`, the local pilot, their keys, the console and the drone instantiator. The
+  installer is kept apart from the scope, so tests build the whole fleet without a scene.
+- **`DroneInstantiator`** adds and removes drones. Each drone
   gets its own child scope of the fleet's container: `DroneInstaller` registers that drone's
   loop, router, controller, sensor, supervisor, grant holder and the gate that combines them,
   and the instantiator adds a `FlightLoopRunner`. Shared objects come from the fleet scope. It
-  also binds the drone's view and adds its HUD box. The fleet scope only wires: it has the
-  instantiator add the drones from its list (id, spawn position, view) and maps the debug keys
-  to it. Being a plain class on the container, it is tested without a scene.
+  also binds the drone's view and adds its HUD box. Each drone's loop starts at the fleet's
+  simulation time, so a drone added later shares the timebase of those already flying and its
+  telemetry lines up with theirs. The fleet scope only wires: it has the instantiator add the
+  drones from its list (id, spawn position, view). Being a plain class on the container, it is
+  tested without a scene.
 - **Joining the fleet.** The fleet starts empty, and each drone scope adds its `FleetDrone` to
   the `DroneRegistry` once built, at startup or later. A request decides on the fleet as it is
   once authorization completes, so a drone that joins meanwhile is part of the decision.
@@ -385,20 +396,25 @@ break the Core boundary. All async code uses `Task` and `CancellationToken`.
 - **Removing drones at runtime.** `DroneInstantiator.RemoveDrone(id)` has the coordinator
   remove the drone, which releases it first, so its pilot's flight ends and they're told.
   Then the drone's child scope is disposed and its view and HUD box are removed. The
-  Debug/RemoveDrone key (M) removes the newest drone, and the next added one takes its spot.
+  Debug/RemoveDrone key (M) removes the newest drone, and the next added one goes one step past
+  the last drone it added.
   Disposing the instantiator, with the fleet, disposes every drone scope and destroys the views
   it built from the prefab; views from the scene stay with the scene.
 - **Input belongs to the local pilot**, not to a drone: one copy of the controls asset per fleet
-  scope, one keyboard and gamepad provider, and the link-loss toggle wrapping it.
+  scope, one keyboard and gamepad provider, and a link that can be cut wrapping it.
 - **`LocalPilotControls`** holds a session on that input for every pilot in the registry: the
   guest through local guest mode, everyone else through the simulated server (0.5 s latency).
   Each session gets its own `LocalPilotInput` over the shared keyboard: only the selected
   pilot's reads the keys, and the others stay connected with their hands off, so a pilot you
   switch away from keeps their drone, hovering, and the next pilot can take it over. A cut
   link cuts them all. It starts as the guest. A local pilot who is preempted is told who took
-  their drone; the pilot who took it hears it from their own request. It maps the Fleet action map to the
-  coordinator and keeps the latest outcome for the HUD. Requests never fault: a superseded or
+  their drone; the pilot who took it hears it from their own request. Switching away from a
+  pilot cancels their pending request, so they are never handed a drone nobody steers. It
+  keeps the latest outcome for the control panel. Requests never fault: a superseded or
   cancelled one ends quietly, and anything else is logged.
+- **`FleetKeys`** binds every key that is not a flight stick, the Fleet map and the Debug link
+  and drone keys, to the local pilot, the link and the instantiator. The dashboard's Tab stays
+  with the dashboard.
 - **Keys:**
   - R: request any drone
   - 1–3: request that drone
@@ -409,7 +425,8 @@ break the Core boundary. All async code uses `Task` and `CancellationToken`.
   - N: add a drone
   - M: remove the newest drone
 - **View:** each drone's cube follows its own loop; the HUD has a box per drone and one for the
-  local pilot and the controls; the camera follows the drone the local pilot flies.
+  controls; the camera follows the drone the local pilot flies. The local pilot's status shows
+  in the control panel only.
 - **Lifetime:** pending requests use a token linked to the scope's `destroyCancellationToken`
   and `Application.exitCancellationToken`. Destroying the scope cancels them, then the
   container disposes the providers, controls and listeners.
@@ -418,16 +435,17 @@ break the Core boundary. All async code uses `Task` and `CancellationToken`.
 
 - **`TelemetryRecorder`**, one per drone in its child scope, subscribes to `FlightLoop.Ticked`
   and samples the `FlightFrame`s at `TelemetryConfig.SampleRate` (10 Hz) of simulation time,
-  starting with the first tick. It keeps the latest sample and a `RingBuffer` of recent ones
-  (600, a minute), and passes each sample to its `ITelemetrySink`s. Adding to a ring buffer
-  never allocates, so nothing on the tick does.
+  starting with the first tick. The schedule advances by whole periods, so a tick step that
+  doesn't divide the period still averages 10 Hz. It keeps the latest sample and passes each to
+  its `ITelemetrySink`s; nothing on the tick allocates. History is a sink's job, added when
+  something reads it.
 - **Telemetry only reads.** A sink that throws is reported through `SinkFailed`, which the
   composition logs, and skipped for that sample, so a broken sink can't break a tick or starve
   the other sinks.
 - **`ITelemetrySink { Write(sample); End(drone); }`.** `End` says a drone's stream finished:
   disposing a recorder, as happens when its drone is removed, ends it in every sink.
 - **`InMemoryTelemetrySink`**, one for the fleet, keeps the latest sample of every drone still
-  streaming and the fleet's most recent samples together (3000). The dashboard reads it; a
+  streaming. The dashboard reads it; a
   network sink for the phone is one more sink in each drone's list.
 - The **fleet dashboard** (IMGUI, `FleetDashboard`), docked to the right of the screen, shows
   for each drone:
@@ -440,7 +458,8 @@ break the Core boundary. All async code uses `Task` and `CancellationToken`.
   (`FleetEventLog`: assignments, releases and why, takeovers and denials, stamped with
   simulation time). It only reads: per-drone values come from the fleet's in-memory telemetry
   sink, the rest from the coordinator and the registries. The text is rebuilt four times a
-  second, and the Debug/ToggleDashboard action (Tab) shows or hides it.
+  second, and the Debug/ToggleDashboard action (Tab) shows or hides it. It stops short of the
+  bottom of the screen, where the control panel sits.
 - **Its own child scope.** `DashboardLifetimeScope` registers only the event log and
   `FleetDashboardReadout`, which builds the text and is tested on its own. Everything else
   comes from the fleet scope, its parent, which the scene names in the scope's parent
@@ -452,11 +471,13 @@ break the Core boundary. All async code uses `Task` and `CancellationToken`.
   everything the keys do: a pilot dropdown (every registered pilot and the drone they fly;
   picking one switches to them), a drone dropdown (any drone or one of the fleet with who
   flies it, through `ControlPanelChoices`, which falls back to any drone when the chosen one
-  leaves), a status line with the current pilot's takeovers and preemptions, and Request, Release, Revoke grant,
-  Cut/Restore link, Add drone and Remove drone. It drives the fleet only through
-  `IFleetConsole`, a small contract in Coordination that the composition implements as
-  `FleetConsole` on top of the local pilot's controls, their link and the drone instantiator,
-  so the panel stays deletable with the rest of the UI.
+  leaves), a status line with the current pilot, their takeovers and preemptions and the
+  latest outcome, and Request, Release, Revoke grant, Cut/Restore link, Add drone and Remove
+  drone. Its text is built once per frame and the status sizes itself to fit. It drives the
+  fleet only through `IFleetConsole`, a small contract in Composition, next to `FleetConsole`,
+  which implements it on top of the local pilot's controls, their link and the drone
+  instantiator; the UI references Composition, never the other way, so the panel stays
+  deletable with the rest of the UI.
 - **Deletion check:** delete the UI folder, confirm Unity compiles, the drones fly, and all
   remaining tests pass. The dashboard's GameObject is left with missing scripts, which Unity
   only warns about; rebuilding the scene drops it.
@@ -526,24 +547,31 @@ break the Core boundary. All async code uses `Task` and `CancellationToken`.
     denied switch keeps the current drone
   - drones join and leave at any time; removing a flown drone releases it first
   - a new request cancels the pending one
+  - "any drone" while flying keeps the current drone
+  - a second session for a pilot moves their one drone
+  - a throwing listener is reported, can't interrupt a switch and can't reach a revoker
 - **Fleet** (the real container, two drone scopes, real key presses through the Input System
   test fixture): drones join the fleet in order, one added while the fleet is in use can be
   flown, a taken id is refused, removing the guest's drone releases it and tells them, free
   drones hold and land, number keys switch drones, signing in through the server, switching
-  pilots keeping the previous pilot's drone, a parked pilot's drone ignoring the keyboard, a
+  pilots keeping the previous pilot's drone and cancelling their pending request, a parked
+  pilot's drone ignoring the keyboard, a
   takeover from the same keyboard counted for both pilots, a preempted pilot being told, revocation,
-  link loss, stats on the fleet's simulation time, telemetry from every drone reaching the
+  link loss, stats on the fleet's simulation time, a drone added later sharing the fleet's
+  timebase, telemetry from every drone reaching the
   fleet sink and ending with the drone, and disposal disabling the controls.
-- **Drone instantiator:** prefab ids and spawn spots, refused ids, removal destroying views,
+- **Drone instantiator:** prefab ids and spawn spots, refused ids, a late drone starting at the
+  fleet's time, removal destroying views (also when another drone joined the registry directly),
   the row restarting, and disposal destroying only the views it built.
 - **Dashboard:** the event log's wording, times and capacity, the readout's drones (free,
   flown, holding, out of range), pilots in priority order with stats, and newest-first events,
   all in invariant culture, Tab hiding and showing the dashboard, and the control panel's
   pilot and drone choices, labels that follow a takeover and each pilot's takeover and
   preemption record; the console itself is covered by the fleet tests.
-- **Telemetry:** sampling rate on simulation time, the first tick sampled, the ring buffer,
-  sink fan-out, a failing sink reported without breaking the flight or other sinks, the
-  stream ending on dispose, and the in-memory sink's latest samples and history.
+- **Telemetry:** sampling rate on simulation time, also on a step that doesn't divide the
+  period, the first tick sampled, the ring buffer, sink fan-out, a failing sink reported
+  without breaking the flight or other sinks, the stream ending on dispose, and the in-memory
+  sink's latest samples.
 - **Remote:**
   - the full loopback path from the client through the coordinator to `FlightLoop`
   - a link drop that leads to hold and then descent

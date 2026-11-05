@@ -1,12 +1,13 @@
 using System;
 
-namespace DroneFlightModule.Core
+namespace DroneFlightModule.Core.Tests
 {
     /// <summary>
-    /// Simple force model: input axes scale the frame's force limits, rotated into world space
-    /// by the drone's yaw. There is no gravity compensation, so the drone must be pushed up.
+    /// Raw force sticks for loop tests: input axes scale the frame's force limits, rotated into
+    /// world space by the drone's yaw. There is no gravity compensation, so the drone must be
+    /// pushed up, which keeps the loop's own physics visible.
     /// </summary>
-    public sealed class ForceFlightController : IFlightController
+    internal sealed class ForceFlightController : IFlightController
     {
         private readonly DroneConfig config;
 

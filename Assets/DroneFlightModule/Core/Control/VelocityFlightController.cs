@@ -11,6 +11,7 @@ namespace DroneFlightModule.Core
     {
         private readonly DroneConfig droneConfig;
         private readonly VelocityControllerConfig config;
+        private readonly HorizontalSpeedController horizontalSpeed;
         private readonly VerticalSpeedController verticalSpeed;
 
         public VelocityFlightController(
@@ -20,6 +21,7 @@ namespace DroneFlightModule.Core
         {
             this.droneConfig = droneConfig ?? throw new ArgumentNullException(nameof(droneConfig));
             this.config = config ?? throw new ArgumentNullException(nameof(config));
+            horizontalSpeed = new HorizontalSpeedController(droneConfig, config.HorizontalSpeedGain);
             verticalSpeed = new VerticalSpeedController(droneConfig, config.VerticalSpeedGain, gravity);
         }
 
@@ -30,24 +32,9 @@ namespace DroneFlightModule.Core
                 input.Move.Y * config.MaxClimbRate,
                 input.Move.Z * config.MaxHorizontalSpeed).RotateYaw(state.Yaw);
 
-            var velocity = state.Velocity;
-            var horizontalForce = new Vec3(
-                HorizontalForce(targetVelocity.X, velocity.X),
-                0f,
-                HorizontalForce(targetVelocity.Z, velocity.Z));
-            float horizontalMagnitude = horizontalForce.Magnitude;
-            if (horizontalMagnitude > droneConfig.MaxLateralForce)
-            {
-                horizontalForce *= droneConfig.MaxLateralForce / horizontalMagnitude;
-            }
-
-            float thrust = verticalSpeed.Thrust(targetVelocity.Y, velocity.Y);
+            var horizontalForce = horizontalSpeed.Force(targetVelocity, state.Velocity);
+            float thrust = verticalSpeed.Thrust(targetVelocity.Y, state.Velocity.Y);
             return new ForceCommand(horizontalForce.WithY(thrust), YawTorque(input.Yaw * config.MaxYawRate, state.YawRate));
-        }
-
-        private float HorizontalForce(float targetSpeed, float speed)
-        {
-            return droneConfig.LinearDrag * speed + droneConfig.Mass * config.HorizontalSpeedGain * (targetSpeed - speed);
         }
 
         private float YawTorque(float targetYawRate, float yawRate)

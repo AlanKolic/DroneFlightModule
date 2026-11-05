@@ -7,15 +7,7 @@ namespace DroneFlightModule.Coordination.Tests
 {
     public class DroneRegistryTests
     {
-        private PilotClaims claims;
-
-        [SetUp]
-        public void SetUp()
-        {
-            claims = new PilotClaims();
-        }
-
-        private FleetDrone Drone(string id) => new TestDrone(id, claims, isAirborne: false).Fleet;
+        private FleetDrone Drone(string id) => new TestDrone(id, isAirborne: false).Fleet;
 
         [Test]
         public void KeepsTheGivenOrder_AndFindsById()
@@ -69,7 +61,7 @@ namespace DroneFlightModule.Coordination.Tests
         public void FleetDrone_RequiresEveryPart()
         {
             var router = new InputRouter();
-            var holder = new DroneGrantHolder(new DroneId("drone-1"), router, claims);
+            var holder = new DroneGrantHolder(router);
             var status = Drone("drone-2").Status;
 
             Assert.Throws<ArgumentException>(() => new FleetDrone(default, router, holder, status));
@@ -81,8 +73,8 @@ namespace DroneFlightModule.Coordination.Tests
         [Test]
         public void FlightLoopStatus_FollowsTheLoop()
         {
-            var airborne = new TestDrone("drone-1", claims, isAirborne: true);
-            var grounded = new TestDrone("drone-2", claims, isAirborne: false);
+            var airborne = new TestDrone("drone-1", isAirborne: true);
+            var grounded = new TestDrone("drone-2", isAirborne: false);
 
             Assert.That(airborne.Fleet.Status.IsGrounded, Is.False);
             Assert.That(grounded.Fleet.Status.IsGrounded, Is.True);

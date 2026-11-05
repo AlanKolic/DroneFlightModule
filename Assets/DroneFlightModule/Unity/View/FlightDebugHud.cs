@@ -8,21 +8,21 @@ namespace DroneFlightModule.Unity
 {
     /// <summary>
     /// On-screen debug readout for the fleet: a box per drone along the top, wrapping into more rows
-    /// as drones join and closing up as they leave, and below them the local pilot's status and the controls. Only reads from the loops and routers; each drone's
-    /// text is rebuilt at most once per rendered frame, not on every OnGUI pass. The controls are
-    /// described from the actions asset's bindings, so they never drift from it.
+    /// as drones join and closing up as they leave, and below them the controls. Only reads from
+    /// the loops and routers; each drone's text is rebuilt at most once per rendered frame and
+    /// OnGUI only draws. The controls are described from the actions asset's bindings, so they
+    /// never drift from it.
     /// </summary>
     public sealed class FlightDebugHud : MonoBehaviour
     {
         [SerializeField] private Vector2 origin = new Vector2(12f, 12f);
         [SerializeField] private Vector2 droneBoxSize = new Vector2(240f, 116f);
-        [SerializeField] private Vector2 pilotBoxSize = new Vector2(400f, 272f);
+        [SerializeField] private Vector2 controlsBoxSize = new Vector2(400f, 230f);
         [SerializeField] private float spacing = 8f;
 
         private readonly FlightReadout readout = new FlightReadout();
         private readonly List<DroneReadout> drones = new List<DroneReadout>();
         private string controlsText = string.Empty;
-        private string pilotStatus = string.Empty;
 
         public void Bind(InputActionAsset controls)
         {
@@ -63,11 +63,6 @@ namespace DroneFlightModule.Unity
             drones.RemoveAt(index);
         }
 
-        public void SetPilotStatus(string status)
-        {
-            pilotStatus = status ?? string.Empty;
-        }
-
         private void Update()
         {
             foreach (var drone in drones)
@@ -96,8 +91,8 @@ namespace DroneFlightModule.Unity
                 DrawBox(new Rect(x, y, droneBoxSize.x, droneBoxSize.y), drones[i].Text);
             }
             int rows = (drones.Count + columns - 1) / columns;
-            var pilotBox = new Rect(origin.x, origin.y + rows * (droneBoxSize.y + spacing), pilotBoxSize.x, pilotBoxSize.y);
-            DrawBox(pilotBox, pilotStatus + "\n\n" + controlsText);
+            var controlsBox = new Rect(origin.x, origin.y + rows * (droneBoxSize.y + spacing), controlsBoxSize.x, controlsBoxSize.y);
+            DrawBox(controlsBox, controlsText);
         }
 
         private void OnDestroy()

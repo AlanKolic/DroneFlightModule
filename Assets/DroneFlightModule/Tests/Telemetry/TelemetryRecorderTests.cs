@@ -8,7 +8,7 @@ namespace DroneFlightModule.Telemetry.Tests
     public class TelemetryRecorderTests
     {
         private readonly TestLoops loops = new TestLoops();
-        private readonly TelemetryConfig tenPerSecond = new TelemetryConfig(sampleRate: 10f, droneHistoryLength: 100, fleetHistoryLength: 100);
+        private readonly TelemetryConfig tenPerSecond = new TelemetryConfig(sampleRate: 10f);
 
         private FlightLoop loop;
         private RecordingSink sink;
@@ -40,7 +40,6 @@ namespace DroneFlightModule.Telemetry.Tests
             var recorder = Recorder(tenPerSecond, sink);
 
             Assert.That(recorder.HasSample, Is.False);
-            Assert.That(recorder.History, Is.Empty);
             Assert.That(recorder.DroneId, Is.EqualTo(loop.DroneId));
         }
 
@@ -70,14 +69,38 @@ namespace DroneFlightModule.Telemetry.Tests
         }
 
         [Test]
-        public void KeepsTheLatestSample_AndAsManyRecentOnesAsConfigured()
+        public void AStepThatDoesNotDivideThePeriod_StillAveragesTheRate()
         {
-            var recorder = Recorder(new TelemetryConfig(sampleRate: 50f, droneHistoryLength: 3, fleetHistoryLength: 10), sink);
+            Recorder(tenPerSecond, sink);
+
+            for (int i = 0; i < 100; i++)
+            {
+                loop.Tick(0.03f);
+            }
+
+            Assert.That(sink.Written, Has.Count.EqualTo(30), "3 s at 10 samples per second.");
+        }
+
+        [Test]
+        public void ATickLongerThanAPeriod_SamplesOnceAndCarriesOn()
+        {
+            Recorder(tenPerSecond, sink);
+
+            loop.Tick(1f);
+            loop.Tick(0.05f);
+            loop.Tick(0.05f);
+
+            Assert.That(sink.Written, Has.Count.EqualTo(2));
+            Assert.That(sink.Written[1].Time, Is.EqualTo(1.1).Within(1e-6));
+        }
+
+        [Test]
+        public void KeepsTheLatestSample()
+        {
+            var recorder = Recorder(new TelemetryConfig(sampleRate: 50f), sink);
 
             loops.Run(loop, 5);
 
-            Assert.That(recorder.History, Has.Count.EqualTo(3));
-            Assert.That(recorder.History[0].Time, Is.EqualTo(3 * TestLoops.DeltaTime).Within(1e-6));
             Assert.That(recorder.Latest.Time, Is.EqualTo(loop.Time).Within(1e-6));
             Assert.That(recorder.Latest.State.Position, Is.EqualTo(loop.State.Position));
         }

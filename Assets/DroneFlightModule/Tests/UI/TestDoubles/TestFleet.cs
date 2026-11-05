@@ -37,12 +37,11 @@ namespace DroneFlightModule.UI.Tests
 
         public TestFleet()
         {
-            var claims = new PilotClaims();
-            Drones = new DroneRegistry(new[] { Drone(Drone1, claims), Drone(Drone2, claims) });
+            Drones = new DroneRegistry(new[] { Drone(Drone1), Drone(Drone2) });
             Pilots = new InMemoryPilotRegistry(new[] { Ace });
             Coordinator = new FlightCoordinator(Pilots, Drones, new PriorityAssignmentPolicy());
             Stats = new InMemoryPilotStatsStore();
-            Telemetry = new InMemoryTelemetrySink(TelemetryConfig.Default);
+            Telemetry = new InMemoryTelemetrySink();
             Terrain = new FlatTerrain(GroundHeight);
         }
 
@@ -61,10 +60,10 @@ namespace DroneFlightModule.UI.Tests
             return Coordinator.RequestFlightAsync(session, drone, CancellationToken.None).Result;
         }
 
-        private FleetDrone Drone(DroneId id, PilotClaims claims)
+        private FleetDrone Drone(DroneId id)
         {
             var router = new InputRouter();
-            return new FleetDrone(id, router, new DroneGrantHolder(id, router, claims), new Status());
+            return new FleetDrone(id, router, new DroneGrantHolder(router), new Status());
         }
     }
 }

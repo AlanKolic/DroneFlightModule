@@ -10,11 +10,11 @@ namespace DroneFlightModule.Coordination.Tests
     {
         private const float DeltaTime = 0.02f;
 
-        public TestDrone(string id, PilotClaims claims, bool isAirborne)
+        public TestDrone(string id, bool isAirborne)
         {
             Id = new DroneId(id);
             Router = new InputRouter();
-            Holder = new DroneGrantHolder(Id, Router, claims);
+            Holder = new DroneGrantHolder(Router);
             Gate = new AllOfFlightGate(new IFlightGate[] { new PilotInControlGate(Router), Holder });
 
             var terrain = new FlatTerrain();

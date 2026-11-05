@@ -142,23 +142,5 @@ namespace DroneFlightModule.Unity.Tests
             Assert.That(provider.Read(), Is.EqualTo(ControlInput.Zero));
             Assert.That(provider.IsConnected, Is.False);
         }
-
-        [Test]
-        public void L_TogglesTheLink()
-        {
-            var link = new DisconnectableInputProvider(provider);
-            var toggle = new LinkLossToggle(actions, link);
-
-            PressAndRelease(keyboard.lKey);
-            Assert.That(link.IsLinkCut, Is.True);
-            Assert.That(link.IsConnected, Is.False);
-
-            PressAndRelease(keyboard.lKey);
-            Assert.That(link.IsLinkCut, Is.False);
-
-            toggle.Dispose();
-            PressAndRelease(keyboard.lKey);
-            Assert.That(link.IsLinkCut, Is.False);
-        }
     }
 }

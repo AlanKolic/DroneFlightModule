@@ -3,8 +3,9 @@ using System;
 namespace DroneFlightModule.Core
 {
     /// <summary>
-    /// Timings and speeds of the failsafe: how long to hold, how fast to sink and where to flare.
-    /// Speeds are positive magnitudes in m/s; the gain is in 1/s.
+    /// Timings and speeds of the failsafe: how long to hold, how fast to sink and where to flare,
+    /// and how quickly it reaches the velocity it targets. Speeds are positive magnitudes in m/s;
+    /// the gain is in 1/s.
     /// </summary>
     public sealed class FailsafeConfig
     {
@@ -14,7 +15,7 @@ namespace DroneFlightModule.Core
             touchdownSinkRate: 0.3f,
             flareHeight: 2f,
             fallbackSinkRate: 0.5f,
-            verticalSpeedGain: 4f);
+            speedGain: 4f);
 
         private readonly ArgumentGuard guard = new ArgumentGuard();
 
@@ -23,7 +24,7 @@ namespace DroneFlightModule.Core
         public float TouchdownSinkRate { get; }
         public float FlareHeight { get; }
         public float FallbackSinkRate { get; }
-        public float VerticalSpeedGain { get; }
+        public float SpeedGain { get; }
 
         public FailsafeConfig(
             float holdDuration,
@@ -31,14 +32,14 @@ namespace DroneFlightModule.Core
             float touchdownSinkRate,
             float flareHeight,
             float fallbackSinkRate,
-            float verticalSpeedGain)
+            float speedGain)
         {
             HoldDuration = guard.RequireNonNegative(holdDuration, nameof(holdDuration));
             DescentSinkRate = guard.RequirePositive(descentSinkRate, nameof(descentSinkRate));
             TouchdownSinkRate = guard.RequirePositive(touchdownSinkRate, nameof(touchdownSinkRate));
             FlareHeight = guard.RequirePositive(flareHeight, nameof(flareHeight));
             FallbackSinkRate = guard.RequirePositive(fallbackSinkRate, nameof(fallbackSinkRate));
-            VerticalSpeedGain = guard.RequirePositive(verticalSpeedGain, nameof(verticalSpeedGain));
+            SpeedGain = guard.RequirePositive(speedGain, nameof(speedGain));
             if (touchdownSinkRate > descentSinkRate)
             {
                 throw new ArgumentOutOfRangeException(

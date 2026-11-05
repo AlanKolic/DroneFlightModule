@@ -59,6 +59,48 @@ namespace DroneFlightModule.Core.Tests
         }
 
         [Test]
+        public void Time_StartsAtTheGivenStartTime_AndAdvancesByEachStep()
+        {
+            var config = DroneConfig.Default;
+            var terrain = new FlatTerrain();
+            var loop = new FlightLoop(
+                TestDrone,
+                input,
+                new ForceFlightController(config),
+                new FlightSupervisor(gate, config, FailsafeConfig.Default),
+                new DroneIntegrator(config, terrain),
+                new RangefinderAltitudeSensor(terrain),
+                DroneState.At(Vec3.Zero),
+                startTime: 12.5);
+            double ticked = -1.0;
+            loop.Ticked += frame => ticked = frame.Time;
+
+            loop.Tick(DeltaTime);
+
+            Assert.That(loop.Time, Is.EqualTo(12.5 + DeltaTime).Within(1e-6));
+            Assert.That(ticked, Is.EqualTo(loop.Time));
+        }
+
+        [TestCase(-1.0)]
+        [TestCase(double.NaN)]
+        [TestCase(double.PositiveInfinity)]
+        public void Constructor_RejectsAnInvalidStartTime(double startTime)
+        {
+            var config = DroneConfig.Default;
+            var terrain = new FlatTerrain();
+
+            Assert.Throws<ArgumentOutOfRangeException>(() => new FlightLoop(
+                TestDrone,
+                input,
+                new ForceFlightController(config),
+                new FlightSupervisor(gate, config, FailsafeConfig.Default),
+                new DroneIntegrator(config, terrain),
+                new RangefinderAltitudeSensor(terrain),
+                DroneState.At(Vec3.Zero),
+                startTime));
+        }
+
+        [Test]
         public void Constructor_RequiresDroneId()
         {
             var config = DroneConfig.Default;

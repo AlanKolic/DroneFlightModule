@@ -5,7 +5,9 @@ namespace DroneFlightModule.Core
     /// <summary>
     /// The core flight loop of one drone. It has no clock of its own: whoever owns it calls
     /// <see cref="Tick"/> with a fixed step, whether that is Unity, a test or a headless sim.
-    /// The supervisor decides each tick whether the pilot's command or the failsafe flies.
+    /// The supervisor decides each tick whether the pilot's command or the failsafe flies. Time
+    /// starts at the given start time, so a drone that joins a running simulation shares its
+    /// timebase with the drones already flying.
     /// </summary>
     public sealed class FlightLoop
     {
@@ -23,7 +25,8 @@ namespace DroneFlightModule.Core
             FlightSupervisor supervisor,
             DroneIntegrator integrator,
             IAltitudeSensor altitudeSensor,
-            DroneState initialState)
+            DroneState initialState,
+            double startTime = 0.0)
         {
             DroneId = guard.RequireId(droneId, nameof(droneId));
             this.input = input ?? throw new ArgumentNullException(nameof(input));
@@ -32,6 +35,11 @@ namespace DroneFlightModule.Core
             this.integrator = integrator ?? throw new ArgumentNullException(nameof(integrator));
             this.altitudeSensor = altitudeSensor ?? throw new ArgumentNullException(nameof(altitudeSensor));
             State = initialState;
+            if (!(startTime >= 0.0) || double.IsInfinity(startTime))
+            {
+                throw new ArgumentOutOfRangeException(nameof(startTime), startTime, "Must be non-negative and finite.");
+            }
+            Time = startTime;
         }
 
         public DroneId DroneId { get; }

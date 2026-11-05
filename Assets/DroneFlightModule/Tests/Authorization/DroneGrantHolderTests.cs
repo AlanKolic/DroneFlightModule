@@ -8,11 +8,8 @@ namespace DroneFlightModule.Authorization.Tests
     {
         private static readonly PilotId Alice = new PilotId("alice");
         private static readonly PilotId Bob = new PilotId("bob");
-        private static readonly DroneId Drone1 = new DroneId("drone-1");
-        private static readonly DroneId Drone2 = new DroneId("drone-2");
 
         private GrantLedger ledger;
-        private PilotClaims claims;
         private InputRouter router;
         private DroneGrantHolder holder;
 
@@ -26,17 +23,14 @@ namespace DroneFlightModule.Authorization.Tests
         public void SetUp()
         {
             ledger = new GrantLedger("test-provider");
-            claims = new PilotClaims();
             router = new InputRouter();
-            holder = new DroneGrantHolder(Drone1, router, claims);
+            holder = new DroneGrantHolder(router);
         }
 
         [Test]
         public void Constructor_RejectsInvalidArguments()
         {
-            Assert.Throws<ArgumentException>(() => new DroneGrantHolder(default, router, claims));
-            Assert.Throws<ArgumentNullException>(() => new DroneGrantHolder(Drone1, null, claims));
-            Assert.Throws<ArgumentNullException>(() => new DroneGrantHolder(Drone1, router, null));
+            Assert.Throws<ArgumentNullException>(() => new DroneGrantHolder(null));
         }
 
         [Test]
@@ -114,79 +108,15 @@ namespace DroneFlightModule.Authorization.Tests
         }
 
         [Test]
-        public void Install_ClaimsTheDroneForThePilot()
+        public void ReplacingTheGrant_GatesOnTheNewPilot()
         {
-            holder.Install(ledger.Issue(Alice));
-
-            Assert.That(claims.TryGetDrone(Alice, out var drone), Is.True);
-            Assert.That(drone, Is.EqualTo(Drone1));
-        }
-
-        [Test]
-        public void PilotControllingAnotherDrone_IsRefused()
-        {
-            var other = new DroneGrantHolder(Drone2, new InputRouter(), claims);
-            var grant = ledger.Issue(Alice);
-            other.Install(grant);
-
-            Assert.Throws<InvalidOperationException>(() => holder.Install(grant));
-            Assert.That(holder.Grant, Is.Null);
-            Assert.That(other.Grant, Is.SameAs(grant));
-        }
-
-        [Test]
-        public void Reinstalling_OnTheSameDrone_IsAllowed()
-        {
-            holder.Install(ledger.Issue(Alice));
-
-            Assert.DoesNotThrow(() => holder.Install(ledger.Issue(Alice)));
-        }
-
-        [Test]
-        public void Clear_ReleasesTheClaim()
-        {
-            var other = new DroneGrantHolder(Drone2, new InputRouter(), claims);
-            other.Install(ledger.Issue(Alice));
-
-            other.Clear();
-            holder.Install(ledger.Issue(Alice));
-
-            Assert.That(claims.TryGetDrone(Alice, out var drone), Is.True);
-            Assert.That(drone, Is.EqualTo(Drone1));
-        }
-
-        [Test]
-        public void ReplacingTheGrant_ReleasesThePreviousPilot()
-        {
+            router.Assign(Bob, new ScriptedConnection());
             holder.Install(ledger.Issue(Alice));
 
             holder.Install(ledger.Issue(Bob));
 
-            Assert.That(claims.TryGetDrone(Alice, out _), Is.False);
-            Assert.That(claims.TryGetDrone(Bob, out _), Is.True);
-        }
-
-        [Test]
-        public void Revocation_ReleasesTheClaim()
-        {
-            holder.Install(ledger.Issue(Alice));
-
-            ledger.Revoke(Alice);
-
-            Assert.That(claims.TryGetDrone(Alice, out _), Is.False);
-            Assert.That(holder.Grant, Is.Null);
-        }
-
-        [Test]
-        public void RevokingAReplacedGrant_KeepsTheCurrentClaim()
-        {
-            var old = new GrantLedger("old-provider");
-            holder.Install(old.Issue(Alice));
-            holder.Install(ledger.Issue(Alice));
-
-            old.Revoke(Alice);
-
-            Assert.That(claims.TryGetDrone(Alice, out _), Is.True);
+            Assert.That(holder.Grant.PilotId, Is.EqualTo(Bob));
+            Assert.That(holder.IsFlightAllowed, Is.True);
         }
 
         [Test]

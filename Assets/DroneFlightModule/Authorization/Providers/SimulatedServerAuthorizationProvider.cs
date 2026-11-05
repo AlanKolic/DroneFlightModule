@@ -14,7 +14,7 @@ namespace DroneFlightModule.Authorization
     /// cancels pending requests and revokes every grant, and an answer still in flight then issues
     /// nothing.
     /// </summary>
-    public sealed class SimulatedServerAuthorizationProvider : IAuthorizationProvider, IDisposable
+    public sealed class SimulatedServerAuthorizationProvider : IRevokingAuthorizationProvider, IDisposable
     {
         public const string ProviderId = "simulated-server";
 

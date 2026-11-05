@@ -4,7 +4,9 @@ namespace DroneFlightModule.Core
 {
     /// <summary>
     /// Measures height above the terrain directly below the drone, with a max range and a fixed
-    /// update rate. Between samples it returns the last reading. No noise.
+    /// update rate. Between samples it returns the last reading. The schedule advances by whole
+    /// periods, so a tick step that does not divide the period still averages the update rate.
+    /// No noise.
     /// </summary>
     public sealed class RangefinderAltitudeSensor : IAltitudeSensor
     {
@@ -41,8 +43,13 @@ namespace DroneFlightModule.Core
             }
 
             last = Sample(truth, time);
+            nextSampleTime = hasSample ? nextSampleTime + samplePeriod : time + samplePeriod;
+            // A gap longer than a period starts the schedule again instead of sampling to catch up.
+            if (nextSampleTime <= time)
+            {
+                nextSampleTime = time + samplePeriod;
+            }
             hasSample = true;
-            nextSampleTime = time + samplePeriod;
             return last;
         }
 

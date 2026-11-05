@@ -36,11 +36,10 @@ namespace DroneFlightModule.Composition.Tests
             keyboard = InputSystem.AddDevice<Keyboard>();
             controls = InputActionAsset.FromJson(File.ReadAllText(ControlsPath));
             var builder = new ContainerBuilder();
-            var installer = new FleetInstaller(GroundHeight, controls, TimeSpan.Zero, CancellationToken.None);
+            var installer = new FleetInstaller(GroundHeight, controls, TimeSpan.Zero, CancellationToken.None, null, null, new Vector3(4f, 0f, 0f));
             installer.Install(builder);
             fleet = builder.Build();
-            drones = new DroneInstantiator(
-                fleet, fleet.Resolve<DroneRegistry>(), fleet.Resolve<FlightCoordinator>(), null, null, GroundHeight, new Vector3(4f, 0f, 0f));
+            drones = fleet.Resolve<DroneInstantiator>();
             drones.AddDrone(AirborneDrone, new Vector3(0f, 5f, 0f), null);
             drones.AddDrone(GroundedDrone, new Vector3(4f, GroundHeight, 0f), null);
             airborne = Scope(AirborneDrone);
@@ -50,7 +49,6 @@ namespace DroneFlightModule.Composition.Tests
 
         public override void TearDown()
         {
-            drones.Dispose();
             fleet?.Dispose();
             UnityEngine.Object.DestroyImmediate(controls);
             base.TearDown();
@@ -98,7 +96,6 @@ namespace DroneFlightModule.Composition.Tests
             Assert.That(airborne.Resolve<FlightLoop>().DroneId, Is.EqualTo(AirborneDrone));
             Assert.That(grounded.Resolve<FlightLoop>().DroneId, Is.EqualTo(GroundedDrone));
             Assert.That(airborne.Resolve<InputRouter>(), Is.Not.SameAs(grounded.Resolve<InputRouter>()));
-            Assert.That(airborne.Resolve<PilotClaims>(), Is.SameAs(grounded.Resolve<PilotClaims>()));
 
             var drones = fleet.Resolve<DroneRegistry>().Drones;
             Assert.That(drones, Has.Count.EqualTo(2));
@@ -238,6 +235,47 @@ namespace DroneFlightModule.Composition.Tests
         }
 
         [Test]
+        public void SwitchingAway_CancelsThePreviousPilotsPendingRequest()
+        {
+            var slowFleet = SlowServerFleet();
+            var pilot = slowFleet.Resolve<LocalPilotControls>();
+            pilot.SelectPilot(FleetInstaller.RegisteredPilot.Id);
+            var ace = pilot.Session;
+
+            var request = pilot.RequestFlightAsync(AirborneDrone);
+            Assert.That(request.IsCompleted, Is.False, "The server answers after its latency.");
+            pilot.SelectPilot(PilotProfile.Guest.Id);
+
+            Assert.That(pilot.LastMessage, Does.Contain("ace's request was cancelled."));
+            Assert.That(slowFleet.Resolve<FlightCoordinator>().CancelRequest(ace), Is.False, "Nothing is left pending.");
+            Assert.That(slowFleet.Resolve<FlightCoordinator>().TryGetDrone(ace.PilotId, out _), Is.False);
+            slowFleet.Dispose();
+        }
+
+        private IObjectResolver SlowServerFleet()
+        {
+            var builder = new ContainerBuilder();
+            new FleetInstaller(GroundHeight, controls, TimeSpan.FromMinutes(1), CancellationToken.None, null, null, new Vector3(4f, 0f, 0f)).Install(builder);
+            var slowFleet = builder.Build();
+            slowFleet.Resolve<DroneInstantiator>().AddDrone(AirborneDrone, new Vector3(0f, 5f, 0f), null);
+            return slowFleet;
+        }
+
+        [Test]
+        public void DronesAddedAtDifferentTimes_ShareTheFleetsTimebase()
+        {
+            var clock = fleet.Resolve<SimulationClock>();
+            clock.Advance(1f);
+            var late = new DroneId("drone-3");
+            drones.AddDrone(late, new Vector3(8f, GroundHeight, 0f), null);
+
+            clock.Advance(DeltaTime);
+            Scope(late).Resolve<FlightLoop>().Tick(DeltaTime);
+
+            Assert.That(Scope(late).Resolve<FlightLoop>().Time, Is.EqualTo(clock.Time).Within(1e-6));
+        }
+
+        [Test]
         public void TheRegisteredPilot_TakesOverTheGuestsDrone_AndBothAreTracked()
         {
             Tap(keyboard.rKey);
@@ -324,7 +362,7 @@ namespace DroneFlightModule.Composition.Tests
         [Test]
         public void TheConsole_DoesWhatTheKeysDo()
         {
-            var console = new FleetConsole(Pilot, fleet.Resolve<DisconnectableInputProvider>(), drones);
+            var console = fleet.Resolve<IFleetConsole>();
 
             console.SelectPilot(FleetInstaller.RegisteredPilot.Id);
             console.RequestFlight(AirborneDrone);
@@ -399,7 +437,6 @@ namespace DroneFlightModule.Composition.Tests
             var recorder = airborne.Resolve<TelemetryRecorder>();
             Assert.That(sink.TryGetLatest(AirborneDrone, out var latest), Is.True);
             // 50 ticks of 0.02 s at 10 samples per second: the first tick, then every fifth, so the last at 0.92 s.
-            Assert.That(recorder.History, Has.Count.EqualTo(10));
             Assert.That(latest.Time, Is.EqualTo(0.92).Within(1e-6));
             Assert.That(latest.Time, Is.EqualTo(recorder.Latest.Time));
             Assert.That(sink.TryGetLatest(GroundedDrone, out _), Is.True);
