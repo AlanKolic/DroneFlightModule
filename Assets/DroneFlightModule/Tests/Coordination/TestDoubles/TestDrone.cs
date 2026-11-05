@@ -27,7 +27,7 @@ namespace DroneFlightModule.Coordination.Tests
                 new VelocityFlightController(DroneConfig.Default, VelocityControllerConfig.Default),
                 new FlightSupervisor(Gate, DroneConfig.Default, FailsafeConfig.Default),
                 new DroneIntegrator(DroneConfig.Default, terrain),
-                new RangefinderAltitudeSensor(terrain),
+                new RangefinderAltitudeSensor(terrain, RangefinderConfig.Default),
                 start);
             Fleet = new FleetDrone(Id, Router, Holder, new FlightLoopStatus(Loop));
         }

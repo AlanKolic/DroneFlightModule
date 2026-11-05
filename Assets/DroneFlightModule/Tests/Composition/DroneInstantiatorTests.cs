@@ -28,7 +28,7 @@ namespace DroneFlightModule.Composition.Tests
         {
             controls = InputActionAsset.FromJson(File.ReadAllText(ControlsPath));
             var builder = new ContainerBuilder();
-            new FleetInstaller(GroundHeight, controls, TimeSpan.Zero, CancellationToken.None, null, null, SpawnStep).Install(builder);
+            new FleetInstaller(new TestFleetSettings().Create(GroundHeight, TimeSpan.Zero, SpawnStep), controls, CancellationToken.None, null, null).Install(builder);
             fleet = builder.Build();
             prefab = new GameObject("Drone Prefab", typeof(DroneView)).GetComponent<DroneView>();
             drones = Instantiator(prefab);
@@ -100,6 +100,31 @@ namespace DroneFlightModule.Composition.Tests
         }
 
         [Test]
+        public void ADroneWithAGivenId_GetsAViewFromThePrefabWhereItSpawns()
+        {
+            var id = new DroneId("scout");
+
+            drones.AddDrone(id, new Vector3(-4f, GroundHeight, 2f));
+
+            Assert.That(drones.TryGetView(id, out var view), Is.True);
+            Assert.That(view.name, Is.EqualTo("scout"));
+            Assert.That(view.transform.position, Is.EqualTo(new Vector3(-4f, GroundHeight, 2f)));
+            Assert.That(Loop(id).State.Position, Is.EqualTo(new Vec3(-4f, GroundHeight, 2f)));
+        }
+
+        [Test]
+        public void ATakenId_BuildsNoViewFromThePrefab()
+        {
+            var id = new DroneId("drone-1");
+            drones.AddDrone(id, Vector3.zero, null);
+            int views = UnityEngine.Object.FindObjectsByType<DroneView>(FindObjectsSortMode.None).Length;
+
+            Assert.Throws<ArgumentException>(() => drones.AddDrone(id, Vector3.zero));
+
+            Assert.That(UnityEngine.Object.FindObjectsByType<DroneView>(FindObjectsSortMode.None), Has.Length.EqualTo(views));
+        }
+
+        [Test]
         public void NewIds_SkipTakenOnes()
         {
             drones.AddDrone(new DroneId("drone-2"), new Vector3(0f, GroundHeight, 0f), null);
@@ -113,6 +138,7 @@ namespace DroneFlightModule.Composition.Tests
             var withoutPrefab = Instantiator(null);
 
             Assert.Throws<InvalidOperationException>(() => withoutPrefab.AddDrone());
+            Assert.Throws<InvalidOperationException>(() => withoutPrefab.AddDrone(new DroneId("scout"), Vector3.zero));
             Assert.That(Registry.Drones, Is.Empty);
         }
 

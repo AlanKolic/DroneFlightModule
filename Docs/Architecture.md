@@ -25,30 +25,25 @@ flowchart TB
     subgraph Roots["Composition roots and UI (Unity)"]
         Comp["Composition<br/>fleet scope, drone scopes, runner"]
         UI["UI<br/>Fleet dashboard, child scope"]
-        Mobile["Mobile app<br/>Sticks, connect screen"]
     end
     subgraph Adapters["Unity adapters"]
-        Unity["Unity<br/>Input actions, view, HUD, UDP"]
+        Unity["Unity<br/>Input actions, devices, view, HUD"]
     end
     subgraph Services["Services (pure C#)"]
         Coord["Coordination"]
         Auth["Authorization"]
         Pilots["Pilots"]
         Tele["Telemetry"]
-        Host["Remote.Host"]
-        Proto["Remote.Protocol"]
     end
     Core["Core (zero dependencies)<br/>Loop, gates, supervisor, router"]
 
-    Comp --> Unity & Coord & Tele & Host
+    Comp --> Unity & Coord & Tele
     UI --> Tele & Coord
-    Mobile --> Proto
-    Unity --> Core & Proto
+    Unity --> Core
     Coord --> Auth & Pilots & Core
     Auth --> Core
     Pilots --> Core
     Tele --> Core
-    Host --> Coord & Proto
 ```
 
 | Assembly | References | Purpose |
@@ -58,10 +53,8 @@ flowchart TB
 | `DroneFlightModule.Authorization` | Core | Providers, revocable grants, per-drone grant holder and gate |
 | `DroneFlightModule.Coordination` | Core, Pilots, Authorization | `FlightCoordinator`, pilot sessions, drone registry, assignment policy, stats recording |
 | `DroneFlightModule.Telemetry` | Core | Recorder per drone sampling `FlightLoop.Ticked`, ring buffer, `ITelemetrySink` and the in-memory sink of the latest samples |
-| `DroneFlightModule.Remote.Protocol` | nothing | Messages, binary codec, `ITransport`, loopback transport |
-| `DroneFlightModule.Remote.Host` | Core, Coordination, Remote.Protocol | Remote pilot sessions, `RemoteInputProvider`, link-loss timeout (network telemetry sink later) |
-| `DroneFlightModule.Unity` | Core, Remote.Protocol, Input System | Input-actions provider (keyboard and gamepad), smoothed drone view, debug HUD, follow camera, Core-to-Unity conversions, UDP transport |
-| `DroneFlightModule.Composition` | everything except UI, plus VContainer and Input System | Fleet `LifetimeScope`, one child scope per drone, installers, the local pilot, `FleetKeys` (every non-flight key), the `IFleetConsole` contract a control panel drives, `FlightLoopRunner` and `SimulationClockRunner` (the only places Unity's clock reaches the simulation) |
+| `DroneFlightModule.Unity` | Core, Input System | Input-actions provider (keyboard and gamepad), smoothed drone view, debug HUD, follow camera, Core-to-Unity conversions |
+| `DroneFlightModule.Composition` | everything except UI, plus VContainer and Input System | Fleet `LifetimeScope`, one child scope per drone, installers, the config assets and the `FleetSettings` they map to, the local pilot, `FleetKeys` (every non-flight key), the `IFleetConsole` contract a control panel drives, `FlightLoopRunner` and `SimulationClockRunner` (the only places Unity's clock reaches the simulation) |
 | `DroneFlightModule.UI` | Core, Coordination, Pilots, Telemetry, Composition, VContainer, Input System | Fleet dashboard and control panel (IMGUI) in their own child scope |
 | `DroneFlightModule.Editor` | Core, Unity, Composition, VContainer | Editor-only tools, such as the menu item that builds the prototype scene |
 | `*.Tests` (one per assembly) | Its target + NUnit | Edit-mode tests |
@@ -84,7 +77,7 @@ flowchart TB
     Sup --> Integ
     Integ --> Ticked["Ticked event<br/>FlightFrame snapshot"]
     Integ -. new state feeds next tick .-> Sense
-    Ticked --> Tele["Telemetry recorder<br/>dashboard, phone sink"]
+    Ticked --> Tele["Telemetry recorder<br/>dashboard sink"]
     Integ -. read each frame .-> View["Cube view"]
 ```
 
@@ -131,8 +124,8 @@ directly. Flight logic (supervisor, telemetry, dashboard) only sees sensor readi
 - **`IAltitudeSensor { AltitudeReading Read(in DroneState truth, double time) }`**, where
   `AltitudeReading { HeightAboveGround, IsValid, Timestamp }`.
 - **`RangefinderAltitudeSensor`** measures height above the terrain directly below the drone.
-  - It has a configurable max range (for example 10 m), above which the reading is invalid.
-  - It has a configurable update rate, and between samples returns the last reading.
+  - It is configured by a `RangefinderConfig`: a max range (10 m by default), above which the
+    reading is invalid, and an update rate (20 Hz), between samples returning the last reading.
   - It has no noise. Noise can be added later as a decorator (`NoisyAltitudeSensor` wrapping any
     `IAltitudeSensor`) with a seeded random source, without changing the rangefinder.
 - In Unity, the scene shows a plane primitive at the terrain height. It is a visual only.
@@ -210,9 +203,8 @@ instead of carrying pilot data around.
 
 ```mermaid
 flowchart TB
-    Kb["Keyboard session<br/>local origin"] --> Coord["Flight coordinator<br/>registry, provider, policy"]
-    Phone["Phone app"] --> Host["Remote host<br/>remote session"]
-    Host --> Coord
+    Kb["Keyboard station<br/>local sessions"] --> Coord["Flight coordinator<br/>registry, provider, policy"]
+    Pad["Gamepad station<br/>one per pad, local sessions"] --> Coord
     Coord --> Guest["Guest provider<br/>local origin only"]
     Coord --> SimServer["Simulated server provider<br/>latency, revocation"]
     Coord -- assign / revoke --> Holder["Drone grant holder<br/>one per drone"]
@@ -229,7 +221,7 @@ flowchart TB
   in the composition root. Until the grant holder exists, the installer registers
   `PilotInControlGate` on its own.
 - `PilotInControlGate` passes while the router has an active input source that reports a
-  connected pilot. A phone whose link drops stops reporting one.
+  connected pilot. An unplugged gamepad stops reporting one.
 - `IInputProvider { bool IsConnected; ControlInput Read() }`. `IsConnected` is how a source
   reports whether its pilot can still reach it.
 - `InputRouter`, one per drone, routes to the input provider of the session assigned to that
@@ -263,7 +255,7 @@ flowchart TB
     `TaskDelay` for real time), approves or denies per pilot from either origin, and can
     `Revoke(pilot)` at any time. The policy is read when the answer arrives, so a change during
     the latency counts. `Approve` and `Deny` change only later answers; a denied pilot keeps a
-    live grant until `Revoke`. It is not guest mode. Phones always use it, and the local pilot can use it
+    live grant until `Revoke`. It is not guest mode. Local pilots use it
     to sign in as a registered pilot.
   - Both cancel pending requests and revoke every grant on `Dispose()`; later requests fail with
     `ObjectDisposedException`. A null request throws synchronously from both.
@@ -283,7 +275,7 @@ One coordinator per simulator manages every drone and every pilot session. It de
 drone a pilot gets, and whether that means taking a drone from someone else.
 
 - **`PilotSession(PilotId, Origin, IAuthorizationProvider, IInputProvider)`** is created when a
-  pilot connects (keyboard or phone). Input belongs to the pilot, not to the drone, so a session
+  pilot connects (from a keyboard, a gamepad or any later input). Input belongs to the pilot, not to the drone, so a session
   can be moved between drones without registering anything again.
 - **`DroneRegistry`** holds the fleet as `FleetDrone(DroneId, InputRouter, DroneGrantHolder,
   IDroneStatus)`, in the order drones joined, which the policy also uses. Drones can join at any
@@ -292,7 +284,7 @@ drone a pilot gets, and whether that means taking a drone from someone else.
   drone that is no longer in the fleet. `FlightLoopStatus` reads the
   status (grounded or not) straight from a drone's `FlightLoop`.
 - **One pilot, one drone.** A pilot flies at most one drone, whichever session they use: a
-  second session for the same pilot, say a phone, moves their one drone or takes it over. The
+  second session for the same pilot, say on a gamepad, moves their one drone or takes it over. The
   coordinator's assignments are the only record of it; grant holders only gate and the stats
   recorder only times flights.
 - **`RequestFlightAsync(session, DroneId? preferred, CancellationToken)`** runs this pipeline:
@@ -311,13 +303,13 @@ drone a pilot gets, and whether that means taking a drone from someone else.
   else, and lets go of the first one only once the second is secured, in the same step. A
   denied request leaves them on the drone they fly. The released drone behaves as after any
   release: an airborne one holds, then lands. Asking for the drone they already fly, or for any
-  drone, only routes it to the requesting session, for example after a phone reconnects; the
+  drone, only routes it to the requesting session, for example when they pick up a gamepad; the
   flight goes on.
 - **Events:** `Assigned`, `Released { Drone, Pilot, Reason }`,
   `TookOver { Drone, Pilot, FromPilot }` and `Denied { Pilot, Preferred, Denial, Message }`. A
   cancelled request raises none. Release reasons are `Released`, `SessionEnded`,
   `Revoked`, `Switched` and `Removed`. A takeover is not a release: the preempted pilot is `FromPilot`.
-  Pilot stats, telemetry, the dashboard and the remote host subscribe to them. Events are
+  Pilot stats, telemetry and the dashboard subscribe to them. Events are
   raised only once a change is complete, so a listener always sees the new state, and each
   listener is called on its own: one that throws is reported through `ListenerFailed`, which
   the composition logs, and can neither interrupt a switch nor reach whoever revoked a grant.
@@ -342,7 +334,7 @@ of leaving a pilot half switched.
 - The pilot who lost the drone is reported as `FromPilot` in the `TookOver` event.
 
 **Releasing a drone:**
-- The pilot releases it (a key, or a button in the app), or the session ends.
+- The pilot releases it (a key, or a button in the control panel), or the session ends.
 - The provider revokes the pilot's grant.
 - The pilot switches to another drone.
 - The drone leaves the fleet. A request still waiting for it is then denied as `UnknownDrone`.
@@ -367,25 +359,27 @@ break the Core boundary. All async code uses `Task` and `CancellationToken`.
 - No `async void` except at the Unity edge (input or button handlers). There it is wrapped in
   try/catch: cancellation is expected, anything else is logged.
 - Latency comes from an injected delay (defaulting to `Task.Delay`), so tests control time.
-- Socket receive loops never call Unity code. They write into a thread-safe latest-value slot
-  that `FixedTick` reads.
 
 ## Fleet in Unity
 
-- **`FleetLifetimeScope`** is the scene's composition root. `FleetInstaller` registers what the
-  fleet shares: frame and failsafe configs, the ground, the pilot registry (the guest plus one
-  registered pilot, Ace), stats, both providers, the coordinator, a fleet-wide
+- **`FleetLifetimeScope`** is the scene's composition root. It reads its configuration from
+  one `FleetSettingsAsset` (see "Config assets" below) and hands the mapped `FleetSettings` to
+  `FleetInstaller`, which registers what the fleet shares: the frame, controller, rangefinder,
+  failsafe and telemetry configs, the ground, the pilot registry (the guest plus the roster's
+  pilots, Ace by default), stats, both providers, the coordinator, a fleet-wide
   `SimulationClock`, the local pilot, their keys, the console and the drone instantiator. The
-  installer is kept apart from the scope, so tests build the whole fleet without a scene.
+  installer is kept apart from the scope, so tests build the whole fleet without a scene, from
+  `FleetSettings` they make themselves.
 - **`DroneInstantiator`** adds and removes drones. Each drone
   gets its own child scope of the fleet's container: `DroneInstaller` registers that drone's
   loop, router, controller, sensor, supervisor, grant holder and the gate that combines them,
   and the instantiator adds a `FlightLoopRunner`. Shared objects come from the fleet scope. It
   also binds the drone's view and adds its HUD box. Each drone's loop starts at the fleet's
   simulation time, so a drone added later shares the timebase of those already flying and its
-  telemetry lines up with theirs. The fleet scope only wires: it has the instantiator add the
-  drones from its list (id, spawn position, view). Being a plain class on the container, it is
-  tested without a scene.
+  telemetry lines up with theirs. The fleet scope only wires: it has the instantiator build the
+  layout's drones (id and spawn position) from the drone prefab, and points the camera at the
+  first. The scene holds no drones of its own. Being a plain class on the container, the
+  instantiator is tested without a scene.
 - **Joining the fleet.** The fleet starts empty, and each drone scope adds its `FleetDrone` to
   the `DroneRegistry` once built, at startup or later. A request decides on the fleet as it is
   once authorization completes, so a drone that joins meanwhile is part of the decision.
@@ -399,11 +393,12 @@ break the Core boundary. All async code uses `Task` and `CancellationToken`.
   Debug/RemoveDrone key (M) removes the newest drone, and the next added one goes one step past
   the last drone it added.
   Disposing the instantiator, with the fleet, disposes every drone scope and destroys the views
-  it built from the prefab; views from the scene stay with the scene.
+  it built from the prefab; a view handed to it, as tests do, stays with its owner.
 - **Input belongs to the local pilot**, not to a drone: one copy of the controls asset per fleet
   scope, one keyboard and gamepad provider, and a link that can be cut wrapping it.
 - **`LocalPilotControls`** holds a session on that input for every pilot in the registry: the
-  guest through local guest mode, everyone else through the simulated server (0.5 s latency).
+  guest through local guest mode, everyone else through the simulated server (0.5 s latency by
+  default).
   Each session gets its own `LocalPilotInput` over the shared keyboard: only the selected
   pilot's reads the keys, and the others stay connected with their hands off, so a pilot you
   switch away from keeps their drone, hovering, and the next pilot can take it over. A cut
@@ -445,8 +440,7 @@ break the Core boundary. All async code uses `Task` and `CancellationToken`.
 - **`ITelemetrySink { Write(sample); End(drone); }`.** `End` says a drone's stream finished:
   disposing a recorder, as happens when its drone is removed, ends it in every sink.
 - **`InMemoryTelemetrySink`**, one for the fleet, keeps the latest sample of every drone still
-  streaming. The dashboard reads it; a
-  network sink for the phone is one more sink in each drone's list.
+  streaming. The dashboard reads it; any later sink is one more in each drone's list.
 - The **fleet dashboard** (IMGUI, `FleetDashboard`), docked to the right of the screen, shows
   for each drone:
   - the assigned pilot and their priority
@@ -482,43 +476,60 @@ break the Core boundary. All async code uses `Task` and `CancellationToken`.
   remaining tests pass. The dashboard's GameObject is left with missing scripts, which Unity
   only warns about; rebuilding the scene drops it.
 
-## Mobile remote control
+## Config assets
 
-- **Protocol** (shared, pure C#):
-  - `Hello { PilotId, ProtocolVersion }`
-  - `RequestFlight { DroneId? }` (empty means any drone)
-  - `FlightAssigned { DroneId }`
-  - `FlightDenied { Reason }`
-  - `Preempted { DroneId, ByPilot }`
-  - `ReleaseFlight`
-  - `ControlPacket { Seq, Move, Yaw }` at about 30 Hz
-  - `TelemetryPacket` at about 10 Hz (reserved; added with telemetry to the phone later)
-  - `Heartbeat`
-  - A binary codec, and a version check during the handshake.
-- **Transport:** `ITransport`, with a loopback version for tests and UDP (`System.Net.Sockets`)
-  for real use.
-  - Every message except control packets is acknowledged and retried.
-  - Control packets use latest-wins, and out-of-order sequence numbers are dropped.
-- **Host:**
-  - On `Hello`, the host creates a remote `PilotSession` that uses the simulated server
-    provider, with a `RemoteInputProvider` as its input.
-  - It forwards `RequestFlight` and `ReleaseFlight` to the coordinator, and sends the
-    coordinator's results back to the phone, plus `Preempted` when a `TookOver` event names the
-    phone's pilot as `FromPilot`.
-  - With no packet for about 0.5 s, the input reports no connected pilot. The pilot gate closes
-    and the normal hold-then-descend failsafe follows.
-- **App:** the same Unity project with a separate scene and a Build Profile each for iOS and
-  Android, and its own small composition root. It ships without the flight-logic assemblies.
-- **First version is controls only:**
-  - connect screen
-  - sticks
-  - "Request flight" and "Release" buttons
-  - the assigned drone, and a message when denied or preempted
+The values the scene runs with live in ScriptableObject assets in `Assets/DroneFlightModule/Config`,
+so they can be tuned in the inspector without touching code. Core keeps its plain config types,
+their validation and their `Default`s, and never sees Unity.
 
-  Telemetry to the phone comes later as a new sink and a readout, with no changes to Core or
-  the existing telemetry code.
-- **Platform notes:** iOS needs `NSLocalNetworkUsageDescription`, and Android needs `INTERNET`.
-  The phone and the simulator must be on the same Wi-Fi.
+- **One asset per Core config**, in Composition: `DroneFrameAsset` (`DroneConfig`),
+  `VelocityControllerAsset`, `RangefinderAsset`, `FailsafeAsset` and `TelemetryAsset`. Each holds
+  only serialized fields, defaulting to the Core defaults, and `ToConfig()` builds the Core type,
+  whose constructor validates them, so an invalid value fails the same way in the scene as in
+  code.
+- **`PilotRosterAsset`** lists the registered pilots (id, name, priority) as `PilotProfile`s; the
+  registry adds the guest and checks the roster as a whole. Every registered pilot signs in
+  through the simulated server.
+- **`SimulatedServerAsset`** holds the server's latency, and **`FleetLayoutAsset`** the ground
+  height, the drones the fleet starts with and the step between drones added later.
+- **`FleetSettingsAsset`** points at one of each and maps them all to `FleetSettings`, a plain
+  object `FleetInstaller` takes. The fleet scope has a single settings field. A missing part
+  fails with its name instead of falling back to defaults, so the scene never runs on values it
+  wasn't given.
+- Tests and headless runs keep using the Core defaults; the tests check that new assets match
+  them, that edits and invalid values reach the Core types, and that the shipped settings map
+  to a valid fleet.
+
+## Input devices
+
+The fleet doesn't know where input comes from. A pilot connects through a session, and a
+session flies with an `IInputProvider`; whether that is a keyboard, a gamepad or a later device
+matters only to the composition root that built it.
+
+- **One pilot station per input device.** `PilotStation` (Composition) is today's
+  `LocalPilotControls` made per device: its own copy of the controls asset restricted to its
+  device (`InputActionAsset.devices` and the device's binding group), its own cuttable link, its
+  own sessions for every registered pilot and its own selected pilot. Stations never see each
+  other. Two stations meet only in the coordinator, under its usual rules, so a gamepad pilot
+  taking over the keyboard pilot's drone is an ordinary takeover.
+- **`InputDeviceStations`** (Composition) creates the keyboard's station at start and one for
+  each gamepad already connected or plugged in later, from `InputSystem.onDeviceChange`. Each
+  station starts as the guest, like the keyboard does today.
+- **Unplugging is link loss.** A station's input reports its pilot as connected only while its
+  device is. Unplugging a pad closes the pilot gate, so its drone holds and then lands, and the
+  sessions stay; plugging the same pad back in resumes them within the hold budget. Disposing
+  the fleet disposes every station.
+- **Same pilot on two devices:** the coordinator's one-pilot-one-drone rule applies, so the
+  latest request moves the pilot's drone to that device.
+- **Station keys and fleet keys.** Each station binds the Flight and Fleet maps and its link
+  toggle to its own device. Adding and removing drones and the dashboard are fleet-wide and stay
+  on the keyboard. Gamepad bindings: sticks as today, South to request any drone, D-pad left, up
+  and right for drones 1 to 3, East to release, Start to switch pilot, North to revoke the grant,
+  Select to cut the link.
+- **UI:** the HUD shows a box per station, the control panel adds a station dropdown and drives
+  the chosen one, and the camera follows that station's drone.
+- **A new device type** is a new binding group and one more case in `InputDeviceStations`. No
+  coordinator, gate or flight code changes.
 
 ## Testing strategy
 
@@ -550,6 +561,8 @@ break the Core boundary. All async code uses `Task` and `CancellationToken`.
   - "any drone" while flying keeps the current drone
   - a second session for a pilot moves their one drone
   - a throwing listener is reported, can't interrupt a switch and can't reach a revoker
+- **Config assets:** new assets matching the Core defaults, edits and invalid values reaching
+  the Core types, a missing part named, and the shipped settings making a valid fleet.
 - **Fleet** (the real container, two drone scopes, real key presses through the Input System
   test fixture): drones join the fleet in order, one added while the fleet is in use can be
   flown, a taken id is refused, removing the guest's drone releases it and tells them, free
@@ -572,11 +585,14 @@ break the Core boundary. All async code uses `Task` and `CancellationToken`.
   period, the first tick sampled, the ring buffer, sink fan-out, a failing sink reported
   without breaking the flight or other sinks, the stream ending on dispose, and the in-memory
   sink's latest samples.
-- **Remote:**
-  - the full loopback path from the client through the coordinator to `FlightLoop`
-  - a link drop that leads to hold and then descent
-  - `Preempted` delivered to the phone
-- **Device only:** the UDP transport and the touch UI.
+- **Input devices** (the Input System test fixture adding and removing virtual gamepads):
+  - a pad plugged in gets its own station, as the guest
+  - the keyboard and a pad fly two drones at once, each moving only its own
+  - two pads stay independent
+  - unplugging a pad holds and then lands its drone, and plugging it back in resumes it
+  - the same pilot on two devices moves their one drone
+  - a pad pilot takes over the keyboard pilot's drone by priority
+  - unplugging during a pending request, and disposal disabling every station's controls
 
 ## Commit plan
 
@@ -611,26 +627,19 @@ Each commit is small, logically separate and includes its own tests.
     keys, destroy and exit cancellation.
 12. **Telemetry:** assembly, recorder per drone, in-memory sink.
 13. **Dashboard:** UI assembly, child scope, fleet view, deletion check.
-14. **Config assets:** ScriptableObjects in the Unity layer for the default values: drone frame
-    (`DroneConfig`), velocity controller, rangefinder, supervisor timings, fleet layout,
-    simulated server latency and the pilot roster. Each asset only holds serialized fields and maps them to the plain Core
-    type, so Core keeps its constructors and validation and never sees Unity. The composition
-    scopes take the assets as serialized fields and register the mapped Core objects in place of
-    the hard-coded defaults. Tests check that the shipped assets map to valid Core config.
-15. **Remote protocol:** messages, codec, `ITransport`, loopback.
-16. **Remote host:** remote sessions, `RemoteInputProvider`, link-loss timeout, coordinator
-    requests and results, end-to-end loopback test.
-17. **UDP transport:** threading and cancellation, wired into the simulator scene.
-18. **Mobile app:** scene, composition root, connect screen, sticks, request and release, iOS
-    and Android Build Profiles.
-
-Later: **telemetry to the phone** (network sink, `TelemetryPacket`, readout).
+14. **Config assets:** ScriptableObjects in Composition for drone frame, velocity controller,
+    rangefinder (with a new Core `RangefinderConfig`), failsafe, telemetry, pilot roster,
+    simulated server latency and fleet layout, bundled by `FleetSettingsAsset` into the plain
+    `FleetSettings` the installer takes. The scene builds its drones from the layout and the
+    prefab. Tests check the mapping and that the shipped assets make a valid fleet.
+15. **Gamepad pilots:** `PilotStation` per input device, `InputDeviceStations` watching device
+    changes, unplugging as link loss, the remaining gamepad bindings, a station box in the HUD
+    and a station dropdown in the control panel, tests with virtual gamepads.
 
 ## Decisions
 
-- **Mobile app:** a Unity build from this project.
-- **Mobile platforms:** iOS and Android, both supported from the first version.
-- **Phone telemetry:** not in the first version; controls only.
+- **Second input:** gamepads, each its own pilot station on the simulator machine, in place of a
+  phone remote. There is no network remote.
 - **Altitude sensor:** a rangefinder only, measuring height above ground.
 - **Sensor noise:** zero for now. Noise can be added later as a decorator.
 - **Guest mode:** reserved for the local machine and keyboard. It goes through the same
@@ -642,6 +651,6 @@ Later: **telemetry to the phone** (network sink, `TelemetryPacket`, readout).
 - **Equal priority with no free drone:** denied. There is no queue for now.
 - **Takeover:** control is handed over instantly, even mid-flight. The drone doesn't need to
   land or hold first.
-- **Default config values:** hard-coded defaults in Core (such as `DroneConfig.Default`) until
-  the config assets step, then ScriptableObject assets in Unity. Tests and headless runs keep using the
-  Core defaults.
+- **Config values:** ScriptableObject assets in Composition for the scene, mapped to the plain
+  Core types; the Core defaults (such as `DroneConfig.Default`) stay for tests and headless runs,
+  and the assets start from them.

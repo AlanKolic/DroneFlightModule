@@ -10,13 +10,9 @@ namespace DroneFlightModule.Core
     /// </summary>
     public sealed class RangefinderAltitudeSensor : IAltitudeSensor
     {
-        public const float DefaultMaxRange = 10f;
-        public const float DefaultUpdateRate = 20f;
-
         // Absorbs float drift when the tick step divides the sample period exactly.
         private const double TimeTolerance = 1e-6;
 
-        private readonly ArgumentGuard guard = new ArgumentGuard();
         private readonly ITerrain terrain;
         private readonly float maxRange;
         private readonly double samplePeriod;
@@ -25,14 +21,15 @@ namespace DroneFlightModule.Core
         private double nextSampleTime;
         private AltitudeReading last;
 
-        public RangefinderAltitudeSensor(
-            ITerrain terrain,
-            float maxRange = DefaultMaxRange,
-            float updateRate = DefaultUpdateRate)
+        public RangefinderAltitudeSensor(ITerrain terrain, RangefinderConfig config)
         {
             this.terrain = terrain ?? throw new ArgumentNullException(nameof(terrain));
-            this.maxRange = guard.RequirePositive(maxRange, nameof(maxRange));
-            samplePeriod = 1.0 / guard.RequirePositive(updateRate, nameof(updateRate));
+            if (config == null)
+            {
+                throw new ArgumentNullException(nameof(config));
+            }
+            maxRange = config.MaxRange;
+            samplePeriod = 1.0 / config.UpdateRate;
         }
 
         public AltitudeReading Read(in DroneState truth, double time)

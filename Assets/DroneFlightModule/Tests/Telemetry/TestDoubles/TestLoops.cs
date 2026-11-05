@@ -29,7 +29,7 @@ namespace DroneFlightModule.Telemetry.Tests
                 new VelocityFlightController(DroneConfig.Default, VelocityControllerConfig.Default),
                 new FlightSupervisor(new OpenGate(), DroneConfig.Default, FailsafeConfig.Default),
                 new DroneIntegrator(DroneConfig.Default, terrain),
-                new RangefinderAltitudeSensor(terrain),
+                new RangefinderAltitudeSensor(terrain, RangefinderConfig.Default),
                 DroneState.At(new Vec3(0f, 5f, 0f)));
         }
 

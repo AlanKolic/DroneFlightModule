@@ -15,6 +15,9 @@ The full design, including the parts that are planned but not built yet, is in
 - Open `Assets/Scenes/DronePrototype.unity` and press Play.
 - If the scene is missing or out of date, run **DroneFlightModule → Create Prototype Scene**. It
   rebuilds the scene from code.
+- Tuning values (drone frame, controller, rangefinder, failsafe, telemetry, pilots, server
+  latency, fleet layout) are ScriptableObject assets in `Assets/DroneFlightModule/Config`;
+  `FleetSettings` points at the rest.
 - Tests: **Window → General → Test Runner → EditMode → Run All**.
 
 ## Controls
@@ -102,7 +105,7 @@ share: the coordinator, pilots and stats, the providers, and the local pilot's i
 | `Authorization` | Core | Providers (local guest, simulated server that can revoke), revocable grants, per-drone grant holder gate |
 | `Telemetry` | Core | A recorder per drone sampling its flight at 10 Hz, sinks (a fleet-wide in-memory sink of the latest samples) |
 | `Coordination` | Core, Pilots, Authorization | `FlightCoordinator`: pilot sessions, drone registry, request pipeline, priority assignment policy, takeover and release, stats from its events |
-| `Composition` | everything above, VContainer, Input System | Fleet scope and installer, `DroneInstantiator` (adds and removes drones, one child scope each), the local pilot, `FleetKeys` (every non-flight key), the `IFleetConsole` a panel drives, runners (the only places Unity's clock reaches the sim) |
+| `Composition` | everything above, VContainer, Input System | Fleet scope and installer, config assets mapped to `FleetSettings`, `DroneInstantiator` (adds and removes drones, one child scope each), the local pilot, `FleetKeys` (every non-flight key), the `IFleetConsole` a panel drives, runners (the only places Unity's clock reaches the sim) |
 | `UI` | Core, Pilots, Coordination, Telemetry, Composition, VContainer, Input System | Fleet dashboard and control panel in their own child scope; nothing references it, so it can be deleted |
 | `Editor` | the above | Menu item that builds the prototype scene |
 | `*.Tests` | their target | EditMode tests |
@@ -110,7 +113,7 @@ share: the coordinator, pilots and stats, the providers, and the local pilot's i
 **Extension points.** Each is an interface with a constructor-injected implementation, so a new
 variant is a new class plus one registration in `DroneInstaller`:
 
-- `IInputProvider`: input sources (Input System actions today; phone remote planned)
+- `IInputProvider`: input sources (Input System actions today; one pilot station per gamepad planned)
 - `IFlightController`: flight models (`VelocityFlightController`)
 - `IFlightGate`: conditions for flight (`PilotInControlGate`, combined with `AllOfFlightGate`)
 - `IAltitudeSensor`, `ITerrain`: sensors and ground
@@ -160,7 +163,7 @@ variant is a new class plus one registration in `DroneInstaller`:
 
 ## Tests
 
-- **Core**: 122 tests run headless in milliseconds. Unit tests for every class, plus
+- **Core**: 123 tests run headless in milliseconds. Unit tests for every class, plus
   closed-loop flights: hover, climb rate, top speed, hold for exactly 10 s, braking to a stop
   when the link drops at full speed, flared landing below 0.3 m/s, a closed gate on the ground
   blocking takeoff, sampling that averages its rate on any tick step, and a loop that starts
@@ -196,7 +199,8 @@ variant is a new class plus one registration in `DroneInstaller`:
   on simulation time, drones added later sharing the fleet's timebase, telemetry reaching the
   fleet sink, and disposal disabling the controls. The drone instantiator on its own: ids and
   spawn spots from the prefab, refused ids, a late drone starting at the fleet's time, removal
-  and disposal.
+  and disposal. The config assets: defaults matching Core, edits and invalid values reaching
+  the Core types, a missing part named, and the shipped settings making a valid fleet.
 
 ## Status and roadmap
 
@@ -206,10 +210,10 @@ the pilot registry with stats, authorization (guest and simulated server provide
 grants, the grant holder gate), the flight coordinator (sessions, priority assignment and
 takeover, switching, release, stats), and the fleet scene (a fleet scope with one child scope
 per drone, three drones and more added or removed at runtime, the local pilot's keys),
-telemetry (a recorder per drone, a fleet-wide in-memory sink), and the deletable fleet
-dashboard.
+telemetry (a recorder per drone, a fleet-wide in-memory sink), the deletable fleet
+dashboard, and ScriptableObject config assets for every tuning value.
 
-Planned, in order (details in the architecture doc): ScriptableObject config assets, and a phone remote (protocol, host, UDP, iOS and Android app).
+Planned (details in the architecture doc): gamepad pilots: one pilot station per input device, so the keyboard and each gamepad fly as separate pilots, and unplugging a pad counts as link loss.
 
 ## Known limitations
 

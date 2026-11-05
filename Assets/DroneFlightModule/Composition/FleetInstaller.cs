@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using DroneFlightModule.Authorization;
 using DroneFlightModule.Coordination;
@@ -15,53 +16,47 @@ using VContainer.Unity;
 namespace DroneFlightModule.Composition
 {
     /// <summary>
-    /// Registers what the whole fleet shares: frame and failsafe configs, the ground, pilots and
-    /// their stats, both authorization providers, the coordinator, the simulation clock, the
-    /// telemetry config and the fleet-wide in-memory telemetry sink, the pilot at this machine and
+    /// Registers what the whole fleet shares: the configs from the <see cref="FleetSettings"/>,
+    /// the ground, pilots and their stats, both authorization providers, the coordinator, the
+    /// simulation clock, the fleet-wide in-memory telemetry sink, the pilot at this machine and
     /// their keys, the console a control panel drives, and the instantiator that adds and removes
-    /// drones. The fleet starts empty: each drone's child scope adds its own objects with
-    /// <see cref="DroneInstaller"/> and joins it, at startup or later. Kept apart from the scope
-    /// so tests can build the fleet without a scene; they pass no prefab or HUD.
+    /// drones. Every registered pilot signs in through the simulated server. The fleet starts
+    /// empty: each drone's child scope adds its own objects with <see cref="DroneInstaller"/> and
+    /// joins it, at startup or later. Kept apart from the scope so tests can build the fleet
+    /// without a scene; they pass no prefab or HUD.
     /// </summary>
     public sealed class FleetInstaller : IInstaller
     {
-        public static readonly PilotProfile RegisteredPilot = new PilotProfile(new PilotId("ace"), "Ace", 50);
-
-        private readonly float groundHeight;
+        private readonly FleetSettings settings;
         private readonly InputActionAsset controls;
-        private readonly TimeSpan serverLatency;
         private readonly CancellationToken lifetime;
         private readonly DroneView dronePrefab;
         private readonly FlightDebugHud hud;
-        private readonly Vector3 spawnStep;
 
         public FleetInstaller(
-            float groundHeight,
+            FleetSettings settings,
             InputActionAsset controls,
-            TimeSpan serverLatency,
             CancellationToken lifetime,
             DroneView dronePrefab,
-            FlightDebugHud hud,
-            Vector3 spawnStep)
+            FlightDebugHud hud)
         {
-            this.groundHeight = groundHeight;
+            this.settings = settings ?? throw new ArgumentNullException(nameof(settings));
             this.controls = controls;
-            this.serverLatency = serverLatency;
             this.lifetime = lifetime;
             this.dronePrefab = dronePrefab;
             this.hud = hud;
-            this.spawnStep = spawnStep;
         }
 
         public void Install(IContainerBuilder builder)
         {
-            builder.RegisterInstance(DroneConfig.Default);
-            builder.RegisterInstance(FailsafeConfig.Default);
-            builder.RegisterInstance(VelocityControllerConfig.Default);
-            builder.RegisterInstance<ITerrain>(new FlatTerrain(groundHeight));
+            builder.RegisterInstance(settings.Frame);
+            builder.RegisterInstance(settings.Failsafe);
+            builder.RegisterInstance(settings.VelocityController);
+            builder.RegisterInstance(settings.Rangefinder);
+            builder.RegisterInstance<ITerrain>(new FlatTerrain(settings.GroundHeight));
 
             builder.Register<IPilotRegistry, InMemoryPilotRegistry>(Lifetime.Singleton)
-                .WithParameter<IEnumerable<PilotProfile>>(new[] { RegisteredPilot });
+                .WithParameter<IEnumerable<PilotProfile>>(settings.Pilots);
             builder.Register<IPilotStatsStore, InMemoryPilotStatsStore>(Lifetime.Singleton);
             builder.Register<PilotStatsRecorder>(Lifetime.Singleton);
 
@@ -70,8 +65,8 @@ namespace DroneFlightModule.Composition
             builder.Register<IDelay, TaskDelay>(Lifetime.Singleton);
             builder.Register<IRevokingAuthorizationProvider, SimulatedServerAuthorizationProvider>(Lifetime.Singleton)
                 .AsSelf()
-                .WithParameter<IEnumerable<PilotId>>(new[] { RegisteredPilot.Id })
-                .WithParameter("latency", serverLatency);
+                .WithParameter<IEnumerable<PilotId>>(settings.Pilots.Select(pilot => pilot.Id).ToArray())
+                .WithParameter("latency", settings.ServerLatency);
 
             builder.Register<DroneRegistry>(Lifetime.Singleton)
                 .WithParameter<IEnumerable<FleetDrone>>(Array.Empty<FleetDrone>());
@@ -80,7 +75,7 @@ namespace DroneFlightModule.Composition
             builder.Register<SimulationClock>(Lifetime.Singleton).AsSelf().As<ISimulationClock>();
             builder.Register<PilotStatsListener>(Lifetime.Singleton);
 
-            builder.RegisterInstance(TelemetryConfig.Default);
+            builder.RegisterInstance(settings.Telemetry);
             builder.Register<InMemoryTelemetrySink>(Lifetime.Singleton);
 
             builder.RegisterInstance(controls);
@@ -93,8 +88,8 @@ namespace DroneFlightModule.Composition
             builder.Register<DroneInstantiator>(Lifetime.Singleton)
                 .WithParameter("prefab", dronePrefab)
                 .WithParameter("hud", hud)
-                .WithParameter("groundHeight", groundHeight)
-                .WithParameter("spawnStep", spawnStep);
+                .WithParameter("groundHeight", settings.GroundHeight)
+                .WithParameter("spawnStep", settings.SpawnStep);
             builder.Register<IFleetConsole, FleetConsole>(Lifetime.Singleton);
             builder.Register<FleetKeys>(Lifetime.Singleton);
         }

@@ -34,7 +34,7 @@ namespace DroneFlightModule.Core.Tests
                 new ForceFlightController(config),
                 new FlightSupervisor(flightGate ?? gate, config, FailsafeConfig.Default, gravity),
                 new DroneIntegrator(config, terrain, gravity),
-                new RangefinderAltitudeSensor(terrain, maxRange: 20f, updateRate: 1f / DeltaTime),
+                new RangefinderAltitudeSensor(terrain, new RangefinderConfig(maxRange: 20f, updateRate: 1f / DeltaTime)),
                 initial);
         }
 
@@ -69,7 +69,7 @@ namespace DroneFlightModule.Core.Tests
                 new ForceFlightController(config),
                 new FlightSupervisor(gate, config, FailsafeConfig.Default),
                 new DroneIntegrator(config, terrain),
-                new RangefinderAltitudeSensor(terrain),
+                new RangefinderAltitudeSensor(terrain, RangefinderConfig.Default),
                 DroneState.At(Vec3.Zero),
                 startTime: 12.5);
             double ticked = -1.0;
@@ -95,7 +95,7 @@ namespace DroneFlightModule.Core.Tests
                 new ForceFlightController(config),
                 new FlightSupervisor(gate, config, FailsafeConfig.Default),
                 new DroneIntegrator(config, terrain),
-                new RangefinderAltitudeSensor(terrain),
+                new RangefinderAltitudeSensor(terrain, RangefinderConfig.Default),
                 DroneState.At(Vec3.Zero),
                 startTime));
         }
@@ -112,7 +112,7 @@ namespace DroneFlightModule.Core.Tests
                 new ForceFlightController(config),
                 new FlightSupervisor(gate, config, FailsafeConfig.Default),
                 new DroneIntegrator(config, terrain),
-                new RangefinderAltitudeSensor(terrain),
+                new RangefinderAltitudeSensor(terrain, RangefinderConfig.Default),
                 DroneState.At(Vec3.Zero)));
         }
 
@@ -143,7 +143,7 @@ namespace DroneFlightModule.Core.Tests
                 new ForceFlightController(config),
                 null,
                 new DroneIntegrator(config, terrain),
-                new RangefinderAltitudeSensor(terrain),
+                new RangefinderAltitudeSensor(terrain, RangefinderConfig.Default),
                 DroneState.At(Vec3.Zero)));
         }
 

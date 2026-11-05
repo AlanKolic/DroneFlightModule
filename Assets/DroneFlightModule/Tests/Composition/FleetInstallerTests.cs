@@ -25,6 +25,7 @@ namespace DroneFlightModule.Composition.Tests
 
         private Keyboard keyboard;
         private InputActionAsset controls;
+        private FleetSettings settings;
         private IObjectResolver fleet;
         private DroneInstantiator drones;
         private IObjectResolver airborne;
@@ -36,7 +37,8 @@ namespace DroneFlightModule.Composition.Tests
             keyboard = InputSystem.AddDevice<Keyboard>();
             controls = InputActionAsset.FromJson(File.ReadAllText(ControlsPath));
             var builder = new ContainerBuilder();
-            var installer = new FleetInstaller(GroundHeight, controls, TimeSpan.Zero, CancellationToken.None, null, null, new Vector3(4f, 0f, 0f));
+            settings = Settings(TimeSpan.Zero);
+            var installer = new FleetInstaller(settings, controls, CancellationToken.None, null, null);
             installer.Install(builder);
             fleet = builder.Build();
             drones = fleet.Resolve<DroneInstantiator>();
@@ -52,6 +54,11 @@ namespace DroneFlightModule.Composition.Tests
             fleet?.Dispose();
             UnityEngine.Object.DestroyImmediate(controls);
             base.TearDown();
+        }
+
+        private FleetSettings Settings(TimeSpan serverLatency)
+        {
+            return new TestFleetSettings().Create(GroundHeight, serverLatency, new Vector3(4f, 0f, 0f));
         }
 
         private IObjectResolver Scope(DroneId id)
@@ -221,11 +228,11 @@ namespace DroneFlightModule.Composition.Tests
 
             Tap(keyboard.pKey);
             AssertFlownBy(grounded, PilotProfile.Guest.Id);
-            Assert.That(Pilot.Session.PilotId, Is.EqualTo(FleetInstaller.RegisteredPilot.Id));
+            Assert.That(Pilot.Session.PilotId, Is.EqualTo(TestFleetSettings.RegisteredPilot.Id));
             Assert.That(Pilot.LastMessage, Does.EndWith("guest keeps drone-2, hands off."));
 
             Tap(keyboard.rKey);
-            AssertFlownBy(airborne, FleetInstaller.RegisteredPilot.Id);
+            AssertFlownBy(airborne, TestFleetSettings.RegisteredPilot.Id);
             Assert.That(airborne.Resolve<DroneGrantHolder>().Grant.ProviderId, Is.EqualTo(SimulatedServerAuthorizationProvider.ProviderId));
 
             Tap(keyboard.pKey);
@@ -239,7 +246,7 @@ namespace DroneFlightModule.Composition.Tests
         {
             var slowFleet = SlowServerFleet();
             var pilot = slowFleet.Resolve<LocalPilotControls>();
-            pilot.SelectPilot(FleetInstaller.RegisteredPilot.Id);
+            pilot.SelectPilot(TestFleetSettings.RegisteredPilot.Id);
             var ace = pilot.Session;
 
             var request = pilot.RequestFlightAsync(AirborneDrone);
@@ -255,10 +262,23 @@ namespace DroneFlightModule.Composition.Tests
         private IObjectResolver SlowServerFleet()
         {
             var builder = new ContainerBuilder();
-            new FleetInstaller(GroundHeight, controls, TimeSpan.FromMinutes(1), CancellationToken.None, null, null, new Vector3(4f, 0f, 0f)).Install(builder);
+            new FleetInstaller(Settings(TimeSpan.FromMinutes(1)), controls, CancellationToken.None, null, null).Install(builder);
             var slowFleet = builder.Build();
             slowFleet.Resolve<DroneInstantiator>().AddDrone(AirborneDrone, new Vector3(0f, 5f, 0f), null);
             return slowFleet;
+        }
+
+        [Test]
+        public void TheFleet_IsBuiltFromItsSettings()
+        {
+            Assert.That(fleet.Resolve<DroneConfig>(), Is.SameAs(settings.Frame));
+            Assert.That(fleet.Resolve<VelocityControllerConfig>(), Is.SameAs(settings.VelocityController));
+            Assert.That(fleet.Resolve<FailsafeConfig>(), Is.SameAs(settings.Failsafe));
+            Assert.That(fleet.Resolve<TelemetryConfig>(), Is.SameAs(settings.Telemetry));
+            Assert.That(airborne.Resolve<RangefinderConfig>(), Is.SameAs(settings.Rangefinder));
+            Assert.That(fleet.Resolve<ITerrain>().HeightAt(0f, 0f), Is.EqualTo(GroundHeight));
+            Assert.That(fleet.Resolve<IPilotRegistry>().TryGet(TestFleetSettings.RegisteredPilot.Id, out _), Is.True);
+            Assert.Throws<ArgumentNullException>(() => new FleetInstaller(null, controls, CancellationToken.None, null, null));
         }
 
         [Test]
@@ -283,10 +303,10 @@ namespace DroneFlightModule.Composition.Tests
 
             Tap(keyboard.digit2Key);
 
-            AssertFlownBy(grounded, FleetInstaller.RegisteredPilot.Id);
+            AssertFlownBy(grounded, TestFleetSettings.RegisteredPilot.Id);
             Assert.That(Pilot.LastMessage, Is.EqualTo("Took over drone-2 from guest."));
             var stats = fleet.Resolve<IPilotStatsStore>();
-            Assert.That(stats.Get(FleetInstaller.RegisteredPilot.Id).Takeovers, Is.EqualTo(1));
+            Assert.That(stats.Get(TestFleetSettings.RegisteredPilot.Id).Takeovers, Is.EqualTo(1));
             Assert.That(stats.Get(PilotProfile.Guest.Id).TimesPreempted, Is.EqualTo(1));
 
             Tap(keyboard.pKey);
@@ -298,7 +318,7 @@ namespace DroneFlightModule.Composition.Tests
         {
             Tap(keyboard.rKey);
             var remoteAce = new PilotSession(
-                FleetInstaller.RegisteredPilot.Id,
+                TestFleetSettings.RegisteredPilot.Id,
                 PilotOrigin.Remote,
                 fleet.Resolve<SimulatedServerAuthorizationProvider>(),
                 fleet.Resolve<DisconnectableInputProvider>());
@@ -341,9 +361,9 @@ namespace DroneFlightModule.Composition.Tests
         {
             Tap(keyboard.rKey);
 
-            Pilot.SelectPilot(FleetInstaller.RegisteredPilot.Id);
+            Pilot.SelectPilot(TestFleetSettings.RegisteredPilot.Id);
 
-            Assert.That(Pilot.Session.PilotId, Is.EqualTo(FleetInstaller.RegisteredPilot.Id));
+            Assert.That(Pilot.Session.PilotId, Is.EqualTo(TestFleetSettings.RegisteredPilot.Id));
             AssertFlownBy(grounded, PilotProfile.Guest.Id);
             Assert.Throws<ArgumentException>(() => Pilot.SelectPilot(new PilotId("stranger")));
         }
@@ -364,9 +384,9 @@ namespace DroneFlightModule.Composition.Tests
         {
             var console = fleet.Resolve<IFleetConsole>();
 
-            console.SelectPilot(FleetInstaller.RegisteredPilot.Id);
+            console.SelectPilot(TestFleetSettings.RegisteredPilot.Id);
             console.RequestFlight(AirborneDrone);
-            Assert.That(console.Pilot, Is.EqualTo(FleetInstaller.RegisteredPilot.Id));
+            Assert.That(console.Pilot, Is.EqualTo(TestFleetSettings.RegisteredPilot.Id));
             Assert.That(console.TryGetDrone(out var flown), Is.True);
             Assert.That(flown, Is.EqualTo(AirborneDrone));
 

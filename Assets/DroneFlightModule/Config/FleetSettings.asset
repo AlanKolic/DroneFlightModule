@@ -1,0 +1,22 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 92cc6f4c84064c4ab379d767efe49566, type: 3}
+  m_Name: FleetSettings
+  m_EditorClassIdentifier: 
+  frame: {fileID: 11400000, guid: d33111ccb48b412b81c8bef111786f46, type: 2}
+  velocityController: {fileID: 11400000, guid: 8a4a7e22a0a6458ca4db3eee19b5084d, type: 2}
+  rangefinder: {fileID: 11400000, guid: ee985af85a694a5fb7ef6dab4c3f5e57, type: 2}
+  failsafe: {fileID: 11400000, guid: 32c7b2bb15384123896ef1219788ede4, type: 2}
+  telemetry: {fileID: 11400000, guid: ff5512354d024781af3c40481bd99767, type: 2}
+  pilots: {fileID: 11400000, guid: 15b532027b3247fc9cefe5bd02dae4b8, type: 2}
+  server: {fileID: 11400000, guid: 17f2be534ca24eb8af70a52fa81816cf, type: 2}
+  layout: {fileID: 11400000, guid: 30ecab9a5f8f4635b0a5e0f4621ede7b, type: 2}

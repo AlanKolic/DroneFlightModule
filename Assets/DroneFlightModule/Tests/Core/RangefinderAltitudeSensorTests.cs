@@ -10,7 +10,7 @@ namespace DroneFlightModule.Core.Tests
         [Test]
         public void MeasuresHeightAboveTerrain()
         {
-            var sensor = new RangefinderAltitudeSensor(new FlatTerrain(height: 5f));
+            var sensor = new RangefinderAltitudeSensor(new FlatTerrain(height: 5f), RangefinderConfig.Default);
 
             var reading = sensor.Read(DroneState.At(new Vec3(0f, 8f, 0f)), 0.0);
 
@@ -21,7 +21,7 @@ namespace DroneFlightModule.Core.Tests
         [Test]
         public void MeasuresTerrainDirectlyBelowDrone()
         {
-            var sensor = new RangefinderAltitudeSensor(new SlopedTerrain());
+            var sensor = new RangefinderAltitudeSensor(new SlopedTerrain(), RangefinderConfig.Default);
 
             var reading = sensor.Read(DroneState.At(new Vec3(4f, 6f, 0f)), 0.0);
 
@@ -31,7 +31,7 @@ namespace DroneFlightModule.Core.Tests
         [Test]
         public void OnTheGround_ReadsZero()
         {
-            var sensor = new RangefinderAltitudeSensor(new FlatTerrain());
+            var sensor = new RangefinderAltitudeSensor(new FlatTerrain(), RangefinderConfig.Default);
 
             var reading = sensor.Read(DroneState.At(Vec3.Zero), 0.0);
 
@@ -42,7 +42,7 @@ namespace DroneFlightModule.Core.Tests
         [Test]
         public void AtMaxRange_IsValid()
         {
-            var sensor = new RangefinderAltitudeSensor(new FlatTerrain(), maxRange: 10f);
+            var sensor = new RangefinderAltitudeSensor(new FlatTerrain(), new RangefinderConfig(maxRange: 10f, updateRate: 20f));
 
             var reading = sensor.Read(DroneState.At(new Vec3(0f, 10f, 0f)), 0.0);
 
@@ -53,7 +53,7 @@ namespace DroneFlightModule.Core.Tests
         [Test]
         public void AboveMaxRange_IsInvalid()
         {
-            var sensor = new RangefinderAltitudeSensor(new FlatTerrain(), maxRange: 10f);
+            var sensor = new RangefinderAltitudeSensor(new FlatTerrain(), new RangefinderConfig(maxRange: 10f, updateRate: 20f));
 
             var reading = sensor.Read(DroneState.At(new Vec3(0f, 10.5f, 0f)), 1.5);
 
@@ -64,7 +64,7 @@ namespace DroneFlightModule.Core.Tests
         [Test]
         public void BetweenSamples_HoldsLastReading()
         {
-            var sensor = new RangefinderAltitudeSensor(new FlatTerrain(), updateRate: 10f);
+            var sensor = new RangefinderAltitudeSensor(new FlatTerrain(), new RangefinderConfig(maxRange: 10f, updateRate: 10f));
             sensor.Read(DroneState.At(new Vec3(0f, 2f, 0f)), 0.0);
 
             var held = sensor.Read(DroneState.At(new Vec3(0f, 4f, 0f)), 0.05);
@@ -76,7 +76,7 @@ namespace DroneFlightModule.Core.Tests
         [Test]
         public void AfterSamplePeriod_TakesNewReading()
         {
-            var sensor = new RangefinderAltitudeSensor(new FlatTerrain(), updateRate: 10f);
+            var sensor = new RangefinderAltitudeSensor(new FlatTerrain(), new RangefinderConfig(maxRange: 10f, updateRate: 10f));
             sensor.Read(DroneState.At(new Vec3(0f, 2f, 0f)), 0.0);
 
             var fresh = sensor.Read(DroneState.At(new Vec3(0f, 4f, 0f)), 0.1);
@@ -88,7 +88,7 @@ namespace DroneFlightModule.Core.Tests
         [Test]
         public void FixedTicks_SampleOncePerPeriod()
         {
-            var sensor = new RangefinderAltitudeSensor(new FlatTerrain(), updateRate: 10f);
+            var sensor = new RangefinderAltitudeSensor(new FlatTerrain(), new RangefinderConfig(maxRange: 10f, updateRate: 10f));
             int samples = 0;
             double lastTimestamp = -1.0;
             double time = 0.0;
@@ -110,7 +110,7 @@ namespace DroneFlightModule.Core.Tests
         [Test]
         public void AStepThatDoesNotDivideThePeriod_StillAveragesTheRate()
         {
-            var sensor = new RangefinderAltitudeSensor(new FlatTerrain(), updateRate: 10f);
+            var sensor = new RangefinderAltitudeSensor(new FlatTerrain(), new RangefinderConfig(maxRange: 10f, updateRate: 10f));
             int samples = 0;
             double lastTimestamp = -1.0;
 
@@ -132,10 +132,16 @@ namespace DroneFlightModule.Core.Tests
         [TestCase(float.PositiveInfinity, 20f)]
         [TestCase(10f, 0f)]
         [TestCase(10f, float.NaN)]
-        public void Constructor_RejectsInvalidSettings(float maxRange, float updateRate)
+        public void Config_RejectsInvalidSettings(float maxRange, float updateRate)
         {
-            Assert.Throws<ArgumentOutOfRangeException>(
-                () => new RangefinderAltitudeSensor(new FlatTerrain(), maxRange, updateRate));
+            Assert.Throws<ArgumentOutOfRangeException>(() => new RangefinderConfig(maxRange, updateRate));
+        }
+
+        [Test]
+        public void Constructor_RequiresTerrainAndConfig()
+        {
+            Assert.Throws<ArgumentNullException>(() => new RangefinderAltitudeSensor(null, RangefinderConfig.Default));
+            Assert.Throws<ArgumentNullException>(() => new RangefinderAltitudeSensor(new FlatTerrain(), null));
         }
     }
 }

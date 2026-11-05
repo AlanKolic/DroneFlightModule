@@ -10,20 +10,18 @@ using VContainer.Unity;
 namespace DroneFlightModule.Composition
 {
     /// <summary>
-    /// Composition root of the fleet scene. Installs the fleet, then has the
-    /// <see cref="DroneInstantiator"/> add the configured drones. The local pilot starts as the
-    /// guest without a drone, and the camera follows the drone they fly. The scope flies with its
+    /// Composition root of the fleet scene. Installs the fleet with the settings its
+    /// <see cref="FleetSettingsAsset"/> maps to, then has the <see cref="DroneInstantiator"/> build
+    /// the layout's drones from the prefab. The local pilot starts as the guest without a drone;
+    /// the camera starts on the first drone and then follows the drone they fly. The scope flies with its
     /// own copy of the controls asset, and its lifetime token, which pending requests use, is
     /// cancelled when it is destroyed or play mode exits.
     /// </summary>
     public sealed class FleetLifetimeScope : LifetimeScope
     {
-        [SerializeField] private float groundHeight = 0f;
-        [SerializeField] private float serverLatencySeconds = 0.5f;
+        [SerializeField] private FleetSettingsAsset settings;
         [SerializeField] private InputActionAsset controls;
-        [SerializeField] private FleetDroneEntry[] drones = new FleetDroneEntry[0];
         [SerializeField] private DroneView dronePrefab;
-        [SerializeField] private Vector3 spawnStep = new Vector3(4f, 0f, 0f);
         [SerializeField] private FlightDebugHud debugHud;
         [SerializeField] private FollowCamera followCamera;
         [SerializeField] private Transform groundPlane;
@@ -37,29 +35,37 @@ namespace DroneFlightModule.Composition
 
         protected override void Configure(IContainerBuilder builder)
         {
+            if (settings == null)
+            {
+                throw new InvalidOperationException($"{name} has no fleet settings asset assigned.");
+            }
             if (controls == null)
             {
                 throw new InvalidOperationException($"{name} has no controls asset assigned.");
             }
+            var fleetSettings = settings.ToSettings();
             ownControls = Instantiate(controls);
             lifetime = CancellationTokenSource.CreateLinkedTokenSource(destroyCancellationToken, Application.exitCancellationToken);
-            var fleet = new FleetInstaller(
-                groundHeight, ownControls, TimeSpan.FromSeconds(serverLatencySeconds), lifetime.Token, dronePrefab, debugHud, spawnStep);
+            var fleet = new FleetInstaller(fleetSettings, ownControls, lifetime.Token, dronePrefab, debugHud);
             fleet.Install(builder);
             builder.RegisterEntryPoint<SimulationClockRunner>();
 
             builder.RegisterBuildCallback(container =>
             {
-                PlaceGround();
+                PlaceGround(fleetSettings.GroundHeight);
                 if (debugHud != null)
                 {
                     debugHud.Bind(ownControls);
                 }
 
                 Instantiator = container.Resolve<DroneInstantiator>();
-                foreach (var entry in drones)
+                foreach (var entry in fleetSettings.Drones)
                 {
-                    Instantiator.AddDrone(new DroneId(entry.Id), entry.SpawnPosition, entry.View);
+                    Instantiator.AddDrone(new DroneId(entry.Id), entry.SpawnPosition);
+                }
+                if (fleetSettings.Drones.Count > 0 && Instantiator.TryGetView(new DroneId(fleetSettings.Drones[0].Id), out var first))
+                {
+                    Follow(first.transform);
                 }
 
                 fleet.Start(container);
@@ -85,7 +91,7 @@ namespace DroneFlightModule.Composition
             }
         }
 
-        private void PlaceGround()
+        private void PlaceGround(float groundHeight)
         {
             if (groundPlane == null)
             {
@@ -98,11 +104,20 @@ namespace DroneFlightModule.Composition
         private void OnLocalPilotChanged()
         {
             // Compared by transform: a removed drone's id can come back on a new drone.
-            if (localPilot.TryGetDrone(out var drone) && followCamera != null && Instantiator.TryGetView(drone, out var view) && view.transform != followed)
+            if (localPilot.TryGetDrone(out var drone) && Instantiator.TryGetView(drone, out var view) && view.transform != followed)
             {
-                followed = view.transform;
-                followCamera.SetTarget(followed);
+                Follow(view.transform);
             }
+        }
+
+        private void Follow(Transform target)
+        {
+            if (followCamera == null)
+            {
+                return;
+            }
+            followed = target;
+            followCamera.SetTarget(target);
         }
     }
 }

@@ -10,9 +10,10 @@ using VContainer.Unity;
 namespace DroneFlightModule.Composition
 {
     /// <summary>
-    /// Registers one drone's flight objects in its own child scope; the configs, the ground and
-    /// the fleet come from the fleet scope. The drone flies whoever the
-    /// coordinator routes to it, only while that pilot is connected and holds a valid grant, and
+    /// Registers one drone's flight objects in its own child scope; the configs (frame,
+    /// controller, rangefinder, failsafe, telemetry), the ground and the fleet come from the fleet
+    /// scope. The drone flies whoever the coordinator routes to it, only while that pilot is
+    /// connected and holds a valid grant, and
     /// joins the fleet's drone registry once its scope is built, whenever that is. Its loop's time
     /// starts at the fleet's simulation time, so its telemetry lines up with the rest. Its telemetry
     /// recorder starts then too, writing to the fleet's sinks, and ends with the scope.
@@ -36,9 +37,7 @@ namespace DroneFlightModule.Composition
                 .WithParameter("gravity", DroneIntegrator.StandardGravity);
             builder.Register<DroneIntegrator>(Lifetime.Singleton)
                 .WithParameter("gravity", DroneIntegrator.StandardGravity);
-            builder.Register<IAltitudeSensor, RangefinderAltitudeSensor>(Lifetime.Singleton)
-                .WithParameter("maxRange", RangefinderAltitudeSensor.DefaultMaxRange)
-                .WithParameter("updateRate", RangefinderAltitudeSensor.DefaultUpdateRate);
+            builder.Register<IAltitudeSensor, RangefinderAltitudeSensor>(Lifetime.Singleton);
 
             builder.Register<InputRouter>(Lifetime.Singleton);
             builder.Register<PilotInControlGate>(Lifetime.Singleton);

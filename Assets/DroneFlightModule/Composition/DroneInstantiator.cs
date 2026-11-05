@@ -12,8 +12,9 @@ namespace DroneFlightModule.Composition
     /// <summary>
     /// Adds drones to the running fleet and removes them. Each drone gets its own child scope of
     /// the fleet's container, ticked every fixed update, and joins the fleet as that scope is
-    /// built; its view is bound and its HUD box added. A drone added without a view is built from
-    /// the drone prefab, one spawn step past the last drone, with the first free drone-N id.
+    /// built; its view is bound and its HUD box added. A drone added without a view gets one built
+    /// from the drone prefab; one added without an id also goes one spawn step past the last
+    /// drone, with the first free drone-N id.
     /// Each drone's loop starts at the fleet's simulation time. Removing a drone has the coordinator
     /// remove it, which releases it first, then disposes its scope and destroys its view and HUD
     /// box; the next drone added goes one step past the last drone it added. Disposing
@@ -57,15 +58,22 @@ namespace DroneFlightModule.Composition
 
         public DroneId AddDrone()
         {
+            var id = NextFreeId();
+            AddDrone(id, nextSpawn);
+            return id;
+        }
+
+        public void AddDrone(DroneId id, Vector3 spawnPosition)
+        {
             if (prefab == null)
             {
                 throw new InvalidOperationException("There is no drone prefab to add drones from.");
             }
-            var id = NextFreeId();
-            var view = UnityEngine.Object.Instantiate(prefab, nextSpawn, Quaternion.identity);
+            // Checked before the view exists, so a taken id leaves no stray view behind.
+            RequireFree(id);
+            var view = UnityEngine.Object.Instantiate(prefab, spawnPosition, Quaternion.identity);
             view.name = id.ToString();
-            Add(id, nextSpawn, view, ownsView: true);
-            return id;
+            Add(id, spawnPosition, view, ownsView: true);
         }
 
         public void AddDrone(DroneId id, Vector3 spawnPosition, DroneView view)
@@ -135,10 +143,7 @@ namespace DroneFlightModule.Composition
         private void Add(DroneId id, Vector3 spawnPosition, DroneView view, bool ownsView)
         {
             // Checked before the scope exists, so a taken id leaves nothing half built.
-            if (registry.TryGet(id, out _))
-            {
-                throw new ArgumentException($"Drone {id} is already in the fleet.", nameof(id));
-            }
+            RequireFree(id);
             var spawn = spawnPosition.ToVec3();
             var initialState = new DroneState(spawn, Vec3.Zero, 0f, 0f, isGrounded: spawn.Y <= groundHeight);
             var scope = fleet.CreateScope(builder =>
@@ -158,6 +163,14 @@ namespace DroneFlightModule.Composition
                 hud.AddDrone(loop, scope.Resolve<InputRouter>());
             }
             nextSpawn = spawnPosition + spawnStep;
+        }
+
+        private void RequireFree(DroneId id)
+        {
+            if (registry.TryGet(id, out _))
+            {
+                throw new ArgumentException($"Drone {id} is already in the fleet.", nameof(id));
+            }
         }
 
         // The first drone-N not taken, so ids stay readable however the fleet was configured.
