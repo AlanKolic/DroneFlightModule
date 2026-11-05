@@ -494,6 +494,9 @@ their validation and their `Default`s, and never sees Unity.
   through the simulated server.
 - **`SimulatedServerAsset`** holds the server's latency, and **`FleetLayoutAsset`** the ground
   height, the drones the fleet starts with and the step between drones added later.
+- **`InputDevicesAsset`** lists the input devices that get a pilot station, as
+  `InputDeviceGroup`s: an Input System layout (`Keyboard`, `Gamepad`) and the controls'
+  binding group it flies with, in the order stations are made at start.
 - **`FleetSettingsAsset`** points at one of each and maps them all to `FleetSettings`, a plain
   object `FleetInstaller` takes. The fleet scope has a single settings field. A missing part
   fails with its name instead of falling back to defaults, so the scene never runs on values it
@@ -514,9 +517,13 @@ matters only to the composition root that built it.
   pilot and its own selected pilot. Stations never see each other. Two stations meet only in
   the coordinator, under its usual rules, so a gamepad pilot taking over the keyboard pilot's
   drone is an ordinary takeover.
-- **`InputDeviceStations`** (Composition) creates a station for every keyboard and gamepad
-  present at start, keyboards first, and for each one plugged in later
-  (`InputSystem.onDeviceChange`). Stations are named by group and number, such as
+- **`InputDeviceStations`** (Composition) creates a station for every device of a configured
+  `InputDeviceGroup` (from `InputDevicesAsset`; the keyboard and gamepads by default) present at
+  start, group by group, and for each one plugged in later (`InputSystem.onDeviceChange`). A
+  device matches the first group whose layout its own layout is, or is based on, so a group for
+  `Gamepad` takes every kind of gamepad; a device matching no group, like the mouse, gets no
+  station. Each group's layout must be known to the Input System and its binding group must be
+  one of the controls' control schemes, or the stations fail to start. Stations are named by group and number, such as
   `Keyboard 1` or `Gamepad 2`. A new station starts as the first pilot no other station flies
   as, the guest first and then the registry's order, or as the guest when every pilot is taken;
   so the keyboard starts as the guest and the first pad as Ace.
@@ -537,8 +544,8 @@ matters only to the composition root that built it.
 - **UI:** the HUD shows a line per station (`IStationStatus`: name, pilot, drone, link), the
   control panel adds a station dropdown and drives the chosen one, and the camera follows that
   station's drone.
-- **A new device type** is a new binding group and one more row in `InputDeviceStations`'s
-  device table. No coordinator, gate or flight code changes.
+- **A new device type** is a control scheme with its bindings in the controls asset and one
+  more entry in `InputDevicesAsset`. No code changes at all.
 
 ## Testing strategy
 
@@ -604,6 +611,7 @@ matters only to the composition root that built it.
   - the same pilot on two devices moves their one drone to the latest request
   - a pad pilot takes over the keyboard pilot's drone by priority, and the keyboard is told
   - each station cuts only its own link
+  - only configured devices get stations, and an unknown layout or binding group is refused
   - the console chooses a station and acts for it
   - disposal ends every station and ignores new devices
 

@@ -68,6 +68,7 @@ namespace DroneFlightModule.Composition.Tests
             SetReference(settings, "pilots", Create<PilotRosterAsset>());
             SetReference(settings, "server", Create<SimulatedServerAsset>());
             SetReference(settings, "layout", Create<FleetLayoutAsset>());
+            SetReference(settings, "devices", Create<InputDevicesAsset>());
             return settings;
         }
 
@@ -128,6 +129,22 @@ namespace DroneFlightModule.Composition.Tests
         }
 
         [Test]
+        public void NewInputDevices_AreTheKeyboardThenGamepads()
+        {
+            var groups = Create<InputDevicesAsset>().ToGroups();
+
+            Assert.That(groups.Select(group => group.Layout), Is.EqualTo(new[] { "Keyboard", "Gamepad" }));
+            Assert.That(groups.Select(group => group.BindingGroup), Is.EqualTo(new[] { "Keyboard", "Gamepad" }));
+        }
+
+        [Test]
+        public void ADeviceGroup_NeedsALayoutAndABindingGroup()
+        {
+            Assert.Throws<ArgumentException>(() => new InputDeviceGroup(" ", "Gamepad"));
+            Assert.Throws<ArgumentException>(() => new InputDeviceGroup("Gamepad", null));
+        }
+
+        [Test]
         public void TheSettingsAsset_MapsEveryPart()
         {
             var settings = CompleteSettings().ToSettings();
@@ -137,6 +154,7 @@ namespace DroneFlightModule.Composition.Tests
             Assert.That(settings.ServerLatency, Is.EqualTo(TimeSpan.FromSeconds(0.5)));
             Assert.That(settings.Pilots.Count, Is.EqualTo(1));
             Assert.That(settings.Drones.Count, Is.EqualTo(3));
+            Assert.That(settings.DeviceGroups.Count, Is.EqualTo(2));
         }
 
         [TestCase("frame")]
@@ -147,6 +165,7 @@ namespace DroneFlightModule.Composition.Tests
         [TestCase("pilots")]
         [TestCase("server")]
         [TestCase("layout")]
+        [TestCase("devices")]
         public void AMissingPart_FailsWithItsName(string field)
         {
             var settings = CompleteSettings();
@@ -161,19 +180,23 @@ namespace DroneFlightModule.Composition.Tests
         {
             var pilots = Array.Empty<PilotProfile>();
             var drones = Array.Empty<FleetDroneEntry>();
+            var groups = Array.Empty<InputDeviceGroup>();
 
             Assert.Throws<ArgumentNullException>(() => new FleetSettings(
                 null, VelocityControllerConfig.Default, RangefinderConfig.Default, FailsafeConfig.Default, TelemetryConfig.Default,
-                pilots, TimeSpan.Zero, 0f, Vector3.right, drones));
+                pilots, TimeSpan.Zero, 0f, Vector3.right, drones, groups));
             Assert.Throws<ArgumentNullException>(() => new FleetSettings(
                 DroneConfig.Default, VelocityControllerConfig.Default, RangefinderConfig.Default, FailsafeConfig.Default, TelemetryConfig.Default,
-                null, TimeSpan.Zero, 0f, Vector3.right, drones));
+                null, TimeSpan.Zero, 0f, Vector3.right, drones, groups));
             Assert.Throws<ArgumentOutOfRangeException>(() => new FleetSettings(
                 DroneConfig.Default, VelocityControllerConfig.Default, RangefinderConfig.Default, FailsafeConfig.Default, TelemetryConfig.Default,
-                pilots, TimeSpan.FromSeconds(-1), 0f, Vector3.right, drones));
+                pilots, TimeSpan.FromSeconds(-1), 0f, Vector3.right, drones, groups));
             Assert.Throws<ArgumentOutOfRangeException>(() => new FleetSettings(
                 DroneConfig.Default, VelocityControllerConfig.Default, RangefinderConfig.Default, FailsafeConfig.Default, TelemetryConfig.Default,
-                pilots, TimeSpan.Zero, float.NaN, Vector3.right, drones));
+                pilots, TimeSpan.Zero, float.NaN, Vector3.right, drones, groups));
+            Assert.Throws<ArgumentNullException>(() => new FleetSettings(
+                DroneConfig.Default, VelocityControllerConfig.Default, RangefinderConfig.Default, FailsafeConfig.Default, TelemetryConfig.Default,
+                pilots, TimeSpan.Zero, 0f, Vector3.right, drones, null));
         }
 
         [Test]
@@ -189,6 +212,7 @@ namespace DroneFlightModule.Composition.Tests
             Assert.That(ids, Is.Not.Empty);
             Assert.That(ids, Is.Unique);
             Assert.That(settings.ServerLatency, Is.GreaterThanOrEqualTo(TimeSpan.Zero));
+            Assert.That(settings.DeviceGroups, Is.Not.Empty, "Some device must get a pilot station.");
             Assert.That(settings.Drones.All(drone => drone.SpawnPosition.y >= settings.GroundHeight), Is.True, "Drones must start on or above the ground.");
         }
     }

@@ -14,8 +14,11 @@ using Object = UnityEngine.Object;
 namespace DroneFlightModule.Composition
 {
     /// <summary>
-    /// Gives every pilot input device its own <see cref="PilotStation"/>: each keyboard and
-    /// gamepad present at start, and each one plugged in later. A station flies with its own copy
+    /// Gives every pilot input device its own <see cref="PilotStation"/>: each device of a
+    /// configured <see cref="InputDeviceGroup"/> present at start, in the groups' order, and each
+    /// one plugged in later; a device matching no group, such as a mouse by default, gets none.
+    /// Every group's layout must be known to the Input System and its binding group must be one of
+    /// the controls' control schemes. A station flies with its own copy
     /// of the controls, restricted to its device and that device's binding group, so devices never
     /// read each other's buttons. Unplugging a device is link loss: its controls resolve to
     /// nothing, the station reports no pilot and the failsafe takes over, while its sessions stay,
@@ -26,13 +29,7 @@ namespace DroneFlightModule.Composition
     /// </summary>
     public sealed class InputDeviceStations : IDisposable
     {
-        // A new device type is one more row: the device and the binding group its station reads.
-        private readonly (Type Device, string Group)[] deviceGroups =
-        {
-            (typeof(Keyboard), "Keyboard"),
-            (typeof(Gamepad), "Gamepad"),
-        };
-
+        private readonly IReadOnlyList<InputDeviceGroup> deviceGroups;
         private readonly InputActionAsset template;
         private readonly FlightCoordinator coordinator;
         private readonly DroneRegistry drones;
@@ -46,6 +43,7 @@ namespace DroneFlightModule.Composition
         private bool isDisposed;
 
         public InputDeviceStations(
+            IReadOnlyList<InputDeviceGroup> deviceGroups,
             InputActionAsset template,
             FlightCoordinator coordinator,
             DroneRegistry drones,
@@ -55,7 +53,9 @@ namespace DroneFlightModule.Composition
             FlightDebugHud hud,
             CancellationToken lifetime)
         {
+            this.deviceGroups = deviceGroups ?? throw new ArgumentNullException(nameof(deviceGroups));
             this.template = template ?? throw new ArgumentNullException(nameof(template));
+            RequireKnown(deviceGroups, template);
             this.coordinator = coordinator ?? throw new ArgumentNullException(nameof(coordinator));
             this.drones = drones ?? throw new ArgumentNullException(nameof(drones));
             this.pilots = pilots ?? throw new ArgumentNullException(nameof(pilots));
@@ -64,12 +64,12 @@ namespace DroneFlightModule.Composition
             this.hud = hud;
             this.lifetime = lifetime;
 
-            // Device type by device type, so the keyboard comes first and starts as the guest. Each device is listed once.
+            // Group by group, so the first group's devices (the keyboard by default) come first and start as the guest.
             foreach (var deviceGroup in deviceGroups)
             {
                 foreach (var device in InputSystem.devices)
                 {
-                    if (deviceGroup.Device.IsInstanceOfType(device))
+                    if (GroupOf(device) == deviceGroup)
                     {
                         Add(device);
                     }
@@ -104,7 +104,6 @@ namespace DroneFlightModule.Composition
             stations.Clear();
         }
 
-        // Only a device's first arrival makes a station; one that comes back is given back to its station.
         private void OnDeviceChange(InputDevice device, InputDeviceChange change)
         {
             if (change != InputDeviceChange.Added && change != InputDeviceChange.Reconnected)
@@ -123,11 +122,12 @@ namespace DroneFlightModule.Composition
 
         private void Add(InputDevice device)
         {
-            string group = GroupOf(device);
-            if (group == null)
+            var deviceGroup = GroupOf(device);
+            if (deviceGroup == null)
             {
                 return;
             }
+            string group = deviceGroup.BindingGroup;
 
             var controls = Object.Instantiate(template);
             controls.devices = new[] { device };
@@ -148,16 +148,37 @@ namespace DroneFlightModule.Composition
             StationAdded?.Invoke(station);
         }
 
-        private string GroupOf(InputDevice device)
+        // The first group whose layout the device's layout is, or is based on.
+        private InputDeviceGroup GroupOf(InputDevice device)
         {
             foreach (var deviceGroup in deviceGroups)
             {
-                if (deviceGroup.Device.IsInstanceOfType(device))
+                if (InputSystem.IsFirstLayoutBasedOnSecond(device.layout, deviceGroup.Layout))
                 {
-                    return deviceGroup.Group;
+                    return deviceGroup;
                 }
             }
             return null;
+        }
+
+        private void RequireKnown(IReadOnlyList<InputDeviceGroup> groups, InputActionAsset controls)
+        {
+            var layouts = new HashSet<string>(InputSystem.ListLayouts(), StringComparer.OrdinalIgnoreCase);
+            foreach (var deviceGroup in groups)
+            {
+                if (deviceGroup == null)
+                {
+                    throw new ArgumentException("Device groups cannot be null.", nameof(groups));
+                }
+                if (!layouts.Contains(deviceGroup.Layout))
+                {
+                    throw new ArgumentException($"The Input System has no device layout {deviceGroup.Layout}.", nameof(groups));
+                }
+                if (!controls.controlSchemes.Any(scheme => scheme.bindingGroup == deviceGroup.BindingGroup))
+                {
+                    throw new ArgumentException($"{controls.name} has no control scheme with the binding group {deviceGroup.BindingGroup}.", nameof(groups));
+                }
+            }
         }
 
         private PilotId StartPilot()

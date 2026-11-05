@@ -20,3 +20,4 @@ MonoBehaviour:
   pilots: {fileID: 11400000, guid: 15b532027b3247fc9cefe5bd02dae4b8, type: 2}
   server: {fileID: 11400000, guid: 17f2be534ca24eb8af70a52fa81816cf, type: 2}
   layout: {fileID: 11400000, guid: 30ecab9a5f8f4635b0a5e0f4621ede7b, type: 2}
+  devices: {fileID: 11400000, guid: 0587d228a6f0438daac94ed446c73963, type: 2}

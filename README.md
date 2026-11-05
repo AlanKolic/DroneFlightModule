@@ -16,7 +16,7 @@ The full design, including the parts that are planned but not built yet, is in
 - If the scene is missing or out of date, run **DroneFlightModule → Create Prototype Scene**. It
   rebuilds the scene from code.
 - Tuning values (drone frame, controller, rangefinder, failsafe, telemetry, pilots, server
-  latency, fleet layout) are ScriptableObject assets in `Assets/DroneFlightModule/Config`;
+  latency, fleet layout, the input devices that get a pilot station) are ScriptableObject assets in `Assets/DroneFlightModule/Config`;
   `FleetSettings` points at the rest.
 - Tests: **Window → General → Test Runner → EditMode → Run All**.
 
@@ -165,8 +165,9 @@ variant is a new class plus one registration in `DroneInstaller`:
   nothing else references (the scene builder adds it by type name), so deleting the UI folder
   leaves flight, the scene and every other test intact.
 - **Input sources don't matter.** A pilot station per input device, each on its own copy of
-  the controls restricted to that device, so the coordinator only ever sees sessions. A new
-  device type is a binding group and one row in `InputDeviceStations`.
+  the controls restricted to that device, so the coordinator only ever sees sessions. Which
+  devices get one is configured in `Config/InputDevices.asset` (a layout and a binding group
+  each), so a new device type is a control scheme and one entry there, with no code.
 - **Keys in two places.** `StationKeys` binds a station's buttons and `FleetKeys` the
   fleet-wide ones; the keys and the control panel drive the same objects. Only the dashboard's
   Tab toggle stays with the dashboard, so it goes when the UI is deleted.

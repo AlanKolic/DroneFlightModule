@@ -80,6 +80,7 @@ namespace DroneFlightModule.Composition
 
             builder.RegisterInstance(controls);
             builder.Register<InputDeviceStations>(Lifetime.Singleton)
+                .WithParameter("deviceGroups", settings.DeviceGroups)
                 .WithParameter("hud", hud)
                 .WithParameter("lifetime", lifetime);
 

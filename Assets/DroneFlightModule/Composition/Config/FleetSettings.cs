@@ -10,7 +10,7 @@ namespace DroneFlightModule.Composition
     /// <summary>
     /// Everything the fleet is configured with, as validated plain objects: the drone frame,
     /// velocity controller, rangefinder, failsafe and telemetry configs, the registered pilots,
-    /// the simulated server's latency, and the layout. The scene reads it from a
+    /// the simulated server's latency, the layout, and the input devices that get a pilot station. The scene reads it from a
     /// <see cref="FleetSettingsAsset"/>; tests build it directly.
     /// </summary>
     public sealed class FleetSettings
@@ -25,7 +25,8 @@ namespace DroneFlightModule.Composition
             TimeSpan serverLatency,
             float groundHeight,
             Vector3 spawnStep,
-            IReadOnlyList<FleetDroneEntry> drones)
+            IReadOnlyList<FleetDroneEntry> drones,
+            IReadOnlyList<InputDeviceGroup> deviceGroups)
         {
             Frame = frame ?? throw new ArgumentNullException(nameof(frame));
             VelocityController = velocityController ?? throw new ArgumentNullException(nameof(velocityController));
@@ -34,6 +35,7 @@ namespace DroneFlightModule.Composition
             Telemetry = telemetry ?? throw new ArgumentNullException(nameof(telemetry));
             Pilots = pilots ?? throw new ArgumentNullException(nameof(pilots));
             Drones = drones ?? throw new ArgumentNullException(nameof(drones));
+            DeviceGroups = deviceGroups ?? throw new ArgumentNullException(nameof(deviceGroups));
             if (serverLatency < TimeSpan.Zero)
             {
                 throw new ArgumentOutOfRangeException(nameof(serverLatency), serverLatency, "Must not be negative.");
@@ -57,5 +59,6 @@ namespace DroneFlightModule.Composition
         public float GroundHeight { get; }
         public Vector3 SpawnStep { get; }
         public IReadOnlyList<FleetDroneEntry> Drones { get; }
+        public IReadOnlyList<InputDeviceGroup> DeviceGroups { get; }
     }
 }

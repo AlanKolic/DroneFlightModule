@@ -19,6 +19,7 @@ namespace DroneFlightModule.Composition
         [SerializeField] private PilotRosterAsset pilots;
         [SerializeField] private SimulatedServerAsset server;
         [SerializeField] private FleetLayoutAsset layout;
+        [SerializeField] private InputDevicesAsset devices;
 
         public FleetSettings ToSettings()
         {
@@ -33,7 +34,8 @@ namespace DroneFlightModule.Composition
                 Require(server, nameof(server)).ToLatency(),
                 fleetLayout.GroundHeight,
                 fleetLayout.SpawnStep,
-                fleetLayout.Drones);
+                fleetLayout.Drones,
+                Require(devices, nameof(devices)).ToGroups());
         }
 
         private T Require<T>(T part, string field) where T : ScriptableObject

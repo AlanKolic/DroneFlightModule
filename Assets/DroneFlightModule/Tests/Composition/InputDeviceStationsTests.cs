@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Threading;
+using DroneFlightModule.Authorization;
+using DroneFlightModule.Coordination;
 using DroneFlightModule.Core;
 using DroneFlightModule.Pilots;
 using NUnit.Framework;
@@ -260,6 +262,41 @@ namespace DroneFlightModule.Composition.Tests
             Assert.That(stations.Stations[1].TryGetDrone(out _), Is.True);
             Assert.That(KeyboardStation.TryGetDrone(out _), Is.False);
             Assert.Throws<ArgumentException>(() => console.SelectStation("Joystick 1"));
+        }
+
+        [Test]
+        public void OnlyConfiguredDevices_GetStations()
+        {
+            var padsOnly = Stations(new InputDeviceGroup("Gamepad", "Gamepad"));
+            Assert.That(padsOnly.Stations, Is.Empty, "The keyboard is not configured.");
+
+            InputSystem.AddDevice<Gamepad>();
+
+            Assert.That(padsOnly.Stations, Has.Count.EqualTo(1));
+            Assert.That(padsOnly.Stations[0].Name, Is.EqualTo("Gamepad 1"));
+            Assert.That(padsOnly.Stations[0].Session.PilotId, Is.EqualTo(Guest), "The first station starts as the guest.");
+            padsOnly.Dispose();
+        }
+
+        [Test]
+        public void ADeviceGroup_MustNameAKnownLayoutAndAControlScheme()
+        {
+            Assert.Throws<ArgumentException>(() => Stations(new InputDeviceGroup("Steering Wheel", "Gamepad")));
+            Assert.Throws<ArgumentException>(() => Stations(new InputDeviceGroup("Gamepad", "Joystick")));
+        }
+
+        private InputDeviceStations Stations(InputDeviceGroup group)
+        {
+            return new InputDeviceStations(
+                new[] { group },
+                controls,
+                fleet.Resolve<FlightCoordinator>(),
+                fleet.Resolve<DroneRegistry>(),
+                fleet.Resolve<IPilotRegistry>(),
+                fleet.Resolve<LocalGuestAuthorizationProvider>(),
+                fleet.Resolve<IRevokingAuthorizationProvider>(),
+                null,
+                CancellationToken.None);
         }
 
         [Test]
