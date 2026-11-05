@@ -35,7 +35,7 @@ namespace DroneFlightModule.Composition
                 fleetLayout.GroundHeight,
                 fleetLayout.SpawnStep,
                 fleetLayout.Drones,
-                Require(devices, nameof(devices)).ToGroups());
+                Require(devices, nameof(devices)).Groups);
         }
 
         private T Require<T>(T part, string field) where T : ScriptableObject

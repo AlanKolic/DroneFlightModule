@@ -36,16 +36,14 @@ namespace DroneFlightModule.Composition.Tests
             keyboard = InputSystem.AddDevice<Keyboard>();
             controls = new TestFleetSettings().LoadControls();
             settings = Settings(TimeSpan.Zero);
-            var installer = new FleetInstaller(settings, controls, CancellationToken.None, null, null);
             var builder = new ContainerBuilder();
-            installer.Install(builder);
+            new FleetInstaller(settings, controls, CancellationToken.None, null).Install(builder);
             fleet = builder.Build();
             drones = fleet.Resolve<DroneInstantiator>();
             drones.AddDrone(AirborneDrone, new Vector3(0f, 5f, 0f));
             drones.AddDrone(GroundedDrone, new Vector3(4f, GroundHeight, 0f));
             airborne = Scope(AirborneDrone);
             grounded = Scope(GroundedDrone);
-            installer.Start(fleet);
         }
 
         public override void TearDown()

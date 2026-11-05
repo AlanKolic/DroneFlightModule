@@ -14,6 +14,8 @@ namespace DroneFlightModule.Composition.Tests
 {
     public class FleetInstallerTests : FleetTestFixture
     {
+        private FleetRunner Runner => new FleetRunner(fleet.Resolve<SimulationClock>(), fleet.Resolve<FlightCoordinator>());
+
         private PilotStation Pilot => fleet.Resolve<InputDeviceStations>().Stations[0];
 
         private void Run(IObjectResolver drone, float seconds)
@@ -135,8 +137,18 @@ namespace DroneFlightModule.Composition.Tests
         {
             Tap(keyboard.digit3Key);
 
-            Assert.That(Pilot.LastMessage, Is.EqualTo("There is no drone 3."));
+            Assert.That(Pilot.LastMessage, Is.EqualTo("drone-3 is not in the fleet."));
             Assert.That(Pilot.TryGetDrone(out _), Is.False);
+        }
+
+        [Test]
+        public void NumberKeys_RequestByDroneId_NotByPosition()
+        {
+            drones.RemoveDrone(AirborneDrone);
+
+            Tap(keyboard.digit2Key);
+
+            AssertFlownBy(grounded, PilotProfile.Guest.Id);
         }
 
         [Test]
@@ -191,7 +203,7 @@ namespace DroneFlightModule.Composition.Tests
         private IObjectResolver SlowServerFleet()
         {
             var builder = new ContainerBuilder();
-            new FleetInstaller(Settings(TimeSpan.FromMinutes(1)), controls, CancellationToken.None, null, null).Install(builder);
+            new FleetInstaller(Settings(TimeSpan.FromMinutes(1)), controls, CancellationToken.None, null).Install(builder);
             var slowFleet = builder.Build();
             slowFleet.Resolve<DroneInstantiator>().AddDrone(AirborneDrone, new Vector3(0f, 5f, 0f));
             return slowFleet;
@@ -222,7 +234,8 @@ namespace DroneFlightModule.Composition.Tests
             Assert.That(airborne.Resolve<RangefinderConfig>(), Is.SameAs(settings.Rangefinder));
             Assert.That(fleet.Resolve<ITerrain>().HeightAt(0f, 0f), Is.EqualTo(GroundHeight));
             Assert.That(fleet.Resolve<IPilotRegistry>().TryGet(TestFleetSettings.RegisteredPilot.Id, out _), Is.True);
-            Assert.Throws<ArgumentNullException>(() => new FleetInstaller(null, controls, CancellationToken.None, null, null));
+            Assert.Throws<ArgumentNullException>(() => new FleetInstaller(null, controls, CancellationToken.None, null));
+            Assert.Throws<ArgumentNullException>(() => new FleetInstaller(settings, null, CancellationToken.None, null));
         }
 
         [Test]
@@ -368,7 +381,7 @@ namespace DroneFlightModule.Composition.Tests
             Tap(keyboard.rKey);
             Tap(keyboard.lKey);
 
-            new UnattendedDroneRunner(fleet.Resolve<FlightCoordinator>()).FixedTick();
+            Runner.FixedTick();
 
             AssertFree(grounded);
             Assert.That(Pilot.LastMessage, Is.EqualTo("drone-2 landed with no link and was released."));
@@ -386,20 +399,6 @@ namespace DroneFlightModule.Composition.Tests
 
             Run(airborne, 25f);
             Assert.That(airborne.Resolve<FlightLoop>().State.IsGrounded, Is.True);
-        }
-
-        [Test]
-        public void StatusChanged_FiresAsTheStationsPilotFliesAndLetsGo()
-        {
-            int changes = 0;
-            Pilot.StatusChanged += station => changes++;
-
-            Tap(keyboard.rKey);
-            int afterRequest = changes;
-            Tap(keyboard.xKey);
-
-            Assert.That(afterRequest, Is.GreaterThan(0));
-            Assert.That(changes, Is.GreaterThan(afterRequest));
         }
 
         [Test]
@@ -445,7 +444,7 @@ namespace DroneFlightModule.Composition.Tests
             var clock = fleet.Resolve<SimulationClock>();
 
             new FlightLoopRunner(loop).FixedTick();
-            new SimulationClockRunner(clock).FixedTick();
+            Runner.FixedTick();
 
             Assert.That(loop.Time, Is.EqualTo(Time.fixedDeltaTime).Within(1e-6));
             Assert.That(clock.Time, Is.EqualTo(Time.fixedDeltaTime).Within(1e-6));

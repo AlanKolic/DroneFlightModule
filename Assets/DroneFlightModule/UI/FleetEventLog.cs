@@ -8,7 +8,7 @@ namespace DroneFlightModule.UI
 {
     /// <summary>
     /// The fleet's recent coordinator events as readable lines, oldest first, each stamped with
-    /// simulation time: assignments, releases and why, takeovers and denials. Keeps a fixed number
+    /// simulation time: assignments, releases and why, takeovers, moves between devices and denials. Keeps a fixed number
     /// of lines. Disposing stops listening.
     /// </summary>
     public sealed class FleetEventLog : IDisposable
@@ -27,6 +27,7 @@ namespace DroneFlightModule.UI
             coordinator.Assigned += OnAssigned;
             coordinator.Released += OnReleased;
             coordinator.TookOver += OnTookOver;
+            coordinator.Moved += OnMoved;
             coordinator.Denied += OnDenied;
         }
 
@@ -37,6 +38,7 @@ namespace DroneFlightModule.UI
             coordinator.Assigned -= OnAssigned;
             coordinator.Released -= OnReleased;
             coordinator.TookOver -= OnTookOver;
+            coordinator.Moved -= OnMoved;
             coordinator.Denied -= OnDenied;
         }
 
@@ -53,6 +55,11 @@ namespace DroneFlightModule.UI
         private void OnTookOver(DroneTakenOver takenOver)
         {
             Add($"{takenOver.Pilot} took over {takenOver.Drone} from {takenOver.FromPilot}");
+        }
+
+        private void OnMoved(DroneMoved moved)
+        {
+            Add($"{moved.Pilot} moved {moved.Drone} to another device");
         }
 
         private void OnDenied(FlightDenied denied)

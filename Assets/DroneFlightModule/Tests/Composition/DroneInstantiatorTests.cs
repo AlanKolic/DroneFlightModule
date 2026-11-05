@@ -31,7 +31,7 @@ namespace DroneFlightModule.Composition.Tests
         {
             controls = new TestFleetSettings().LoadControls();
             var builder = new ContainerBuilder();
-            new FleetInstaller(new TestFleetSettings().Create(GroundHeight, TimeSpan.Zero, SpawnStep), controls, CancellationToken.None, null, null).Install(builder);
+            new FleetInstaller(new TestFleetSettings().Create(GroundHeight, TimeSpan.Zero, SpawnStep), controls, CancellationToken.None, null).Install(builder);
             fleet = builder.Build();
             prefab = new GameObject("Drone Prefab", typeof(DroneView)).GetComponent<DroneView>();
             drones = Instantiator(prefab);
@@ -134,6 +134,7 @@ namespace DroneFlightModule.Composition.Tests
         {
             drones.AddDrone(new DroneId("drone-2"), new Vector3(0f, GroundHeight, 0f));
 
+            Assert.That(drones.AddDrone(), Is.EqualTo(new DroneId("drone-1")));
             Assert.That(drones.AddDrone(), Is.EqualTo(new DroneId("drone-3")));
         }
 

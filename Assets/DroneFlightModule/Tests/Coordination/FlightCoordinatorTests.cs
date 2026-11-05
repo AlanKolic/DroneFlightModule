@@ -25,6 +25,7 @@ namespace DroneFlightModule.Coordination.Tests
         private List<DroneAssigned> assigned;
         private List<DroneReleased> released;
         private List<DroneTakenOver> tookOver;
+        private List<DroneMoved> moved;
         private List<FlightDenied> denied;
 
         [SetUp]
@@ -48,10 +49,12 @@ namespace DroneFlightModule.Coordination.Tests
             assigned = new List<DroneAssigned>();
             released = new List<DroneReleased>();
             tookOver = new List<DroneTakenOver>();
+            moved = new List<DroneMoved>();
             denied = new List<FlightDenied>();
             coordinator.Assigned += assigned.Add;
             coordinator.Released += released.Add;
             coordinator.TookOver += tookOver.Add;
+            coordinator.Moved += moved.Add;
             coordinator.Denied += denied.Add;
         }
 
@@ -440,6 +443,8 @@ namespace DroneFlightModule.Coordination.Tests
             Assert.That(airborne.Router.Read().Move, Is.EqualTo(Vec3.Forward));
             Assert.That(assigned, Has.Count.EqualTo(1), "The flight goes on, so nothing new starts.");
 
+            Assert.That(moved, Has.Count.EqualTo(1));
+            Assert.That(moved[0].FromSession, Is.SameAs(first));
             Assert.That(coordinator.Release(first), Is.False, "The first session no longer steers it.");
             AssertFlying(Alice, airborne);
             Assert.That(coordinator.TryGetDrone(first, out _), Is.False);

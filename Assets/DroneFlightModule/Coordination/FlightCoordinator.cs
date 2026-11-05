@@ -37,6 +37,7 @@ namespace DroneFlightModule.Coordination
         public event Action<DroneAssigned> Assigned;
         public event Action<DroneReleased> Released;
         public event Action<DroneTakenOver> TookOver;
+        public event Action<DroneMoved> Moved;
         public event Action<FlightDenied> Denied;
         public event Action<Exception> ListenerFailed;
 
@@ -181,11 +182,16 @@ namespace DroneFlightModule.Coordination
             // Any drone will do for a pilot who already flies one, so they keep it.
             if (current.HasValue && (!preferred.HasValue || preferred == current))
             {
-                Route(assignments[current.Value].Drone, session, profile, grant);
+                var previous = assignments[current.Value];
+                Route(previous.Drone, session, profile, grant);
+                if (previous.Session != session)
+                {
+                    Raise(Moved, new DroneMoved(current.Value, previous.Session));
+                }
                 return new FlightRequestResult(current.Value);
             }
 
-            var decision = policy.Decide(profile, preferred, Snapshot(current));
+            var decision = policy.Decide(profile, preferred, Snapshot());
             if (decision.Action == AssignmentAction.Deny)
             {
                 return Deny(session, preferred, decision.Denial, DenialMessage(decision.Denial, session.PilotId, preferred));
@@ -199,7 +205,7 @@ namespace DroneFlightModule.Coordination
 
             if (left != null)
             {
-                Raise(Released, new DroneReleased(left.Drone.Id, left.Session.PilotId, ReleaseReason.Switched));
+                Raise(Released, new DroneReleased(left.Drone.Id, left.Session, ReleaseReason.Switched));
             }
             if (decision.Action == AssignmentAction.TakeOver)
             {
@@ -210,15 +216,11 @@ namespace DroneFlightModule.Coordination
             return new FlightRequestResult(target.Id);
         }
 
-        private List<DroneSnapshot> Snapshot(DroneId? excluded)
+        private List<DroneSnapshot> Snapshot()
         {
             var fleet = new List<DroneSnapshot>(drones.Drones.Count);
             foreach (var drone in drones.Drones)
             {
-                if (drone.Id == excluded)
-                {
-                    continue;
-                }
                 var pilot = assignments.TryGetValue(drone.Id, out var assignment) ? assignment.Profile : null;
                 fleet.Add(new DroneSnapshot(drone.Id, drone.Status.IsGrounded, pilot));
             }
@@ -263,7 +265,7 @@ namespace DroneFlightModule.Coordination
             {
                 return false;
             }
-            Raise(Released, new DroneReleased(droneId, freed.Session.PilotId, reason));
+            Raise(Released, new DroneReleased(droneId, freed.Session, reason));
             return true;
         }
 
@@ -333,6 +335,7 @@ namespace DroneFlightModule.Coordination
             }
         }
 
+        // Who flies a drone, and the registration that releases it if their grant is revoked.
         private sealed class Assignment
         {
             public Assignment(FleetDrone drone, PilotSession session, PilotProfile profile, CancellationTokenRegistration revocation)

@@ -39,7 +39,7 @@ namespace DroneFlightModule.Composition
                 .WithParameter("gravity", DroneIntegrator.StandardGravity);
             builder.Register<IAltitudeSensor, RangefinderAltitudeSensor>(Lifetime.Singleton);
 
-            builder.Register<InputRouter>(Lifetime.Singleton);
+            builder.Register<InputRouter>(Lifetime.Singleton).AsSelf().As<IInputProvider>();
             builder.Register<PilotInControlGate>(Lifetime.Singleton);
             builder.Register<DroneGrantHolder>(Lifetime.Singleton);
             builder.Register<IFlightGate, AllOfFlightGate>(Lifetime.Singleton)
@@ -51,12 +51,9 @@ namespace DroneFlightModule.Composition
             builder.Register<FlightLoop>(Lifetime.Singleton)
                 .WithParameter("droneId", droneId)
                 .WithParameter("initialState", initialState)
-                .WithParameter("startTime", startTime)
-                .WithParameter<IInputProvider>(resolver => resolver.Resolve<InputRouter>());
+                .WithParameter("startTime", startTime);
 
-            builder.Register<TelemetryRecorder>(Lifetime.Singleton)
-                .WithParameter<IReadOnlyList<ITelemetrySink>>(resolver =>
-                    new ITelemetrySink[] { resolver.Resolve<InMemoryTelemetrySink>() });
+            builder.Register<TelemetryRecorder>(Lifetime.Singleton);
 
             builder.Register<IDroneStatus, FlightLoopStatus>(Lifetime.Singleton);
             builder.Register<FleetDrone>(Lifetime.Singleton)

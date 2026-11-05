@@ -13,8 +13,8 @@ namespace DroneFlightModule.UI
     /// </summary>
     public sealed class FleetDashboard : MonoBehaviour
     {
-        [SerializeField] private float width = 460f;
-        [SerializeField] private float margin = 12f;
+        [SerializeField] private float width = 480f;
+        [SerializeField] private float margin = 15f;
         [SerializeField] private float refreshInterval = 0.25f;
         [SerializeField] private int eventCount = 8;
         [SerializeField] private bool isVisible = true;

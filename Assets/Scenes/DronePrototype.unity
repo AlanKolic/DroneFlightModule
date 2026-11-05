@@ -437,7 +437,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: DroneFlightModule.UI::DroneFlightModule.UI.ControlPanel
   width: 340
-  margin: 12
+  margin: 15
   refreshInterval: 0.25
 --- !u!114 &1353050264
 MonoBehaviour:

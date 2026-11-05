@@ -30,7 +30,6 @@ namespace DroneFlightModule.Composition
         private readonly Vector3 spawnStep;
         private readonly ObjectDestroyer destroyer = new ObjectDestroyer();
         private readonly Dictionary<DroneId, Member> members = new Dictionary<DroneId, Member>();
-        private Vector3 nextSpawn;
 
         public DroneInstantiator(
             IObjectResolver fleet,
@@ -48,15 +47,12 @@ namespace DroneFlightModule.Composition
             this.prefab = prefab;
             this.terrain = terrain ?? throw new ArgumentNullException(nameof(terrain));
             this.spawnStep = spawnStep;
-            nextSpawn = FirstSpawn;
         }
-
-        private Vector3 FirstSpawn => new Vector3(0f, terrain.HeightAt(0f, 0f), 0f);
 
         public DroneId AddDrone()
         {
             var id = NextFreeId();
-            AddDrone(id, nextSpawn);
+            AddDrone(id, NextSpawn());
             return id;
         }
 
@@ -82,7 +78,6 @@ namespace DroneFlightModule.Composition
             {
                 view.Bind(loop);
             }
-            nextSpawn = spawnPosition + spawnStep;
         }
 
         public bool RemoveDrone(DroneId id)
@@ -95,15 +90,6 @@ namespace DroneFlightModule.Composition
             coordinator.RemoveDrone(id);
             DestroyView(member.View);
             member.Scope.Dispose();
-
-            nextSpawn = FirstSpawn;
-            foreach (var drone in registry.Drones)
-            {
-                if (members.TryGetValue(drone.Id, out var remaining))
-                {
-                    nextSpawn = remaining.SpawnPosition + spawnStep;
-                }
-            }
             return true;
         }
 
@@ -137,10 +123,24 @@ namespace DroneFlightModule.Composition
             members.Clear();
         }
 
+        // One step past the newest drone added here, or at the origin when there is none.
+        private Vector3 NextSpawn()
+        {
+            var fleetDrones = registry.Drones;
+            for (int i = fleetDrones.Count - 1; i >= 0; i--)
+            {
+                if (members.TryGetValue(fleetDrones[i].Id, out var newest))
+                {
+                    return newest.SpawnPosition + spawnStep;
+                }
+            }
+            return new Vector3(0f, terrain.HeightAt(0f, 0f), 0f);
+        }
+
         // The first drone-N not taken, so ids stay readable however the fleet was configured.
         private DroneId NextFreeId()
         {
-            int number = registry.Drones.Count + 1;
+            int number = 1;
             while (registry.TryGet(new DroneId($"drone-{number}"), out _))
             {
                 number++;
@@ -168,6 +168,7 @@ namespace DroneFlightModule.Composition
             destroyer.Destroy(view.gameObject);
         }
 
+        // What the instantiator keeps for one drone it added.
         private sealed class Member
         {
             public Member(IScopedObjectResolver scope, DroneView view, Vector3 spawnPosition)

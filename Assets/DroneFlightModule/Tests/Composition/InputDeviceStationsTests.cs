@@ -184,6 +184,33 @@ namespace DroneFlightModule.Composition.Tests
         }
 
         [Test]
+        public void TheStationAPilotMovedAwayFrom_SaysSo()
+        {
+            var pad = InputSystem.AddDevice<Gamepad>();
+            Tap(keyboard.rKey);
+            stations.Stations[1].SelectPilot(Guest);
+
+            Tap(pad.buttonSouth);
+
+            Assert.That(KeyboardStation.LastMessage, Is.EqualTo("guest moved drone-2 to another device."));
+        }
+
+        [Test]
+        public void ARemovedDrone_IsReportedByTheStationThatFliesIt_EvenParked()
+        {
+            var pad = InputSystem.AddDevice<Gamepad>();
+            Tap(pad.dpad.left);
+            KeyboardStation.SelectPilot(Ace);
+            var padStation = stations.Stations[1];
+            padStation.SelectPilot(Guest);
+
+            drones.RemoveDrone(AirborneDrone);
+
+            Assert.That(padStation.LastMessage, Is.EqualTo("drone-1 was removed from the fleet."));
+            Assert.That(KeyboardStation.LastMessage, Does.Not.Contain("removed"), "Selecting the same pilot elsewhere is not flying.");
+        }
+
+        [Test]
         public void APadPilot_TakesOverTheKeyboardPilotsDrone_ByPriority()
         {
             var pad = InputSystem.AddDevice<Gamepad>();
@@ -233,7 +260,7 @@ namespace DroneFlightModule.Composition.Tests
             AssertFlownBy(grounded, Ace);
 
             InputSystem.RemoveDevice(pad);
-            new UnattendedDroneRunner(fleet.Resolve<FlightCoordinator>()).FixedTick();
+            new FleetRunner(fleet.Resolve<SimulationClock>(), fleet.Resolve<FlightCoordinator>()).FixedTick();
             AssertFree(grounded);
 
             Tap(keyboard.digit2Key);
@@ -244,16 +271,8 @@ namespace DroneFlightModule.Composition.Tests
         public void ANewStation_StartsAsTheLowestRankedFreePilot()
         {
             var john = new PilotProfile(new PilotId("john"), "John", 60);
-            var withJohn = new InputDeviceStations(
-                new[] { new InputDeviceGroup("Keyboard", "Keyboard"), new InputDeviceGroup("Gamepad", "Gamepad") },
-                controls,
-                fleet.Resolve<FlightCoordinator>(),
-                fleet.Resolve<DroneRegistry>(),
-                new InMemoryPilotRegistry(new[] { john, TestFleetSettings.RegisteredPilot }),
-                fleet.Resolve<LocalGuestAuthorizationProvider>(),
-                fleet.Resolve<IRevokingAuthorizationProvider>(),
-                null,
-                CancellationToken.None);
+            var pilots = new InMemoryPilotRegistry(new[] { john, TestFleetSettings.RegisteredPilot });
+            var withJohn = Stations(pilots, new InputDeviceGroup("Keyboard", "Keyboard"), new InputDeviceGroup("Gamepad", "Gamepad"));
 
             InputSystem.AddDevice<Gamepad>();
             InputSystem.AddDevice<Gamepad>();
@@ -283,24 +302,6 @@ namespace DroneFlightModule.Composition.Tests
         }
 
         [Test]
-        public void TheConsole_SaysWhenTheChosenStationChanges()
-        {
-            InputSystem.AddDevice<Gamepad>();
-            var console = fleet.Resolve<FleetConsole>();
-            int changes = 0;
-            console.Changed += () => changes++;
-
-            stations.Stations[1].ToggleLink();
-            Assert.That(changes, Is.EqualTo(0), "Another station's change is not the console's.");
-
-            console.SelectStation("Gamepad 1");
-            Assert.That(changes, Is.EqualTo(1));
-
-            stations.Stations[1].ToggleLink();
-            Assert.That(changes, Is.EqualTo(2));
-        }
-
-        [Test]
         public void WithNoStation_TheConsoleSaysSo_AndItsActionsDoNothing()
         {
             var builder = new ContainerBuilder();
@@ -308,7 +309,6 @@ namespace DroneFlightModule.Composition.Tests
                 new TestFleetSettings().Create(GroundHeight, TimeSpan.Zero, SpawnStep, Array.Empty<InputDeviceGroup>()),
                 controls,
                 CancellationToken.None,
-                null,
                 null).Install(builder);
             var empty = builder.Build();
             var console = empty.Resolve<IFleetConsole>();
@@ -331,25 +331,23 @@ namespace DroneFlightModule.Composition.Tests
             var prefab = new GameObject("Drone Prefab", typeof(DroneView)).GetComponent<DroneView>();
             var camera = new GameObject("Camera", typeof(FollowCamera)).GetComponent<FollowCamera>();
             var builder = new ContainerBuilder();
-            new FleetInstaller(settings, controls, CancellationToken.None, prefab, null).Install(builder);
+            new FleetInstaller(settings, controls, CancellationToken.None, prefab).Install(builder);
             var viewed = builder.Build();
             var instantiator = viewed.Resolve<DroneInstantiator>();
             var first = instantiator.AddDrone();
             var second = instantiator.AddDrone();
-            var console = viewed.Resolve<FleetConsole>();
+            var console = viewed.Resolve<IFleetConsole>();
             var follower = new StationFollowCamera(console, instantiator, camera);
             follower.Follow(first);
             instantiator.TryGetView(first, out var firstView);
             instantiator.TryGetView(second, out var secondView);
-            Assert.That(camera.Target, Is.EqualTo(firstView.transform));
+
+            follower.Tick();
+            Assert.That(camera.Target, Is.EqualTo(firstView.transform), "With no drone it stays where it is.");
 
             console.RequestFlight(second);
+            follower.Tick();
             Assert.That(camera.Target, Is.EqualTo(secondView.transform));
-
-            follower.Dispose();
-            console.Release();
-            console.RequestFlight(first);
-            Assert.That(camera.Target, Is.EqualTo(secondView.transform), "Disposing stops following.");
 
             viewed.Dispose();
             UnityEngine.Object.DestroyImmediate(camera.gameObject);
@@ -391,7 +389,7 @@ namespace DroneFlightModule.Composition.Tests
         [Test]
         public void OnlyConfiguredDevices_GetStations()
         {
-            var padsOnly = Stations(new InputDeviceGroup("Gamepad", "Gamepad"));
+            var padsOnly = Stations(fleet.Resolve<IPilotRegistry>(), new InputDeviceGroup("Gamepad", "Gamepad"));
             Assert.That(padsOnly.Stations, Is.Empty, "The keyboard is not configured.");
 
             InputSystem.AddDevice<Gamepad>();
@@ -405,22 +403,22 @@ namespace DroneFlightModule.Composition.Tests
         [Test]
         public void ADeviceGroup_MustNameAKnownLayoutAndAControlScheme()
         {
-            Assert.Throws<ArgumentException>(() => Stations(new InputDeviceGroup("Steering Wheel", "Gamepad")));
-            Assert.Throws<ArgumentException>(() => Stations(new InputDeviceGroup("Gamepad", "Joystick")));
+            var pilots = fleet.Resolve<IPilotRegistry>();
+
+            Assert.Throws<ArgumentException>(() => Stations(pilots, new InputDeviceGroup("Steering Wheel", "Gamepad")));
+            Assert.Throws<ArgumentException>(() => Stations(pilots, new InputDeviceGroup("Gamepad", "Joystick")));
+            Assert.Throws<ArgumentException>(() => Stations(pilots, new InputDeviceGroup(string.Empty, "Gamepad")));
         }
 
-        private InputDeviceStations Stations(InputDeviceGroup group)
+        private InputDeviceStations Stations(IPilotRegistry pilots, params InputDeviceGroup[] groups)
         {
-            return new InputDeviceStations(
-                new[] { group },
+            var factory = new PilotStationFactory(
                 controls,
                 fleet.Resolve<FlightCoordinator>(),
-                fleet.Resolve<DroneRegistry>(),
-                fleet.Resolve<IPilotRegistry>(),
-                fleet.Resolve<LocalGuestAuthorizationProvider>(),
-                fleet.Resolve<IRevokingAuthorizationProvider>(),
-                null,
+                pilots,
+                fleet.Resolve<IAuthorizationProviderSelector>(),
                 CancellationToken.None);
+            return new InputDeviceStations(groups, controls, factory, pilots);
         }
 
         [Test]

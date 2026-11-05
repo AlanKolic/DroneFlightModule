@@ -22,10 +22,6 @@ namespace DroneFlightModule.Core
             {
                 throw new ArgumentNullException(nameof(source));
             }
-            if (source == this)
-            {
-                throw new ArgumentException("A router can't route to itself.", nameof(source));
-            }
 
             this.source = source;
             ActivePilotId = pilotId;

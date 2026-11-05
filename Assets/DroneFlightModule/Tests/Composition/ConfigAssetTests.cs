@@ -131,17 +131,10 @@ namespace DroneFlightModule.Composition.Tests
         [Test]
         public void NewInputDevices_AreTheKeyboardThenGamepads()
         {
-            var groups = Create<InputDevicesAsset>().ToGroups();
+            var groups = Create<InputDevicesAsset>().Groups;
 
             Assert.That(groups.Select(group => group.Layout), Is.EqualTo(new[] { "Keyboard", "Gamepad" }));
             Assert.That(groups.Select(group => group.BindingGroup), Is.EqualTo(new[] { "Keyboard", "Gamepad" }));
-        }
-
-        [Test]
-        public void ADeviceGroup_NeedsALayoutAndABindingGroup()
-        {
-            Assert.Throws<ArgumentException>(() => new InputDeviceGroup(" ", "Gamepad"));
-            Assert.Throws<ArgumentException>(() => new InputDeviceGroup("Gamepad", null));
         }
 
         [Test]

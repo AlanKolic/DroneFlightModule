@@ -6,9 +6,10 @@ namespace DroneFlightModule.Telemetry
 {
     /// <summary>
     /// One per drone. Samples its flight loop's ticks at the configured rate of simulation time,
-    /// starting with the first tick, and passes each sample to every sink. Telemetry only reads: a sink that throws is reported
-    /// through SinkFailed and skipped for that sample, so it can never break a tick or starve the
-    /// other sinks. Disposing stops recording and ends the drone's stream in every sink.
+    /// starting with the first tick, and passes each sample to every sink. Telemetry only reads: a
+    /// sink that throws is reported through SinkFailed and skipped for that sample, so it can never
+    /// break a tick or starve the other sinks. Disposing stops recording and ends the drone's
+    /// stream in every sink.
     /// </summary>
     public sealed class TelemetryRecorder : IDisposable
     {

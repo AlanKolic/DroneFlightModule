@@ -18,6 +18,7 @@ namespace DroneFlightModule.Composition
         PilotId Pilot { get; }
         string LastMessage { get; }
         bool IsLinkCut { get; }
+        string LinkStatus { get; }
 
         void SelectStation(string station);
 

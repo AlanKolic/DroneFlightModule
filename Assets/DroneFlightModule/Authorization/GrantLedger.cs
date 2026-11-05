@@ -8,7 +8,6 @@ namespace DroneFlightModule.Authorization
     /// <summary>
     /// The grants one provider has issued: at most one live grant per pilot, and a repeat request
     /// returns it. Revoking cancels the grant's token, which runs its registered callbacks inline.
-    /// Revoking every grant finishes even when callbacks throw, then rethrows.
     /// </summary>
     public sealed class GrantLedger : IDisposable
     {
@@ -54,21 +53,9 @@ namespace DroneFlightModule.Authorization
 
         public void RevokeAll()
         {
-            var failures = new List<Exception>();
             foreach (var pilot in new List<PilotId>(live.Keys))
             {
-                try
-                {
-                    Revoke(pilot);
-                }
-                catch (AggregateException exception)
-                {
-                    failures.AddRange(exception.InnerExceptions);
-                }
-            }
-            if (failures.Count > 0)
-            {
-                throw new AggregateException("Revocation callbacks failed.", failures);
+                Revoke(pilot);
             }
         }
 

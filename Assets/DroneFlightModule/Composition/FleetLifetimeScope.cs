@@ -30,7 +30,6 @@ namespace DroneFlightModule.Composition
 
         private InputActionAsset ownControls;
         private CancellationTokenSource lifetime;
-        private StationFollowCamera stationCamera;
 
         protected override void Configure(IContainerBuilder builder)
         {
@@ -49,41 +48,32 @@ namespace DroneFlightModule.Composition
             var fleetSettings = settings.ToSettings();
             ownControls = Instantiate(controls);
             lifetime = CancellationTokenSource.CreateLinkedTokenSource(destroyCancellationToken, Application.exitCancellationToken);
-            var fleet = new FleetInstaller(fleetSettings, ownControls, lifetime.Token, dronePrefab, debugHud);
-            fleet.Install(builder);
-            builder.RegisterEntryPoint<SimulationClockRunner>();
-            builder.RegisterEntryPoint<UnattendedDroneRunner>();
+            new FleetInstaller(fleetSettings, ownControls, lifetime.Token, dronePrefab).Install(builder);
+            builder.RegisterEntryPoint<FleetRunner>();
+            if (followCamera != null)
+            {
+                builder.RegisterEntryPoint<StationFollowCamera>().AsSelf().WithParameter("camera", followCamera);
+            }
 
             builder.RegisterBuildCallback(container =>
             {
                 PlaceGround(fleetSettings.GroundHeight);
-                if (debugHud != null)
-                {
-                    debugHud.Bind(ownControls);
-                }
+                BindHud(container.Resolve<InputDeviceStations>());
 
                 var drones = container.Resolve<DroneInstantiator>();
                 foreach (var entry in fleetSettings.Drones)
                 {
                     drones.AddDrone(new DroneId(entry.Id), entry.SpawnPosition);
                 }
-
-                fleet.Start(container);
-                if (followCamera != null)
+                if (followCamera != null && fleetSettings.Drones.Count > 0)
                 {
-                    stationCamera = new StationFollowCamera(container.Resolve<FleetConsole>(), drones, followCamera);
-                    if (fleetSettings.Drones.Count > 0)
-                    {
-                        stationCamera.Follow(new DroneId(fleetSettings.Drones[0].Id));
-                    }
+                    container.Resolve<StationFollowCamera>().Follow(new DroneId(fleetSettings.Drones[0].Id));
                 }
             });
         }
 
         protected override void OnDestroy()
         {
-            // Unhooked first: disposing the fleet releases drones, and the views may already be gone.
-            stationCamera?.Dispose();
             lifetime?.Cancel();
             base.OnDestroy();
             lifetime?.Dispose();
@@ -92,6 +82,20 @@ namespace DroneFlightModule.Composition
                 Destroy(ownControls);
                 ownControls = null;
             }
+        }
+
+        private void BindHud(InputDeviceStations stations)
+        {
+            if (debugHud == null)
+            {
+                return;
+            }
+            debugHud.Bind(ownControls);
+            foreach (var station in stations.Stations)
+            {
+                debugHud.AddStation(station);
+            }
+            stations.StationAdded += debugHud.AddStation;
         }
 
         private void PlaceGround(float groundHeight)

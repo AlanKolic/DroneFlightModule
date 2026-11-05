@@ -5,8 +5,9 @@ using DroneFlightModule.Core;
 namespace DroneFlightModule.Coordination
 {
     /// <summary>
-    /// One connected pilot: who they are, which provider authorizes them and their input. The input belongs to the pilot rather than a drone, so the coordinator can
-    /// move the session between drones without anything being registered again.
+    /// One connected pilot: who they are, which provider authorizes them and their input. The input
+    /// belongs to the pilot rather than a drone, so the coordinator can move the session between
+    /// drones without anything being registered again.
     /// </summary>
     public sealed class PilotSession
     {

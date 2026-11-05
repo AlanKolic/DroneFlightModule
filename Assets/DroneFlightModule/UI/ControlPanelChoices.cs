@@ -9,8 +9,8 @@ namespace DroneFlightModule.UI
     /// <summary>
     /// What the control panel offers: every registered pilot, highest priority first, and any drone
     /// or one of the fleet's drones, in the order they joined. Labels say who flies what, so a
-    /// takeover shows in both lists, and the status line gives the station, its pilot, their drone
-    /// and record, and the latest outcome.
+    /// takeover shows in both lists, and the status line gives the station, its pilot, their drone,
+    /// the link, their record and the latest outcome.
     /// It remembers the chosen drone, and reads as any drone while that drone is not in the fleet.
     /// </summary>
     public sealed class ControlPanelChoices
@@ -57,7 +57,7 @@ namespace DroneFlightModule.UI
             return coordinator.TryGetDrone(pilot, out var drone) ? $"{name}, flying {drone}" : name;
         }
 
-        public string Status(string station, PilotId pilot, DroneId? drone, string lastMessage)
+        public string Status(string station, PilotId pilot, DroneId? drone, string link, string lastMessage)
         {
             if (string.IsNullOrEmpty(station))
             {
@@ -65,7 +65,7 @@ namespace DroneFlightModule.UI
             }
             var record = stats.Get(pilot);
             string flying = drone.HasValue ? $"flying {drone.Value}" : "no drone";
-            return $"{station}: {pilot}, {flying}, takeovers {record.Takeovers}, preempted {record.TimesPreempted}\n{lastMessage}";
+            return $"{station}: {pilot}, {flying}, {link}, takeovers {record.Takeovers}, preempted {record.TimesPreempted}\n{lastMessage}";
         }
     }
 }

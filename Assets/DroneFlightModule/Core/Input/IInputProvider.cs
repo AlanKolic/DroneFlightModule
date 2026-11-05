@@ -1,8 +1,8 @@
 namespace DroneFlightModule.Core
 {
     /// <summary>
-    /// A source of pilot input: keyboard, phone, scripted, etc. IsConnected is false while the
-    /// source can't reach its pilot, such as a phone whose link has dropped.
+    /// A source of pilot input: a keyboard, a gamepad, a script. IsConnected is false while the
+    /// source can't reach its pilot, such as an unplugged gamepad.
     /// </summary>
     public interface IInputProvider
     {

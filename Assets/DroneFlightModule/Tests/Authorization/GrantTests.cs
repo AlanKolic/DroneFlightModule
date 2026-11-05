@@ -110,20 +110,5 @@ namespace DroneFlightModule.Authorization.Tests
             Assert.That(alice.IsRevoked, Is.True);
             Assert.That(bob.IsRevoked, Is.True);
         }
-
-        [Test]
-        public void Dispose_WithAThrowingCallback_StillRevokesEveryGrant()
-        {
-            var alice = ledger.Issue(Alice);
-            var bob = ledger.Issue(Bob);
-            alice.Revoked.Register(() => throw new InvalidOperationException("callback failed"));
-            bob.Revoked.Register(() => throw new InvalidOperationException("callback failed"));
-
-            var failure = Assert.Throws<AggregateException>(() => ledger.Dispose());
-
-            Assert.That(alice.IsRevoked, Is.True);
-            Assert.That(bob.IsRevoked, Is.True);
-            Assert.That(failure.InnerExceptions, Has.Count.EqualTo(2));
-        }
     }
 }

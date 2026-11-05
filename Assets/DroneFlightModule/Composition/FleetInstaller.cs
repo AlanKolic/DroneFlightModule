@@ -18,12 +18,12 @@ namespace DroneFlightModule.Composition
     /// <summary>
     /// Registers what the whole fleet shares: the configs from the <see cref="FleetSettings"/>,
     /// the ground, pilots and their stats, both authorization providers, the coordinator, the
-    /// simulation clock, the fleet-wide in-memory telemetry sink, a pilot station per input
-    /// device, the fleet-wide keys, the console a control panel drives, and the instantiator that
-    /// adds and removes drones. Every registered pilot signs in through the simulated server. The fleet starts
-    /// empty: each drone's child scope adds its own objects with <see cref="DroneInstaller"/> and
-    /// joins it, at startup or later. Kept apart from the scope so tests can build the fleet
-    /// without a scene; they pass no prefab or HUD.
+    /// simulation clock, the fleet-wide telemetry sinks, a pilot station per input device, the
+    /// fleet-wide keys, the console a control panel drives, and the instantiator that adds and
+    /// removes drones. Every registered pilot signs in through the simulated server. The fleet
+    /// starts empty: each drone's child scope adds its own objects with
+    /// <see cref="DroneInstaller"/> and joins it, at startup or later. Kept apart from the scope so
+    /// tests can build the fleet without a scene; they pass no prefab.
     /// </summary>
     public sealed class FleetInstaller : IInstaller
     {
@@ -31,20 +31,17 @@ namespace DroneFlightModule.Composition
         private readonly InputActionAsset controls;
         private readonly CancellationToken lifetime;
         private readonly DroneView dronePrefab;
-        private readonly FlightDebugHud hud;
 
         public FleetInstaller(
             FleetSettings settings,
             InputActionAsset controls,
             CancellationToken lifetime,
-            DroneView dronePrefab,
-            FlightDebugHud hud)
+            DroneView dronePrefab)
         {
             this.settings = settings ?? throw new ArgumentNullException(nameof(settings));
-            this.controls = controls;
+            this.controls = controls != null ? controls : throw new ArgumentNullException(nameof(controls));
             this.lifetime = lifetime;
             this.dronePrefab = dronePrefab;
-            this.hud = hud;
         }
 
         public void Install(IContainerBuilder builder)
@@ -76,32 +73,29 @@ namespace DroneFlightModule.Composition
             builder.Register<PilotStatsListener>(Lifetime.Singleton);
 
             builder.RegisterInstance(settings.Telemetry);
-            builder.Register<InMemoryTelemetrySink>(Lifetime.Singleton);
+            builder.Register<InMemoryTelemetrySink>(Lifetime.Singleton).AsSelf().As<ITelemetrySink>();
 
             builder.RegisterInstance(controls);
-            builder.Register<InputDeviceStations>(Lifetime.Singleton)
-                .WithParameter("deviceGroups", settings.DeviceGroups)
-                .WithParameter("hud", hud)
+            builder.Register<IAuthorizationProviderSelector, GuestOrServerSelector>(Lifetime.Singleton);
+            builder.Register<PilotStationFactory>(Lifetime.Singleton)
                 .WithParameter("lifetime", lifetime);
+            builder.Register<InputDeviceStations>(Lifetime.Singleton)
+                .WithParameter("deviceGroups", settings.DeviceGroups);
 
             builder.Register<DroneInstantiator>(Lifetime.Singleton)
                 .WithParameter("prefab", dronePrefab)
                 .WithParameter("spawnStep", settings.SpawnStep);
             builder.Register<IFleetConsole, FleetConsole>(Lifetime.Singleton).AsSelf();
             builder.Register<FleetKeys>(Lifetime.Singleton);
-        }
 
-        public void Start(IObjectResolver fleet)
-        {
             // Nothing depends on these, so they start by being resolved. Drones can join before or after.
-            if (fleet == null)
+            builder.RegisterBuildCallback(fleet =>
             {
-                throw new ArgumentNullException(nameof(fleet));
-            }
-            fleet.Resolve<FlightCoordinator>().ListenerFailed += Debug.LogException;
-            fleet.Resolve<PilotStatsListener>();
-            fleet.Resolve<InputDeviceStations>();
-            fleet.Resolve<FleetKeys>();
+                fleet.Resolve<FlightCoordinator>().ListenerFailed += Debug.LogException;
+                fleet.Resolve<PilotStatsListener>();
+                fleet.Resolve<InputDeviceStations>();
+                fleet.Resolve<FleetKeys>();
+            });
         }
     }
 }

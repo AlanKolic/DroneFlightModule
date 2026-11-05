@@ -95,17 +95,17 @@ namespace DroneFlightModule.UI.Tests
             fleet.Stats.Save(PilotProfile.Guest.Id, fleet.Stats.Get(PilotProfile.Guest.Id).WithPreemption());
 
             Assert.That(
-                choices.Status("Gamepad 1", TestFleet.Ace.Id, TestFleet.Drone1, "Flying drone-1."),
-                Is.EqualTo("Gamepad 1: ace, flying drone-1, takeovers 1, preempted 0\nFlying drone-1."));
+                choices.Status("Gamepad 1", TestFleet.Ace.Id, TestFleet.Drone1, "connected", "Flying drone-1."),
+                Is.EqualTo("Gamepad 1: ace, flying drone-1, connected, takeovers 1, preempted 0\nFlying drone-1."));
             Assert.That(
-                choices.Status("Keyboard 1", PilotProfile.Guest.Id, null, "Lost it."),
-                Is.EqualTo("Keyboard 1: guest, no drone, takeovers 0, preempted 1\nLost it."));
+                choices.Status("Keyboard 1", PilotProfile.Guest.Id, null, "link cut", "Lost it."),
+                Is.EqualTo("Keyboard 1: guest, no drone, link cut, takeovers 0, preempted 1\nLost it."));
         }
 
         [Test]
         public void Status_WithoutAStation_IsJustTheMessage()
         {
-            Assert.That(choices.Status(string.Empty, default, null, "No input device is connected."), Is.EqualTo("No input device is connected."));
+            Assert.That(choices.Status(string.Empty, default, null, string.Empty, "No input device is connected."), Is.EqualTo("No input device is connected."));
         }
     }
 }

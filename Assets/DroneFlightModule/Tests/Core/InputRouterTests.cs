@@ -100,7 +100,6 @@ namespace DroneFlightModule.Core.Tests
         {
             Assert.Throws<ArgumentException>(() => router.Assign(default, new ScriptedInputProvider()));
             Assert.Throws<ArgumentNullException>(() => router.Assign(Pilot1, null));
-            Assert.Throws<ArgumentException>(() => router.Assign(Pilot1, router));
         }
     }
 }

@@ -8,38 +8,38 @@ using DroneFlightModule.Core;
 using DroneFlightModule.Pilots;
 using DroneFlightModule.Unity;
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 namespace DroneFlightModule.Composition
 {
     /// <summary>
-    /// One input device and whoever flies with it. From it a pilot can fly as anyone in the
-    /// registry: the guest through local guest mode, everyone else signing in through the server.
+    /// One input device and whoever flies with it. It owns the device's controls, input and keys,
+    /// and holds a session for every pilot in the registry, so a pilot can fly as anyone from it.
     /// It knows nothing of other stations; they meet only in the coordinator, so it reports only
     /// the drone its own session steers. Switching keeps the previous pilot on their drone with
     /// their hands off the sticks, so the next pilot can outrank and take it over, and cancels the
     /// previous pilot's pending request, so nobody is given a drone after they were switched away
-    /// from. Its link can be cut, and it reports no pilot while its device is unplugged. The latest
-    /// outcome, including a pilot here losing their drone, is kept for display, and StatusChanged
-    /// fires whenever it or the fleet changes.
+    /// from. Its link can be cut, and it reports no pilot while its device is unplugged. It keeps
+    /// the latest outcome for display, including a pilot here losing their drone. Disposing stops
+    /// listening and destroys its controls.
     /// </summary>
     public sealed class PilotStation : IStationStatus, IDisposable
     {
         private readonly FlightCoordinator coordinator;
-        private readonly DroneRegistry drones;
-        private readonly IRevokingAuthorizationProvider server;
-        private readonly List<Seat> seats = new List<Seat>();
+        private readonly InputActionAsset controls;
+        private readonly InputActionInputProvider input;
+        private readonly StationKeys keys;
+        private readonly ObjectDestroyer destroyer = new ObjectDestroyer();
+        private readonly List<PilotSession> sessions = new List<PilotSession>();
         private readonly CancellationToken lifetime;
-        private Seat selected;
-        private bool isDisposed;
 
         public PilotStation(
             string name,
+            InputDevice device,
+            InputActionAsset controls,
             FlightCoordinator coordinator,
-            DroneRegistry drones,
             IPilotRegistry pilots,
-            LocalGuestAuthorizationProvider guestProvider,
-            IRevokingAuthorizationProvider server,
-            DisconnectableInputProvider link,
+            IAuthorizationProviderSelector providers,
             PilotId startPilot,
             CancellationToken lifetime)
         {
@@ -48,35 +48,33 @@ namespace DroneFlightModule.Composition
                 throw new ArgumentException("A station needs a name.", nameof(name));
             }
             Name = name;
+            Device = device ?? throw new ArgumentNullException(nameof(device));
+            this.controls = controls ?? throw new ArgumentNullException(nameof(controls));
             this.coordinator = coordinator ?? throw new ArgumentNullException(nameof(coordinator));
-            this.drones = drones ?? throw new ArgumentNullException(nameof(drones));
-            this.server = server ?? throw new ArgumentNullException(nameof(server));
-            Link = link ?? throw new ArgumentNullException(nameof(link));
             this.lifetime = lifetime;
-            if (pilots == null)
-            {
-                throw new ArgumentNullException(nameof(pilots));
-            }
+
+            input = new InputActionInputProvider(controls);
+            Link = new DisconnectableInputProvider(input);
             foreach (var profile in pilots.Profiles)
             {
-                var provider = profile.IsGuest ? (IAuthorizationProvider)guestProvider : server;
-                var input = new LocalPilotInput(link);
-                seats.Add(new Seat(new PilotSession(profile.Id, provider, input), input));
+                sessions.Add(new PilotSession(profile.Id, providers.For(profile), new LocalPilotInput(Link)));
             }
-            selected = seats.Find(seat => seat.Session.PilotId == startPilot)
+            Session = sessions.Find(session => session.PilotId == startPilot)
                 ?? throw new ArgumentException($"{startPilot} is not in the pilot registry.", nameof(startPilot));
-            selected.Input.IsSelected = true;
+            SetSelected(Session, true);
+            keys = new StationKeys(controls, this);
 
-            coordinator.Assigned += OnAssigned;
             coordinator.Released += OnReleased;
             coordinator.TookOver += OnTookOver;
+            coordinator.Moved += OnMoved;
         }
 
         public string Name { get; }
+        public InputDevice Device { get; }
         public DisconnectableInputProvider Link { get; }
-        public PilotSession Session => selected.Session;
+        public PilotSession Session { get; private set; }
         public string LastMessage { get; private set; } = "Request a drone to fly.";
-        public event Action<PilotStation> StatusChanged;
+        public string LinkStatus => Link.IsLinkCut ? "link cut" : Link.IsConnected ? "connected" : "disconnected";
 
         public bool TryGetDrone(out DroneId drone)
         {
@@ -86,19 +84,24 @@ namespace DroneFlightModule.Composition
         public string Describe()
         {
             string flying = TryGetDrone(out var drone) ? $"flying {drone}" : "no drone";
-            string link = Link.IsLinkCut ? "link cut" : Link.IsConnected ? "connected" : "disconnected";
-            return $"{Name}: {Session.PilotId}, {flying}, {link}";
+            return $"{Name}: {Session.PilotId}, {flying}, {LinkStatus}";
         }
 
-        // Faults only if a status listener throws: a superseded or cancelled request ends quietly, and anything else is logged and reported.
+        // Removing a device also takes it out of its controls' device list, so it is put back when it returns.
+        public void RestoreDevice()
+        {
+            controls.devices = new[] { Device };
+        }
+
+        // Never faults: a superseded or cancelled request ends quietly, and anything else is logged and reported.
         public async Task RequestFlightAsync(DroneId? drone)
         {
             var session = Session;
-            Report($"Asking {session.Provider.Id} for {(drone.HasValue ? drone.Value.ToString() : "any drone")}...");
+            LastMessage = $"Asking {session.Provider.Id} for {(drone.HasValue ? drone.Value.ToString() : "any drone")}...";
             try
             {
                 var result = await coordinator.RequestFlightAsync(session, drone, lifetime);
-                Report(result.Message);
+                LastMessage = result.Message;
             }
             catch (OperationCanceledException)
             {
@@ -106,134 +109,107 @@ namespace DroneFlightModule.Composition
             catch (Exception exception)
             {
                 Debug.LogException(exception);
-                Report($"The request failed: {exception.Message}");
+                LastMessage = $"The request failed: {exception.Message}";
             }
         }
 
         public Task RequestDroneAsync(int number)
         {
-            if (number < 1 || number > drones.Drones.Count)
-            {
-                Report($"There is no drone {number}.");
-                return Task.CompletedTask;
-            }
-            return RequestFlightAsync(drones.Drones[number - 1].Id);
+            return RequestFlightAsync(new DroneId($"drone-{number}"));
         }
 
         public bool Release()
         {
             bool released = coordinator.Release(Session);
-            Report(released ? "Released the drone." : "Not flying a drone.");
+            LastMessage = released ? "Released the drone." : "Not flying a drone.";
             return released;
         }
 
         public void SwitchPilot()
         {
-            int next = (seats.IndexOf(selected) + 1) % seats.Count;
-            SelectPilot(seats[next].Session.PilotId);
+            int next = (sessions.IndexOf(Session) + 1) % sessions.Count;
+            SelectPilot(sessions[next].PilotId);
         }
 
         public void SelectPilot(PilotId pilot)
         {
-            var seat = seats.Find(candidate => candidate.Session.PilotId == pilot)
+            var session = sessions.Find(candidate => candidate.PilotId == pilot)
                 ?? throw new ArgumentException($"{pilot} is not in the pilot registry.", nameof(pilot));
-            if (seat == selected)
+            if (session == Session)
             {
                 return;
             }
-            var previous = selected.Session;
-            selected.Input.IsSelected = false;
-            seat.Input.IsSelected = true;
-            selected = seat;
+            var previous = Session;
+            SetSelected(previous, false);
+            SetSelected(session, true);
+            Session = session;
             string cancelled = coordinator.CancelRequest(previous) ? $" {previous.PilotId}'s request was cancelled." : "";
             string kept = coordinator.TryGetDrone(previous, out var parked)
                 ? $" {previous.PilotId} keeps {parked}, hands off."
                 : "";
-            Report($"Now flying as {Session.PilotId}, authorized by {Session.Provider.Id}.{cancelled}{kept}");
+            LastMessage = $"Now flying as {Session.PilotId}, authorized by {Session.Provider.Id}.{cancelled}{kept}";
         }
 
         public bool RevokeServerGrant()
         {
             var pilot = Session.PilotId;
-            bool revoked = server.Revoke(pilot);
-            Report(revoked ? $"The server revoked {pilot}'s grant." : $"{pilot} holds no server grant.");
+            bool revoked = Session.Provider is IRevokingAuthorizationProvider server && server.Revoke(pilot);
+            LastMessage = revoked ? $"The server revoked {pilot}'s grant." : $"{pilot} holds no server grant.";
             return revoked;
         }
 
         public void ToggleLink()
         {
             Link.IsLinkCut = !Link.IsLinkCut;
-            Report(Link.IsLinkCut ? "Link cut." : "Link restored.");
+            LastMessage = Link.IsLinkCut ? "Link cut." : "Link restored.";
         }
 
         public void Dispose()
         {
-            if (isDisposed)
-            {
-                return;
-            }
-            isDisposed = true;
-            coordinator.Assigned -= OnAssigned;
             coordinator.Released -= OnReleased;
             coordinator.TookOver -= OnTookOver;
+            coordinator.Moved -= OnMoved;
+            keys.Dispose();
+            input.Dispose();
+            destroyer.Destroy(controls);
         }
 
-        private void Report(string message)
+        private void SetSelected(PilotSession session, bool isSelected)
         {
-            if (isDisposed)
-            {
-                return;
-            }
-            LastMessage = message;
-            StatusChanged?.Invoke(this);
-        }
-
-        private void OnAssigned(DroneAssigned assigned)
-        {
-            StatusChanged?.Invoke(this);
+            ((LocalPilotInput)session.Input).IsSelected = isSelected;
         }
 
         private void OnReleased(DroneReleased released)
         {
-            if (released.Pilot != Session.PilotId)
+            if (!sessions.Contains(released.Session))
             {
-                StatusChanged?.Invoke(this);
+                return;
             }
-            else if (released.Reason == ReleaseReason.Removed)
+            if (released.Reason == ReleaseReason.Removed)
             {
-                Report($"{released.Drone} was removed from the fleet.");
+                LastMessage = $"{released.Drone} was removed from the fleet.";
             }
             else if (released.Reason == ReleaseReason.LinkLost)
             {
-                Report($"{released.Drone} landed with no link and was released.");
-            }
-            else
-            {
-                StatusChanged?.Invoke(this);
+                LastMessage = $"{released.Drone} landed with no link and was released.";
             }
         }
 
         // The pilot who took over hears it from their own request; a pilot here, flying or parked, hears here that they lost a drone.
         private void OnTookOver(DroneTakenOver takenOver)
         {
-            if (seats.Exists(seat => seat.Session == takenOver.FromSession))
+            if (sessions.Contains(takenOver.FromSession))
             {
-                Report($"{takenOver.Pilot} took {takenOver.Drone} over from {takenOver.FromPilot}.");
-                return;
+                LastMessage = $"{takenOver.Pilot} took {takenOver.Drone} over from {takenOver.FromPilot}.";
             }
-            StatusChanged?.Invoke(this);
         }
 
-        private sealed class Seat
+        private void OnMoved(DroneMoved moved)
         {
-            public Seat(PilotSession session, LocalPilotInput input)
+            if (sessions.Contains(moved.FromSession))
             {
-                Session = session;
-                Input = input;
+                LastMessage = $"{moved.Pilot} moved {moved.Drone} to another device.";
             }
-
-            public PilotSession Session { get; }
-            public LocalPilotInput Input { get; }
         }
     }
 }

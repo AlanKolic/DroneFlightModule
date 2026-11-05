@@ -18,14 +18,16 @@ namespace DroneFlightModule.Unity
 
         [SerializeField] private Vector2 origin = new Vector2(12f, 12f);
         [SerializeField] private Vector2 stationBoxSize = new Vector2(400f, 26f);
-        [SerializeField] private float spacing = 8f;
+        [SerializeField] private float spacing = 10f;
 
         private readonly List<IStationStatus> stations = new List<IStationStatus>();
         private readonly List<string> stationTexts = new List<string>();
-        private string controlsText = string.Empty;
         private Vector2 controlsBoxSize;
         private GUIStyle boxText;
         private float nextStationRefresh;
+
+        public string ControlsText { get; private set; } = string.Empty;
+        public IReadOnlyList<string> StationTexts => stationTexts;
 
         public void Bind(InputActionAsset controls)
         {
@@ -34,7 +36,7 @@ namespace DroneFlightModule.Unity
                 throw new ArgumentNullException(nameof(controls));
             }
             controlsBoxSize = Vector2.zero;
-            controlsText = string.Join("\n",
+            ControlsText = string.Join("\n",
                 Describe(controls, "Flight/Move", "move"),
                 Describe(controls, "Flight/Climb", "climb, descend"),
                 Describe(controls, "Flight/Yaw", "yaw"),
@@ -54,17 +56,6 @@ namespace DroneFlightModule.Unity
         {
             stations.Add(station ?? throw new ArgumentNullException(nameof(station)));
             stationTexts.Add(station.Describe());
-        }
-
-        public void RemoveStation(IStationStatus station)
-        {
-            int index = stations.IndexOf(station);
-            if (index < 0)
-            {
-                return;
-            }
-            stations.RemoveAt(index);
-            stationTexts.RemoveAt(index);
         }
 
         private void Update()
@@ -89,7 +80,7 @@ namespace DroneFlightModule.Unity
             }
             if (controlsBoxSize == Vector2.zero)
             {
-                controlsBoxSize = boxText.CalcSize(new GUIContent(controlsText)) + Vector2.one * (2f * TextPadding);
+                controlsBoxSize = boxText.CalcSize(new GUIContent(ControlsText)) + Vector2.one * (2f * TextPadding);
             }
 
             float top = origin.y;
@@ -99,7 +90,7 @@ namespace DroneFlightModule.Unity
                 top += stationBoxSize.y + spacing;
             }
             var controlsBox = new Rect(origin.x, top, controlsBoxSize.x, controlsBoxSize.y);
-            DrawBox(controlsBox, controlsText);
+            DrawBox(controlsBox, ControlsText);
         }
 
         private void DrawBox(Rect box, string text)
@@ -110,12 +101,7 @@ namespace DroneFlightModule.Unity
 
         private string Describe(InputActionAsset controls, string action, string meaning)
         {
-            return $"{Display(controls, action)}: {meaning}";
-        }
-
-        private string Display(InputActionAsset controls, string action)
-        {
-            return controls.FindAction(action, throwIfNotFound: true).GetBindingDisplayString();
+            return $"{controls.FindAction(action, throwIfNotFound: true).GetBindingDisplayString()}: {meaning}";
         }
     }
 }
