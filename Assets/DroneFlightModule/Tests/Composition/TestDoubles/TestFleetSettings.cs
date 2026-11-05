@@ -30,8 +30,8 @@ namespace DroneFlightModule.Composition.Tests
         {
             return Create(groundHeight, serverLatency, spawnStep, new[]
             {
-                new InputDeviceGroup("Keyboard", "Keyboard"),
-                new InputDeviceGroup("Gamepad", "Gamepad", SilenceTimeout),
+                new InputDeviceGroup("Keyboard", "Keyboard", "Keyboard"),
+                new InputDeviceGroup("Gamepad", "Gamepad", "Gamepad", SilenceTimeout),
             });
         }
 

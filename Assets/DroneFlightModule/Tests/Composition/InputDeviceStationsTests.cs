@@ -54,7 +54,7 @@ namespace DroneFlightModule.Composition.Tests
             InputSystem.AddDevice<Mouse>();
 
             Assert.That(stations.Stations, Has.Count.EqualTo(1));
-            Assert.That(KeyboardStation.Name, Is.EqualTo("Keyboard 1"));
+            Assert.That(KeyboardStation.Name, Is.EqualTo("Keyboard"));
             Assert.That(KeyboardStation.Session.PilotId, Is.EqualTo(Guest));
         }
 
@@ -68,7 +68,7 @@ namespace DroneFlightModule.Composition.Tests
 
             Assert.That(stations.Stations, Has.Count.EqualTo(2));
             Assert.That(added, Is.EqualTo(new[] { stations.Stations[1] }));
-            Assert.That(stations.Stations[1].Name, Is.EqualTo("Gamepad 1"));
+            Assert.That(stations.Stations[1].Name, Is.EqualTo("Gamepad"));
             Assert.That(stations.Stations[1].Session.PilotId, Is.EqualTo(Ace));
         }
 
@@ -244,7 +244,7 @@ namespace DroneFlightModule.Composition.Tests
             AddPad("pad-1");
             var live = AddPad("pad-1");
 
-            var fresh = Stations(fleet.Resolve<IPilotRegistry>(), new InputDeviceGroup("Gamepad", "Gamepad"));
+            var fresh = Stations(fleet.Resolve<IPilotRegistry>(), new InputDeviceGroup("Gamepad", "Gamepad", "Gamepad"));
 
             Assert.That(fresh.Stations, Has.Count.EqualTo(1));
             Assert.That(fresh.Stations[0].Device, Is.SameAs(live));
@@ -275,7 +275,7 @@ namespace DroneFlightModule.Composition.Tests
             Assert.That(stations.Stations, Has.Count.EqualTo(1));
 
             InputSystem.AddDevice<Gamepad>();
-            Assert.That(stations.Stations[1].Name, Is.EqualTo("Gamepad 1"));
+            Assert.That(stations.Stations[1].Name, Is.EqualTo("Gamepad"));
             Assert.That(stations.Stations[1].Session.PilotId, Is.EqualTo(Ace));
         }
 
@@ -300,12 +300,12 @@ namespace DroneFlightModule.Composition.Tests
         {
             var pad = InputSystem.AddDevice<Gamepad>();
             var console = fleet.Resolve<IFleetConsole>();
-            console.SelectStation("Gamepad 1");
+            console.SelectStation("Gamepad");
 
             InputSystem.RemoveDevice(pad);
             Runner.FixedTick();
 
-            Assert.That(console.Station, Is.EqualTo("Keyboard 1"));
+            Assert.That(console.Station, Is.EqualTo("Keyboard"));
         }
 
         [Test]
@@ -410,7 +410,7 @@ namespace DroneFlightModule.Composition.Tests
             var pad = InputSystem.AddDevice<Gamepad>();
             Tap(keyboard.digit1Key);
             var console = fleet.Resolve<IFleetConsole>();
-            console.SelectStation("Gamepad 1");
+            console.SelectStation("Gamepad");
             InputSystem.RemoveDevice(pad);
 
             console.RequestFlight(AirborneDrone);
@@ -439,7 +439,7 @@ namespace DroneFlightModule.Composition.Tests
         {
             var john = new PilotProfile(new PilotId("john"), "John", 60);
             var pilots = new InMemoryPilotRegistry(new[] { john, TestFleetSettings.RegisteredPilot });
-            var withJohn = Stations(pilots, new InputDeviceGroup("Keyboard", "Keyboard"), new InputDeviceGroup("Gamepad", "Gamepad"));
+            var withJohn = Stations(pilots, new InputDeviceGroup("Keyboard", "Keyboard", "Keyboard"), new InputDeviceGroup("Gamepad", "Gamepad", "Gamepad"));
 
             InputSystem.AddDevice<Gamepad>();
             InputSystem.AddDevice<Gamepad>();
@@ -455,17 +455,17 @@ namespace DroneFlightModule.Composition.Tests
         {
             var pad = InputSystem.AddDevice<Gamepad>();
             var padStation = stations.Stations[1];
-            Assert.That(KeyboardStation.Describe(), Is.EqualTo("Keyboard 1: guest, no drone, connected"));
+            Assert.That(KeyboardStation.Describe(), Is.EqualTo("Keyboard: guest, no drone, connected"));
 
             Tap(pad.dpad.left);
-            Assert.That(padStation.Describe(), Is.EqualTo("Gamepad 1: ace, flying drone-1, connected"));
+            Assert.That(padStation.Describe(), Is.EqualTo("Gamepad: ace, flying drone-1, connected"));
 
             Tap(pad.selectButton);
-            Assert.That(padStation.Describe(), Is.EqualTo("Gamepad 1: ace, flying drone-1, link cut"));
+            Assert.That(padStation.Describe(), Is.EqualTo("Gamepad: ace, flying drone-1, link cut"));
 
             Tap(pad.selectButton);
             InputSystem.RemoveDevice(pad);
-            Assert.That(padStation.Describe(), Is.EqualTo("Gamepad 1: ace, flying drone-1, disconnected"));
+            Assert.That(padStation.Describe(), Is.EqualTo("Gamepad: ace, flying drone-1, disconnected"));
         }
 
         [Test]
@@ -540,10 +540,10 @@ namespace DroneFlightModule.Composition.Tests
         {
             InputSystem.AddDevice<Gamepad>();
             var console = fleet.Resolve<IFleetConsole>();
-            Assert.That(console.Stations, Is.EqualTo(new[] { "Keyboard 1", "Gamepad 1" }));
-            Assert.That(console.Station, Is.EqualTo("Keyboard 1"));
+            Assert.That(console.Stations, Is.EqualTo(new[] { "Keyboard", "Gamepad" }));
+            Assert.That(console.Station, Is.EqualTo("Keyboard"));
 
-            console.SelectStation("Gamepad 1");
+            console.SelectStation("Gamepad");
             console.RequestFlight(AirborneDrone);
 
             Assert.That(console.Pilot, Is.EqualTo(Ace));
@@ -556,15 +556,36 @@ namespace DroneFlightModule.Composition.Tests
         [Test]
         public void OnlyConfiguredDevices_GetStations()
         {
-            var padsOnly = Stations(fleet.Resolve<IPilotRegistry>(), new InputDeviceGroup("Gamepad", "Gamepad"));
+            var padsOnly = Stations(fleet.Resolve<IPilotRegistry>(), new InputDeviceGroup("Gamepad", "Gamepad", "Gamepad"));
             Assert.That(padsOnly.Stations, Is.Empty, "The keyboard is not configured.");
 
             InputSystem.AddDevice<Gamepad>();
 
             Assert.That(padsOnly.Stations, Has.Count.EqualTo(1));
-            Assert.That(padsOnly.Stations[0].Name, Is.EqualTo("Gamepad 1"));
+            Assert.That(padsOnly.Stations[0].Name, Is.EqualTo("Gamepad"));
             Assert.That(padsOnly.Stations[0].Session.PilotId, Is.EqualTo(Guest), "The first station starts as the guest.");
             padsOnly.Dispose();
+        }
+
+        [Test]
+        public void TheScreenPanel_IsAnInputOfItsOwn_WithNoTimeout()
+        {
+            InputSystem.RegisterLayout<ScreenPanelGamepad>();
+            var groups = Stations(
+                fleet.Resolve<IPilotRegistry>(),
+                new InputDeviceGroup("Screen panel", "ScreenPanelGamepad", "Gamepad"),
+                new InputDeviceGroup("Gamepad", "Gamepad", "Gamepad", TestFleetSettings.SilenceTimeout));
+
+            InputSystem.AddDevice<ScreenPanelGamepad>();
+            InputSystem.AddDevice<Gamepad>();
+
+            Assert.That(groups.Stations[0].Name, Is.EqualTo("Screen panel"));
+            Assert.That(groups.Stations[1].Name, Is.EqualTo("Gamepad"));
+
+            currentTime += 1000.0;
+            Assert.That(groups.Stations[0].Link.IsConnected, Is.True, "No silence timeout: the panel can sit idle.");
+            Assert.That(groups.Stations[1].Link.IsConnected, Is.False);
+            groups.Dispose();
         }
 
         [Test]
@@ -572,9 +593,10 @@ namespace DroneFlightModule.Composition.Tests
         {
             var pilots = fleet.Resolve<IPilotRegistry>();
 
-            Assert.Throws<ArgumentException>(() => Stations(pilots, new InputDeviceGroup("Steering Wheel", "Gamepad")));
-            Assert.Throws<ArgumentException>(() => Stations(pilots, new InputDeviceGroup("Gamepad", "Joystick")));
-            Assert.Throws<ArgumentException>(() => Stations(pilots, new InputDeviceGroup(string.Empty, "Gamepad")));
+            Assert.Throws<ArgumentException>(() => Stations(pilots, new InputDeviceGroup("Wheel", "Steering Wheel", "Gamepad")));
+            Assert.Throws<ArgumentException>(() => Stations(pilots, new InputDeviceGroup("Gamepad", "Gamepad", "Joystick")));
+            Assert.Throws<ArgumentException>(() => Stations(pilots, new InputDeviceGroup("Gamepad", string.Empty, "Gamepad")));
+            Assert.Throws<ArgumentException>(() => Stations(pilots, new InputDeviceGroup(string.Empty, "Gamepad", "Gamepad")));
         }
 
         private InputDeviceStations Stations(IPilotRegistry pilots, params InputDeviceGroup[] groups)

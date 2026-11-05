@@ -12,7 +12,7 @@ namespace DroneFlightModule.Unity.Tests
 
         private sealed class FixedStatus : IStationStatus
         {
-            public string Describe() => "Keyboard 1: guest, no drone, connected";
+            public string Describe() => "Keyboard: guest, no drone, connected";
         }
 
         private FlightDebugHud hud;
@@ -47,7 +47,7 @@ namespace DroneFlightModule.Unity.Tests
         {
             hud.AddStation(new FixedStatus());
 
-            Assert.That(hud.StationTexts, Is.EqualTo(new[] { "Keyboard 1: guest, no drone, connected" }));
+            Assert.That(hud.StationTexts, Is.EqualTo(new[] { "Keyboard: guest, no drone, connected" }));
         }
 
         [Test]

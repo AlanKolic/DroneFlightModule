@@ -44,7 +44,6 @@ namespace DroneFlightModule.Composition
             }
             RequireKnown(controls);
 
-            // Group by group, so the first group's devices (the keyboard by default) come first and start as the guest.
             foreach (var deviceGroup in deviceGroups)
             {
                 foreach (var device in InputSystem.devices)
@@ -114,7 +113,7 @@ namespace DroneFlightModule.Composition
             {
                 return;
             }
-            var station = factory.Create(FreeName(deviceGroup.BindingGroup), device, deviceGroup, StartPilot());
+            var station = factory.Create(FreeName(deviceGroup.StationName), device, deviceGroup, StartPilot());
             stations.Add(station);
             StationAdded?.Invoke(station);
         }
@@ -129,17 +128,17 @@ namespace DroneFlightModule.Composition
             return !string.IsNullOrEmpty(serial) && serial == second.description.serial && first.layout == second.layout;
         }
 
-        private string FreeName(string group)
+        // Just the name for the first station of a group, then numbered from 2.
+        private string FreeName(string name)
         {
-            int number = 1;
-            while (stations.Exists(station => station.Name == $"{group} {number}"))
+            string free = name;
+            for (int number = 2; stations.Exists(station => station.Name == free); number++)
             {
-                number++;
+                free = $"{name} {number}";
             }
-            return $"{group} {number}";
+            return free;
         }
 
-        // The first group whose layout the device's layout is, or is based on.
         private InputDeviceGroup GroupOf(InputDevice device)
         {
             foreach (var deviceGroup in deviceGroups)
@@ -157,6 +156,10 @@ namespace DroneFlightModule.Composition
             var layouts = new HashSet<string>(InputSystem.ListLayouts(), StringComparer.OrdinalIgnoreCase);
             foreach (var deviceGroup in deviceGroups)
             {
+                if (string.IsNullOrWhiteSpace(deviceGroup.StationName))
+                {
+                    throw new ArgumentException($"The device group {deviceGroup} needs a station name.", nameof(deviceGroups));
+                }
                 if (string.IsNullOrEmpty(deviceGroup.Layout) || !layouts.Contains(deviceGroup.Layout))
                 {
                     throw new ArgumentException($"The Input System has no device layout '{deviceGroup.Layout}'.", nameof(deviceGroups));

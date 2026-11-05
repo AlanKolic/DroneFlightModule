@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using DroneFlightModule.Core;
+using UnityEngine.InputSystem;
 
 namespace DroneFlightModule.Composition
 {
@@ -21,6 +22,8 @@ namespace DroneFlightModule.Composition
         string LinkStatus { get; }
 
         void SelectStation(string station);
+
+        bool IsChosen(InputDevice device);
 
         bool TryGetDrone(out DroneId drone);
 

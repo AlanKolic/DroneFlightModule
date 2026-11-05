@@ -43,12 +43,18 @@ Centred sticks hold position and altitude, so the drone hovers hands-off.
 **Every input device is its own pilot station.** The keyboard and each gamepad, including one
 plugged in while the scene runs, fly as separate pilots on separate drones, and none reads the
 others' buttons. A station starts as the lowest-ranked pilot no other station flies as, so the
-keyboard is the guest, the first gamepad Ace and the second John. Unplugging a gamepad is link
-loss: its drone holds and lands, and plugging it back in resumes, with the same pilot and station.
-A pad silent for 15 s counts as unplugged until it next sends something, because macOS can drop a
-Bluetooth pad without reporting it. A drone that lands with no link is released, and a gone device
-with no drone loses its station. Adding and removing drones and the dashboard stay on the
-keyboard, since they act on the whole fleet. The HUD lists the stations.
+keyboard is the guest and each later device takes the next free pilot up the ranks. Unplugging a
+gamepad is link loss: its drone holds and lands, and plugging it back in resumes, with the same
+pilot and station. A pad silent for 15 s counts as unplugged until it next sends something,
+because macOS can drop a Bluetooth pad without reporting it. A drone that lands with no link is
+released, and a gone device with no drone loses its station. Adding and removing drones and the
+dashboard stay on the keyboard, since they act on the whole fleet. The HUD lists the stations.
+
+**The screen panel** is one more input device: pick "Screen panel" in the control panel's station
+dropdown and on-screen flight buttons appear at the bottom left, then Request a drone and hold the
+buttons to fly. They drive a virtual gamepad, so the panel has its own station and pilot like any
+other device, and pressing a key or pad button elsewhere doesn't affect it. A mouse holds one
+button at a time, so moves can't be combined.
 
 You start as the **guest**, authorized at once by local guest mode, without a drone. **P**
 switches to the next pilot in the registry, highest priority first: **John** (60), then **Ace**
@@ -93,7 +99,7 @@ where the latest outcome shows: what you asked for, a denial, or that someone to
 9. Take a drone over: as the guest press **1**, then **P** to become John, who outranks the
    guest, and press **1** again. John takes drone-1, the guest is preempted, and the dashboard
    counts one takeover for John and one preemption for the guest.
-10. Plug in a gamepad: it appears in the HUD as `Gamepad 1`, flying as Ace. Press **R** on the
+10. Plug in a gamepad: it appears in the HUD as `Gamepad`, with its own pilot. Press **R** on the
     keyboard and **South** on the pad, and the two fly separate drones at once. Unplug the pad
     and its drone holds, then lands; plug it back in within the hold to take over again.
 11. Watch the fleet dashboard on the right: every drone's pilot, mode, measured and true
@@ -124,7 +130,7 @@ share: the coordinator, pilots and stats, the providers, and a pilot station per
 | `Telemetry` | Core | A recorder per drone sampling its flight at 10 Hz, sinks (a fleet-wide in-memory sink of the latest samples) |
 | `Coordination` | Core, Pilots, Authorization | `FlightCoordinator`: pilot sessions, drone registry, request pipeline, priority assignment policy, takeover and release, stats from its events |
 | `Composition` | everything above, VContainer, Input System | Fleet scope and installer, config assets mapped to `FleetSettings`, `DroneInstantiator` (adds and removes drones, one child scope each), a pilot station per input device, `FleetKeys` (fleet-wide keys), the `IFleetConsole` a panel drives, runners (the only places Unity's clock reaches the sim) |
-| `UI` | Core, Pilots, Coordination, Telemetry, Composition, VContainer, Input System | Fleet dashboard and control panel in their own child scope; nothing references it, so it can be deleted |
+| `UI` | Core, Unity, Pilots, Coordination, Telemetry, Composition, VContainer, Input System | Fleet dashboard, control panel and on-screen flight buttons in their own child scope; nothing references it, so it can be deleted |
 | `Editor` | the above | Menu item that builds the prototype scene |
 | `*.Tests` | their target | EditMode tests |
 
@@ -215,9 +221,9 @@ Three others are added elsewhere:
   cancelled and superseded requests, decisions on the fleet as it is once authorization completes,
   the drones joining and leaving at any time, the policy on its own, and stats timed by the
   simulation clock.
-- **Dashboard**: 29 tests for the event log, the readout's text (run in a comma-decimal
+- **Dashboard**: 33 tests for the event log, the readout's text (run in a comma-decimal
   culture to keep the formatting invariant), Tab toggling the dashboard, and the control
-  panel's pilot and drone choices, labels that follow a takeover, and the status line.
+  panel's pilot and drone choices, labels that follow a takeover, the status line, and the screen panel's virtual gamepad.
 - **Telemetry**: 14 tests for sampling on simulation time, sink fan-out, a failing sink never
   breaking the flight, streams ending with the drone, and the in-memory sink.
 - **Composition**: the real fleet container with two drone scopes, driven by key presses: each
@@ -261,10 +267,9 @@ Every planned commit is done.
   released; touching the pad restores the link. Until then a dropped pad's last input stays in
   force, and a stick held perfectly still may count as silence.
 - A pad with no serial that returns as a new device gets a new station.
-- The roster has two registered pilots, so a third gamepad starts as the guest, the same pilot
-  as the keyboard: whichever requests last flies the guest's drone. Adding pilots to the roster
-  asset gives every device its own.
-
+- The roster has two registered pilots and the screen panel takes one, so a second gamepad starts
+  as the guest, the same pilot as the keyboard: whichever requests last flies the guest's drone.
+  Adding pilots to the roster asset gives every device its own.
 - The drone doesn't pitch or roll; lateral force is applied directly. Good enough to exercise
   the loop, not a multirotor model.
 - Vertical speed for the failsafe comes from the true state, standing in for an IMU.

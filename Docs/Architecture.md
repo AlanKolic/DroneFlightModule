@@ -38,7 +38,7 @@ flowchart TB
     Core["Core (zero dependencies)<br/>Loop, gates, supervisor, router"]
 
     Comp --> Unity & Coord & Auth & Pilots & Tele
-    UI --> Comp & Tele & Coord & Pilots
+    UI --> Comp & Unity & Tele & Coord & Pilots
     Unity --> Core
     Coord --> Auth & Pilots & Core
     Auth --> Core
@@ -55,7 +55,7 @@ flowchart TB
 | `DroneFlightModule.Telemetry` | Core | Recorder per drone sampling `FlightLoop.Ticked`, `ITelemetrySink` and the in-memory sink of the latest samples |
 | `DroneFlightModule.Unity` | Core, Input System | Input-actions provider (keyboard and gamepad), smoothed drone view, debug HUD, follow camera, Core-to-Unity conversions |
 | `DroneFlightModule.Composition` | everything except UI, plus VContainer and Input System | Fleet `LifetimeScope`, one child scope per drone, installers, the config assets and the `FleetSettings` they map to, a `PilotStation` per input device and the `InputDeviceStations` that makes them, `FleetKeys` (the fleet-wide keys), the `IFleetConsole` contract a control panel drives, `FlightLoopRunner` and `FleetRunner` (the only places Unity's clock reaches the simulation) |
-| `DroneFlightModule.UI` | Core, Coordination, Pilots, Telemetry, Composition, VContainer, Input System | Fleet dashboard and control panel (IMGUI) in their own child scope |
+| `DroneFlightModule.UI` | Core, Unity, Coordination, Pilots, Telemetry, Composition, VContainer, Input System | Fleet dashboard, control panel and on-screen flight buttons (IMGUI) in their own child scope |
 | `DroneFlightModule.Editor` | Core, Unity, Composition, VContainer | Editor-only tools, such as the menu item that builds the prototype scene |
 | `*.Tests` (one per assembly) | Its target + NUnit | Edit-mode tests, in `Tests/`; the UI's are in `UI/Tests` |
 
@@ -540,10 +540,10 @@ matters only to the composition root that built it.
   device matches the first group whose layout its own layout is, or is based on, so a group for
   `Gamepad` takes every kind of gamepad; a device matching no group, like the mouse, gets no
   station. Each group's layout must be known to the Input System and its binding group must be one
-  of the controls' control schemes, or the stations fail to start. Stations are named by group and
-  number, such as `Keyboard 1` or `Gamepad 2`. A new station starts as the lowest-ranked pilot no
+  of the controls' control schemes, or the stations fail to start. A station takes its entry's name, numbered from the
+  second on, such as `Gamepad` and `Gamepad 2`. A new station starts as the lowest-ranked pilot no
   other station flies as, or as the guest when every pilot is taken, so an unknown device is never
-  the strongest pilot: the keyboard is the guest, the first pad Ace and the second John.
+  the strongest pilot: the keyboard is the guest and each later device the next free pilot up the ranks.
 - **Unplugging is link loss.** A station's input reports its pilot as connected only while its
   device's controls resolve. The Input System drops a removed device from every asset's device
   list, which leaves the station's list empty, so no other pad can drive it. Unplugging a pad
@@ -580,6 +580,15 @@ matters only to the composition root that built it.
 - **UI:** the HUD shows a line per station (`IStationStatus`: name, pilot, drone, link), the
   control panel adds a station dropdown and drives the chosen one, and the camera follows that
   station's drone.
+- **The screen panel** (`ScreenFlightPanel`, in UI) is a virtual gamepad of its own layout,
+  `ScreenPanelGamepad`, so to everything else it is one more device. It has its own entry in
+  `InputDevices.asset`: station name "Screen panel", no silence timeout since a panel can sit idle,
+  and placed before the Gamepad entry, because its layout is based on Gamepad and the first match
+  wins. The panel adds the device when bound and removes it when destroyed, and a held button
+  becomes a stick value through `QueueStateEvent`. The buttons show only while the console's chosen
+  station is on that device, and hide with the sticks centred. Requesting and releasing go through
+  the control panel. The layout lives in the Unity assembly, so the asset entry stays valid with
+  the UI deleted; no such device is then made.
 - **A new device type** is a control scheme with its bindings in the controls asset and one
   more entry in `InputDevicesAsset`. No code changes at all.
 
@@ -649,6 +658,8 @@ matters only to the composition root that built it.
   - another pad never stands in for an unplugged one
   - a pad that comes back as a new device resumes its station, and a different pad doesn't
   - a stale entry of a pad is replaced when the pad connects, and shares its station at start
+  - the screen panel's layout gets a station under its own name, with no timeout
+  - the screen panel adds and removes its device, shows only for its station and moves the sticks
   - a silent pad counts as disconnected and any input restores it; a new pad gets the full timeout,
     and a keyboard never times out
   - a gone device loses its station once it holds no drone, not before, and the console falls back

@@ -129,12 +129,13 @@ namespace DroneFlightModule.Composition.Tests
         }
 
         [Test]
-        public void NewInputDevices_AreTheKeyboardThenGamepads()
+        public void NewInputDevices_AreTheKeyboardTheScreenPanelThenGamepads()
         {
             var groups = Create<InputDevicesAsset>().Groups;
 
-            Assert.That(groups.Select(group => group.Layout), Is.EqualTo(new[] { "Keyboard", "Gamepad" }));
-            Assert.That(groups.Select(group => group.BindingGroup), Is.EqualTo(new[] { "Keyboard", "Gamepad" }));
+            Assert.That(groups.Select(group => group.StationName), Is.EqualTo(new[] { "Keyboard", "Screen panel", "Gamepad" }));
+            Assert.That(groups.Select(group => group.Layout), Is.EqualTo(new[] { "Keyboard", "ScreenPanelGamepad", "Gamepad" }));
+            Assert.That(groups.Select(group => group.BindingGroup), Is.EqualTo(new[] { "Keyboard", "Gamepad", "Gamepad" }));
         }
 
         [Test]
@@ -147,7 +148,7 @@ namespace DroneFlightModule.Composition.Tests
             Assert.That(settings.ServerLatency, Is.EqualTo(TimeSpan.FromSeconds(0.5)));
             Assert.That(settings.Pilots.Count, Is.EqualTo(1));
             Assert.That(settings.Drones.Count, Is.EqualTo(3));
-            Assert.That(settings.DeviceGroups.Count, Is.EqualTo(2));
+            Assert.That(settings.DeviceGroups.Count, Is.EqualTo(3));
         }
 
         [TestCase("frame")]

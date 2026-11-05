@@ -13,9 +13,15 @@ MonoBehaviour:
   m_Name: InputDevices
   m_EditorClassIdentifier: 
   devices:
-  - layout: Keyboard
+  - stationName: Keyboard
+    layout: Keyboard
     bindingGroup: Keyboard
     silenceTimeout: 0
-  - layout: Gamepad
+  - stationName: Screen panel
+    layout: ScreenPanelGamepad
+    bindingGroup: Gamepad
+    silenceTimeout: 0
+  - stationName: Gamepad
+    layout: Gamepad
     bindingGroup: Gamepad
     silenceTimeout: 15

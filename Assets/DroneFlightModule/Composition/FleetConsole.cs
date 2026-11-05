@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using DroneFlightModule.Core;
+using UnityEngine.InputSystem;
 
 namespace DroneFlightModule.Composition
 {
@@ -46,6 +47,11 @@ namespace DroneFlightModule.Composition
         {
             chosen = stations.Stations.FirstOrDefault(candidate => candidate.Name == station)
                 ?? throw new ArgumentException($"There is no station {station}.", nameof(station));
+        }
+
+        public bool IsChosen(InputDevice device)
+        {
+            return Selected != null && Selected.Device == device;
         }
 
         public bool TryGetDrone(out DroneId drone)

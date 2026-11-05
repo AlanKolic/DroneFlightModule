@@ -119,7 +119,7 @@ NavMeshSettings:
     debug:
       m_Flags: 0
   m_NavMeshData: {fileID: 0}
---- !u!1 &13487396
+--- !u!1 &145383825
 GameObject:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -127,10 +127,80 @@ GameObject:
   m_PrefabAsset: {fileID: 0}
   serializedVersion: 6
   m_Component:
-  - component: {fileID: 13487400}
-  - component: {fileID: 13487399}
-  - component: {fileID: 13487398}
-  - component: {fileID: 13487397}
+  - component: {fileID: 145383828}
+  - component: {fileID: 145383827}
+  - component: {fileID: 145383826}
+  m_Layer: 0
+  m_Name: Fleet Scope
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &145383826
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 145383825}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ed496358ece1f40f3889c2a7569534c9, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: DroneFlightModule.Composition::DroneFlightModule.Composition.FleetLifetimeScope
+  parentReference:
+    TypeName: 
+  autoRun: 1
+  autoInjectGameObjects: []
+  settings: {fileID: 11400000, guid: 52f0f5b1faaa4aaa8dec0753be0d38ea, type: 2}
+  controls: {fileID: -944628639613478452, guid: 8e5abd5b862e54199a7f52d01f88c40e, type: 3}
+  dronePrefab: {fileID: 8669992714969344846, guid: 9ffa04c47d26e4ac59e11c598a8aaef5, type: 3}
+  debugHud: {fileID: 145383827}
+  followCamera: {fileID: 339353830}
+  groundPlane: {fileID: 522335637}
+--- !u!114 &145383827
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 145383825}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 306b9a43b1158445ab35db7b9d790819, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: DroneFlightModule.Unity::DroneFlightModule.Unity.FlightDebugHud
+  origin: {x: 12, y: 12}
+  stationBoxSize: {x: 400, y: 26}
+  spacing: 10
+--- !u!4 &145383828
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 145383825}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &339353829
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 339353833}
+  - component: {fileID: 339353832}
+  - component: {fileID: 339353831}
+  - component: {fileID: 339353830}
   m_Layer: 0
   m_Name: Main Camera
   m_TagString: MainCamera
@@ -138,13 +208,13 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &13487397
+--- !u!114 &339353830
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 13487396}
+  m_GameObject: {fileID: 339353829}
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: fc3ab38ab7a1a4cc999ff0b21209a502, type: 3}
@@ -154,21 +224,21 @@ MonoBehaviour:
   offset: {x: 0, y: 2.5, z: -6}
   lookHeight: 0.5
   sharpness: 5
---- !u!81 &13487398
+--- !u!81 &339353831
 AudioListener:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 13487396}
+  m_GameObject: {fileID: 339353829}
   m_Enabled: 1
---- !u!20 &13487399
+--- !u!20 &339353832
 Camera:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 13487396}
+  m_GameObject: {fileID: 339353829}
   m_Enabled: 1
   serializedVersion: 2
   m_ClearFlags: 1
@@ -213,13 +283,13 @@ Camera:
   m_OcclusionCulling: 1
   m_StereoConvergence: 10
   m_StereoSeparation: 0.022
---- !u!4 &13487400
+--- !u!4 &339353833
 Transform:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 13487396}
+  m_GameObject: {fileID: 339353829}
   serializedVersion: 2
   m_LocalRotation: {x: 0.1305262, y: 0, z: 0, w: 0.9914449}
   m_LocalPosition: {x: 0, y: 2.5, z: -6}
@@ -228,7 +298,7 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!1 &338102168
+--- !u!1 &481230334
 GameObject:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -236,60 +306,87 @@ GameObject:
   m_PrefabAsset: {fileID: 0}
   serializedVersion: 6
   m_Component:
-  - component: {fileID: 338102171}
-  - component: {fileID: 338102170}
-  - component: {fileID: 338102169}
+  - component: {fileID: 481230339}
+  - component: {fileID: 481230338}
+  - component: {fileID: 481230337}
+  - component: {fileID: 481230336}
+  - component: {fileID: 481230335}
   m_Layer: 0
-  m_Name: Fleet Scope
+  m_Name: Dashboard
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &338102169
+--- !u!114 &481230335
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 338102168}
+  m_GameObject: {fileID: 481230334}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: ed496358ece1f40f3889c2a7569534c9, type: 3}
+  m_Script: {fileID: 11500000, guid: 7755d191981a648d1a2e0a877166bcf9, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: DroneFlightModule.Composition::DroneFlightModule.Composition.FleetLifetimeScope
+  m_EditorClassIdentifier: DroneFlightModule.UI::DroneFlightModule.UI.DashboardLifetimeScope
   parentReference:
-    TypeName: 
+    TypeName: DroneFlightModule.Composition.FleetLifetimeScope
   autoRun: 1
   autoInjectGameObjects: []
-  settings: {fileID: 11400000, guid: 52f0f5b1faaa4aaa8dec0753be0d38ea, type: 2}
-  controls: {fileID: -944628639613478452, guid: 8e5abd5b862e54199a7f52d01f88c40e, type: 3}
-  dronePrefab: {fileID: 8669992714969344846, guid: 9ffa04c47d26e4ac59e11c598a8aaef5, type: 3}
-  debugHud: {fileID: 338102170}
-  followCamera: {fileID: 13487397}
-  groundPlane: {fileID: 469011804}
---- !u!114 &338102170
+  eventCapacity: 50
+--- !u!114 &481230336
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 338102168}
+  m_GameObject: {fileID: 481230334}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 306b9a43b1158445ab35db7b9d790819, type: 3}
+  m_Script: {fileID: 11500000, guid: ba70da6b030f4b7a98856fd0aafa6a5a, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: DroneFlightModule.Unity::DroneFlightModule.Unity.FlightDebugHud
-  origin: {x: 12, y: 12}
-  stationBoxSize: {x: 400, y: 26}
-  spacing: 10
---- !u!4 &338102171
+  m_EditorClassIdentifier: DroneFlightModule.UI::DroneFlightModule.UI.ScreenFlightPanel
+  margin: 15
+--- !u!114 &481230337
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 481230334}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f6b0167d5a6f54d6d85d766fe4edf401, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: DroneFlightModule.UI::DroneFlightModule.UI.ControlPanel
+  width: 340
+  margin: 15
+  refreshInterval: 0.25
+--- !u!114 &481230338
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 481230334}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2d5f6ccf268804461a70bfba8660fefa, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: DroneFlightModule.UI::DroneFlightModule.UI.FleetDashboard
+  width: 480
+  margin: 15
+  refreshInterval: 0.25
+  eventCount: 8
+  isVisible: 1
+--- !u!4 &481230339
 Transform:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 338102168}
+  m_GameObject: {fileID: 481230334}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
@@ -298,7 +395,7 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!1 &469011803
+--- !u!1 &522335636
 GameObject:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -306,9 +403,9 @@ GameObject:
   m_PrefabAsset: {fileID: 0}
   serializedVersion: 6
   m_Component:
-  - component: {fileID: 469011804}
-  - component: {fileID: 469011806}
-  - component: {fileID: 469011805}
+  - component: {fileID: 522335637}
+  - component: {fileID: 522335639}
+  - component: {fileID: 522335638}
   m_Layer: 0
   m_Name: Ground
   m_TagString: Untagged
@@ -316,13 +413,13 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!4 &469011804
+--- !u!4 &522335637
 Transform:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 469011803}
+  m_GameObject: {fileID: 522335636}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
@@ -331,13 +428,13 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!23 &469011805
+--- !u!23 &522335638
 MeshRenderer:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 469011803}
+  m_GameObject: {fileID: 522335636}
   m_Enabled: 1
   m_CastShadows: 1
   m_ReceiveShadows: 1
@@ -380,15 +477,15 @@ MeshRenderer:
   m_SortingOrder: 0
   m_MaskInteraction: 0
   m_AdditionalVertexStreams: {fileID: 0}
---- !u!33 &469011806
+--- !u!33 &522335639
 MeshFilter:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 469011803}
+  m_GameObject: {fileID: 522335636}
   m_Mesh: {fileID: 10209, guid: 0000000000000000e000000000000000, type: 0}
---- !u!1 &1353050261
+--- !u!1 &2140169188
 GameObject:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -396,92 +493,8 @@ GameObject:
   m_PrefabAsset: {fileID: 0}
   serializedVersion: 6
   m_Component:
-  - component: {fileID: 1353050265}
-  - component: {fileID: 1353050264}
-  - component: {fileID: 1353050263}
-  - component: {fileID: 1353050262}
-  m_Layer: 0
-  m_Name: Dashboard
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!114 &1353050262
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1353050261}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 7755d191981a648d1a2e0a877166bcf9, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: DroneFlightModule.UI::DroneFlightModule.UI.DashboardLifetimeScope
-  parentReference:
-    TypeName: DroneFlightModule.Composition.FleetLifetimeScope
-  autoRun: 1
-  autoInjectGameObjects: []
-  eventCapacity: 50
---- !u!114 &1353050263
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1353050261}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: f6b0167d5a6f54d6d85d766fe4edf401, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: DroneFlightModule.UI::DroneFlightModule.UI.ControlPanel
-  width: 340
-  margin: 15
-  refreshInterval: 0.25
---- !u!114 &1353050264
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1353050261}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 2d5f6ccf268804461a70bfba8660fefa, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: DroneFlightModule.UI::DroneFlightModule.UI.FleetDashboard
-  width: 480
-  margin: 15
-  refreshInterval: 0.25
-  eventCount: 8
-  isVisible: 1
---- !u!4 &1353050265
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1353050261}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!1 &2144559883
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 2144559885}
-  - component: {fileID: 2144559884}
-  - component: {fileID: 2144559886}
+  - component: {fileID: 2140169190}
+  - component: {fileID: 2140169189}
   m_Layer: 0
   m_Name: Directional Light
   m_TagString: Untagged
@@ -489,13 +502,13 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!108 &2144559884
+--- !u!108 &2140169189
 Light:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2144559883}
+  m_GameObject: {fileID: 2140169188}
   m_Enabled: 1
   serializedVersion: 12
   m_Type: 1
@@ -554,13 +567,13 @@ Light:
   m_LightUnit: 1
   m_LuxAtDistance: 1
   m_EnableSpotReflector: 1
---- !u!4 &2144559885
+--- !u!4 &2140169190
 Transform:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2144559883}
+  m_GameObject: {fileID: 2140169188}
   serializedVersion: 2
   m_LocalRotation: {x: 0.40821794, y: -0.23456973, z: 0.10938166, w: 0.8754261}
   m_LocalPosition: {x: 0, y: 0, z: 0}
@@ -569,41 +582,12 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &2144559886
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2144559883}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 474bcb49853aa07438625e644c072ee6, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Unity.RenderPipelines.Universal.Runtime::UnityEngine.Rendering.Universal.UniversalAdditionalLightData
-  m_UsePipelineSettings: 1
-  m_AdditionalLightsShadowResolutionTier: 2
-  m_CustomShadowLayers: 0
-  m_LightCookieSize: {x: 1, y: 1}
-  m_LightCookieOffset: {x: 0, y: 0}
-  m_SoftShadowQuality: 0
-  m_RenderingLayersMask:
-    serializedVersion: 0
-    m_Bits: 1
-  m_ShadowRenderingLayersMask:
-    serializedVersion: 0
-    m_Bits: 1
-  m_Version: 4
-  m_LightLayerMask: 1
-  m_ShadowLayerMask: 1
-  m_RenderingLayers: 1
-  m_ShadowRenderingLayers: 1
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0
   m_Roots:
-  - {fileID: 13487400}
-  - {fileID: 2144559885}
-  - {fileID: 469011804}
-  - {fileID: 338102171}
-  - {fileID: 1353050265}
+  - {fileID: 339353833}
+  - {fileID: 2140169190}
+  - {fileID: 522335637}
+  - {fileID: 145383828}
+  - {fileID: 481230339}
