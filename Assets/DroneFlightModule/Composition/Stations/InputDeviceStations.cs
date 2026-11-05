@@ -7,7 +7,6 @@ using DroneFlightModule.Coordination;
 using DroneFlightModule.Core;
 using DroneFlightModule.Pilots;
 using DroneFlightModule.Unity;
-using UnityEngine;
 using UnityEngine.InputSystem;
 using Object = UnityEngine.Object;
 
@@ -17,15 +16,14 @@ namespace DroneFlightModule.Composition
     /// Gives every pilot input device its own <see cref="PilotStation"/>: each device of a
     /// configured <see cref="InputDeviceGroup"/> present at start, in the groups' order, and each
     /// one plugged in later; a device matching no group, such as a mouse by default, gets none.
-    /// Every group's layout must be known to the Input System and its binding group must be one of
-    /// the controls' control schemes. A station flies with its own copy
-    /// of the controls, restricted to its device and that device's binding group, so devices never
-    /// read each other's buttons. Unplugging a device is link loss: its controls resolve to
-    /// nothing, the station reports no pilot and the failsafe takes over, while its sessions stay,
-    /// and no other device can stand in for it; plugging the same device back in gives it back to
-    /// its station and resumes them. A new station starts as the first pilot no
-    /// other station flies as, the guest first, then the registry's order, or as the guest when
-    /// everyone is taken. Disposing disposes every station and destroys their controls.
+    /// A group's layout must be known to the Input System and its binding group must be one of the
+    /// controls' control schemes. A station flies with its own copy of the controls, restricted to
+    /// its device and that device's binding group, so devices never read each other's buttons.
+    /// Unplugging a device is link loss: its controls resolve to nothing, no other device can stand
+    /// in for it, and the failsafe takes over; plugging the same device back in resumes it. A new
+    /// station starts as the lowest-ranked pilot no other station flies as, so the guest first and
+    /// an unknown device is never the strongest pilot, or as the guest when everyone is taken.
+    /// Disposing disposes every station and destroys their controls.
     /// </summary>
     public sealed class InputDeviceStations : IDisposable
     {
@@ -39,7 +37,7 @@ namespace DroneFlightModule.Composition
         private readonly FlightDebugHud hud;
         private readonly CancellationToken lifetime;
         private readonly List<Member> members = new List<Member>();
-        private readonly List<PilotStation> stations = new List<PilotStation>();
+        private readonly ObjectDestroyer destroyer = new ObjectDestroyer();
         private bool isDisposed;
 
         public InputDeviceStations(
@@ -78,7 +76,7 @@ namespace DroneFlightModule.Composition
             InputSystem.onDeviceChange += OnDeviceChange;
         }
 
-        public IReadOnlyList<PilotStation> Stations => stations;
+        public IReadOnlyList<PilotStation> Stations => members.ConvertAll(member => member.Station);
         public event Action<PilotStation> StationAdded;
 
         public void Dispose()
@@ -98,10 +96,9 @@ namespace DroneFlightModule.Composition
                 member.Keys.Dispose();
                 member.Station.Dispose();
                 member.Input.Dispose();
-                DestroyControls(member.Controls);
+                destroyer.Destroy(member.Controls);
             }
             members.Clear();
-            stations.Clear();
         }
 
         private void OnDeviceChange(InputDevice device, InputDeviceChange change)
@@ -140,7 +137,6 @@ namespace DroneFlightModule.Composition
             var keys = new StationKeys(controls, station);
 
             members.Add(new Member(device, group, controls, input, station, keys));
-            stations.Add(station);
             if (hud != null)
             {
                 hud.AddStation(station);
@@ -183,32 +179,16 @@ namespace DroneFlightModule.Composition
 
         private PilotId StartPilot()
         {
-            var taken = new HashSet<PilotId>(stations.Select(station => station.Session.PilotId));
-            if (!taken.Contains(PilotProfile.Guest.Id))
+            var taken = new HashSet<PilotId>(members.Select(member => member.Station.Session.PilotId));
+            // Profiles are listed highest priority first, with the guest last.
+            for (int i = pilots.Profiles.Count - 1; i >= 0; i--)
             {
-                return PilotProfile.Guest.Id;
-            }
-            foreach (var profile in pilots.Profiles)
-            {
-                if (!taken.Contains(profile.Id))
+                if (!taken.Contains(pilots.Profiles[i].Id))
                 {
-                    return profile.Id;
+                    return pilots.Profiles[i].Id;
                 }
             }
             return PilotProfile.Guest.Id;
-        }
-
-        private void DestroyControls(InputActionAsset controls)
-        {
-            // Edit mode can't defer destruction, so tests destroy at once.
-            if (Application.isPlaying)
-            {
-                Object.Destroy(controls);
-            }
-            else
-            {
-                Object.DestroyImmediate(controls);
-            }
         }
 
         private sealed class Member

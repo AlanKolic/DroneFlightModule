@@ -24,9 +24,9 @@ namespace DroneFlightModule.Authorization.Tests
             provider.Dispose();
         }
 
-        private AuthorizationResult Authorize(PilotId pilot, PilotOrigin origin)
+        private AuthorizationResult Authorize(PilotId pilot)
         {
-            var task = provider.AuthorizeAsync(new AuthorizationRequest(pilot, origin), CancellationToken.None);
+            var task = provider.AuthorizeAsync(new AuthorizationRequest(pilot), CancellationToken.None);
             Assert.That(task.IsCompleted, Is.True, "The guest provider answers immediately.");
             return task.Result;
         }
@@ -40,7 +40,7 @@ namespace DroneFlightModule.Authorization.Tests
         [Test]
         public void LocalGuest_IsGrantedImmediately()
         {
-            var result = Authorize(Guest, PilotOrigin.Local);
+            var result = Authorize(Guest);
 
             Assert.That(result.IsGranted, Is.True);
             Assert.That(result.Grant.PilotId, Is.EqualTo(Guest));
@@ -48,18 +48,9 @@ namespace DroneFlightModule.Authorization.Tests
         }
 
         [Test]
-        public void RemoteRequest_IsDenied()
-        {
-            var result = Authorize(Guest, PilotOrigin.Remote);
-
-            Assert.That(result.IsGranted, Is.False);
-            StringAssert.Contains("local machine", result.DenialReason);
-        }
-
-        [Test]
         public void LocalRegisteredPilot_IsDenied()
         {
-            var result = Authorize(Alice, PilotOrigin.Local);
+            var result = Authorize(Alice);
 
             Assert.That(result.IsGranted, Is.False);
         }
@@ -67,13 +58,13 @@ namespace DroneFlightModule.Authorization.Tests
         [Test]
         public void RepeatedRequests_ShareOneGrant()
         {
-            Assert.That(Authorize(Guest, PilotOrigin.Local).Grant, Is.SameAs(Authorize(Guest, PilotOrigin.Local).Grant));
+            Assert.That(Authorize(Guest).Grant, Is.SameAs(Authorize(Guest).Grant));
         }
 
         [Test]
         public void CancelledToken_CancelsTheRequest()
         {
-            var task = provider.AuthorizeAsync(new AuthorizationRequest(Guest, PilotOrigin.Local), new CancellationToken(true));
+            var task = provider.AuthorizeAsync(new AuthorizationRequest(Guest), new CancellationToken(true));
 
             Assert.That(task.IsCanceled, Is.True);
         }
@@ -87,12 +78,12 @@ namespace DroneFlightModule.Authorization.Tests
         [Test]
         public void Dispose_RevokesGrantsAndRejectsLaterRequests()
         {
-            var grant = Authorize(Guest, PilotOrigin.Local).Grant;
+            var grant = Authorize(Guest).Grant;
 
             provider.Dispose();
 
             Assert.That(grant.IsRevoked, Is.True);
-            var task = provider.AuthorizeAsync(new AuthorizationRequest(Guest, PilotOrigin.Local), CancellationToken.None);
+            var task = provider.AuthorizeAsync(new AuthorizationRequest(Guest), CancellationToken.None);
             Assert.That(task.IsFaulted, Is.True);
             Assert.That(task.Exception.InnerException, Is.TypeOf<ObjectDisposedException>());
         }

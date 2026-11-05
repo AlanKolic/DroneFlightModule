@@ -11,6 +11,11 @@ namespace DroneFlightModule.Core
         public readonly float YawRate;
         public readonly bool IsGrounded;
 
+        public DroneState(Vec3 position, float yaw = 0f)
+            : this(position, Vec3.Zero, yaw, 0f, isGrounded: false)
+        {
+        }
+
         public DroneState(Vec3 position, Vec3 velocity, float yaw, float yawRate, bool isGrounded)
         {
             Position = position;
@@ -19,9 +24,6 @@ namespace DroneFlightModule.Core
             YawRate = yawRate;
             IsGrounded = isGrounded;
         }
-
-        public static DroneState At(Vec3 position, float yaw = 0f) =>
-            new DroneState(position, Vec3.Zero, yaw, 0f, false);
 
         public override string ToString() =>
             $"position {Position} velocity {Velocity} yaw {Yaw:0.###} yawRate {YawRate:0.###} grounded {IsGrounded}";

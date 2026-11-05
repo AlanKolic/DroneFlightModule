@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Globalization;
 using DroneFlightModule.Coordination;
 using DroneFlightModule.Core;
-using DroneFlightModule.Telemetry;
 
 namespace DroneFlightModule.UI
 {
@@ -16,13 +15,15 @@ namespace DroneFlightModule.UI
     {
         private readonly FlightCoordinator coordinator;
         private readonly ISimulationClock clock;
-        private readonly RingBuffer<string> lines;
+        private readonly ArgumentGuard guard = new ArgumentGuard();
+        private readonly List<string> lines = new List<string>();
+        private readonly int capacity;
 
         public FleetEventLog(FlightCoordinator coordinator, ISimulationClock clock, int capacity)
         {
             this.coordinator = coordinator ?? throw new ArgumentNullException(nameof(coordinator));
             this.clock = clock ?? throw new ArgumentNullException(nameof(clock));
-            lines = new RingBuffer<string>(capacity);
+            this.capacity = guard.RequirePositive(capacity, nameof(capacity));
             coordinator.Assigned += OnAssigned;
             coordinator.Released += OnReleased;
             coordinator.TookOver += OnTookOver;
@@ -63,8 +64,8 @@ namespace DroneFlightModule.UI
         {
             switch (released.Reason)
             {
-                case ReleaseReason.SessionEnded:
-                    return $"{released.Pilot} left, releasing {released.Drone}";
+                case ReleaseReason.LinkLost:
+                    return $"{released.Pilot} lost {released.Drone}: it landed with no link";
                 case ReleaseReason.Revoked:
                     return $"{released.Pilot} lost {released.Drone}: grant revoked";
                 case ReleaseReason.Switched:
@@ -78,6 +79,10 @@ namespace DroneFlightModule.UI
 
         private void Add(string text)
         {
+            if (lines.Count == capacity)
+            {
+                lines.RemoveAt(0);
+            }
             lines.Add(string.Format(CultureInfo.InvariantCulture, "{0:0.0} s  {1}", clock.Time, text));
         }
     }

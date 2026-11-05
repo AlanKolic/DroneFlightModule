@@ -1,5 +1,4 @@
 using System;
-using System.Globalization;
 using System.Text;
 using DroneFlightModule.Coordination;
 using DroneFlightModule.Core;
@@ -12,12 +11,11 @@ namespace DroneFlightModule.UI
     /// Turns the fleet's state into the dashboard's text: each drone with its pilot and their
     /// priority, mode and countdown, measured height with the true height alongside, position,
     /// velocity and heading from its latest telemetry; each pilot with their drone and stats; and
-    /// the latest events, newest first. Only reads. Invariant culture keeps the decimal point stable.
+    /// the latest events, newest first. Only reads.
     /// </summary>
     public sealed class FleetDashboardReadout
     {
-        private const double RadiansToDegrees = 180.0 / Math.PI;
-
+        private readonly FlightTextFormat format = new FlightTextFormat();
         private readonly DroneRegistry drones;
         private readonly FlightCoordinator coordinator;
         private readonly IPilotRegistry pilots;
@@ -73,7 +71,7 @@ namespace DroneFlightModule.UI
             {
                 var record = stats.Get(profile.Id);
                 string flying = coordinator.TryGetDrone(profile.Id, out var drone) ? $"flying {drone}" : "not flying";
-                text.Append(Invariant(
+                text.Append(format.Invariant(
                     $"{profile.DisplayName} ({profile.Id}, priority {profile.Priority}): {flying}, flights {record.Flights}, {record.FlightTime:0.0} s, takeovers {record.Takeovers}, preempted {record.TimesPreempted}\n"));
             }
             return text.ToString().TrimEnd('\n');
@@ -107,29 +105,14 @@ namespace DroneFlightModule.UI
         {
             var state = sample.State;
             float trueHeight = state.Position.Y - terrain.HeightAt(state.Position.X, state.Position.Z);
-            string measured = sample.Altitude.IsValid ? Invariant($"{sample.Altitude.HeightAboveGround:0.00} m") : "out of range";
-            // Rounded before wrapping, so a yaw just left of north shows 0°, never 360°.
-            double heading = (Math.Round(state.Yaw * RadiansToDegrees) % 360.0 + 360.0) % 360.0;
 
-            text.Append("  ").Append(Mode(sample)).Append(Invariant($", height {measured} (true {trueHeight:0.00} m)\n"));
-            text.Append(Invariant($"  position {Format(state.Position)}, velocity {Format(state.Velocity)}, heading {heading:0}°\n"));
-        }
-
-        private string Mode(in FlightFrame sample)
-        {
-            return sample.Mode == FlightMode.Holding
-                ? Invariant($"Holding, descending in {sample.HoldTimeRemaining:0.0} s")
-                : sample.Mode.ToString();
+            text.Append("  ").Append(format.Mode(sample)).Append(format.Invariant($", height {format.Height(sample.Altitude)} (true {trueHeight:0.00} m)\n"));
+            text.Append(format.Invariant($"  position {Format(state.Position)}, velocity {Format(state.Velocity)}, heading {format.Heading(state.Yaw)}\n"));
         }
 
         private string Format(Vec3 vector)
         {
-            return Invariant($"({vector.X:0.0}, {vector.Y:0.0}, {vector.Z:0.0})");
-        }
-
-        private string Invariant(FormattableString text)
-        {
-            return text.ToString(CultureInfo.InvariantCulture);
+            return format.Invariant($"({vector.X:0.0}, {vector.Y:0.0}, {vector.Z:0.0})");
         }
     }
 }

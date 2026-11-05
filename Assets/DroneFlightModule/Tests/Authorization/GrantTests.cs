@@ -21,7 +21,7 @@ namespace DroneFlightModule.Authorization.Tests
         [Test]
         public void Request_And_Grant_RequireIds()
         {
-            Assert.Throws<ArgumentException>(() => new AuthorizationRequest(default, PilotOrigin.Local));
+            Assert.Throws<ArgumentException>(() => new AuthorizationRequest(default));
             Assert.Throws<ArgumentException>(() => new AuthorizationGrant(default, "provider", CancellationToken.None));
             Assert.Throws<ArgumentException>(() => new AuthorizationGrant(Alice, " ", CancellationToken.None));
             Assert.Throws<ArgumentException>(() => new GrantLedger(null));
@@ -32,11 +32,11 @@ namespace DroneFlightModule.Authorization.Tests
         {
             var grant = ledger.Issue(Alice);
 
-            Assert.That(AuthorizationResult.Granted(grant).IsGranted, Is.True);
-            Assert.That(AuthorizationResult.Denied("no").IsGranted, Is.False);
-            Assert.That(AuthorizationResult.Denied("no").DenialReason, Is.EqualTo("no"));
-            Assert.Throws<ArgumentNullException>(() => AuthorizationResult.Granted(null));
-            Assert.Throws<ArgumentException>(() => AuthorizationResult.Denied(""));
+            Assert.That(new AuthorizationResult(grant).IsGranted, Is.True);
+            Assert.That(new AuthorizationResult("no").IsGranted, Is.False);
+            Assert.That(new AuthorizationResult("no").DenialReason, Is.EqualTo("no"));
+            Assert.Throws<ArgumentNullException>(() => new AuthorizationResult((AuthorizationGrant)null));
+            Assert.Throws<ArgumentException>(() => new AuthorizationResult(""));
         }
 
         [Test]

@@ -12,9 +12,12 @@ namespace DroneFlightModule.Coordination
     /// Decides which drone each pilot flies. A pilot flies at most one drone, whichever session
     /// they use. A request authorizes the session through its provider, asks the policy on a fresh
     /// snapshot of the fleet, then carries the decision out in one step between ticks: the grant
-    /// and the route change together, so a takeover never closes the gate. Each change of who flies
-    /// what, and each denial, is raised as an event once the change is complete; a listener that
-    /// throws is reported through ListenerFailed and cannot undo or interrupt it.
+    /// and the route change together, so a takeover never closes the gate. A session whose input is
+    /// not connected when the answer arrives is refused, so a drone never goes to a pilot who
+    /// cannot fly it. A drone that has landed with no connected pilot is released, so a lost
+    /// device does not hold it forever. Each change of who flies what, and each denial, is raised
+    /// as an event once the change is complete; a listener that throws is reported through
+    /// ListenerFailed and cannot undo or interrupt it.
     /// </summary>
     public sealed class FlightCoordinator
     {
@@ -42,6 +45,21 @@ namespace DroneFlightModule.Coordination
             foreach (var assignment in assignments.Values)
             {
                 if (assignment.Session.PilotId == pilot)
+                {
+                    drone = assignment.Drone.Id;
+                    return true;
+                }
+            }
+            drone = default;
+            return false;
+        }
+
+        // The drone this exact session steers; the same pilot may have other sessions that do not.
+        public bool TryGetDrone(PilotSession session, out DroneId drone)
+        {
+            foreach (var assignment in assignments.Values)
+            {
+                if (assignment.Session == session)
                 {
                     drone = assignment.Drone.Id;
                     return true;
@@ -81,7 +99,21 @@ namespace DroneFlightModule.Coordination
             {
                 throw new ArgumentNullException(nameof(session));
             }
-            return ReleaseFlownBy(session, ReleaseReason.Released);
+            CancelPending(session);
+            return TryGetDrone(session, out var drone) && ReleaseDrone(drone, ReleaseReason.Released);
+        }
+
+        // At most one per call, which allocates nothing; called every tick, the next drone goes on the next tick.
+        public void ReleaseLandedWithoutPilot()
+        {
+            foreach (var assignment in assignments.Values)
+            {
+                if (assignment.Drone.Status.IsGrounded && !assignment.Session.Input.IsConnected)
+                {
+                    ReleaseDrone(assignment.Drone.Id, ReleaseReason.LinkLost);
+                    return;
+                }
+            }
         }
 
         // Released first, so its pilot's flight ends before the drone is gone; a pending request for it is then denied as UnknownDrone.
@@ -101,16 +133,6 @@ namespace DroneFlightModule.Coordination
             return CancelPending(session);
         }
 
-        public void EndSession(PilotSession session)
-        {
-            if (session == null)
-            {
-                throw new ArgumentNullException(nameof(session));
-            }
-            CancelPending(session);
-            ReleaseFlownBy(session, ReleaseReason.SessionEnded);
-        }
-
         private async Task<FlightRequestResult> RequestAsync(PilotSession session, DroneId? preferred, CancellationToken cancellationToken)
         {
             CancelPending(session);
@@ -125,7 +147,7 @@ namespace DroneFlightModule.Coordination
                     return Deny(session, preferred, FlightDenial.UnknownPilot, $"{session.PilotId} is not a registered pilot.");
                 }
 
-                var authorization = await session.Provider.AuthorizeAsync(new AuthorizationRequest(session.PilotId, session.Origin), token);
+                var authorization = await session.Provider.AuthorizeAsync(new AuthorizationRequest(session.PilotId), token);
                 token.ThrowIfCancellationRequested();
                 if (!authorization.IsGranted)
                 {
@@ -134,6 +156,11 @@ namespace DroneFlightModule.Coordination
                 if (authorization.Grant.IsRevoked)
                 {
                     return Deny(session, preferred, FlightDenial.NotAuthorized, $"{session.PilotId}'s grant was revoked before it was used.");
+                }
+                // Checked after the wait, because the link can drop while the provider answers.
+                if (!session.Input.IsConnected)
+                {
+                    return Deny(session, preferred, FlightDenial.PilotDisconnected, $"{session.PilotId} is not connected.");
                 }
                 return CarryOut(session, profile, authorization.Grant, preferred);
             }
@@ -155,7 +182,7 @@ namespace DroneFlightModule.Coordination
             if (current.HasValue && (!preferred.HasValue || preferred == current))
             {
                 Route(assignments[current.Value].Drone, session, profile, grant);
-                return FlightRequestResult.Assigned(current.Value);
+                return new FlightRequestResult(current.Value);
             }
 
             var decision = policy.Decide(profile, preferred, Snapshot(current));
@@ -167,7 +194,7 @@ namespace DroneFlightModule.Coordination
 
             // The new drone is secured, so only now does the pilot let go of the one they fly.
             var left = current.HasValue ? Free(current.Value) : null;
-            PilotId fromPilot = decision.Action == AssignmentAction.TakeOver ? assignments[target.Id].Session.PilotId : default;
+            var fromSession = decision.Action == AssignmentAction.TakeOver ? assignments[target.Id].Session : null;
             Route(target, session, profile, grant);
 
             if (left != null)
@@ -176,11 +203,11 @@ namespace DroneFlightModule.Coordination
             }
             if (decision.Action == AssignmentAction.TakeOver)
             {
-                Raise(TookOver, new DroneTakenOver(target.Id, session.PilotId, fromPilot));
-                return FlightRequestResult.TookOver(target.Id, fromPilot);
+                Raise(TookOver, new DroneTakenOver(target.Id, session.PilotId, fromSession));
+                return new FlightRequestResult(target.Id, fromSession.PilotId);
             }
             Raise(Assigned, new DroneAssigned(target.Id, session.PilotId));
-            return FlightRequestResult.Assigned(target.Id);
+            return new FlightRequestResult(target.Id);
         }
 
         private List<DroneSnapshot> Snapshot(DroneId? excluded)
@@ -229,18 +256,6 @@ namespace DroneFlightModule.Coordination
             assignments[drone.Id] = new Assignment(drone, session, profile, revocation);
         }
 
-        private bool ReleaseFlownBy(PilotSession session, ReleaseReason reason)
-        {
-            foreach (var assignment in assignments.Values)
-            {
-                if (assignment.Session == session)
-                {
-                    return ReleaseDrone(assignment.Drone.Id, reason);
-                }
-            }
-            return false;
-        }
-
         private bool ReleaseDrone(DroneId droneId, ReleaseReason reason)
         {
             var freed = Free(droneId);
@@ -281,7 +296,7 @@ namespace DroneFlightModule.Coordination
         private FlightRequestResult Deny(PilotSession session, DroneId? preferred, FlightDenial denial, string message)
         {
             Raise(Denied, new FlightDenied(session.PilotId, preferred, denial, message));
-            return FlightRequestResult.Denied(denial, message);
+            return new FlightRequestResult(denial, message);
         }
 
         private void Raise<T>(Action<T> listeners, T change)

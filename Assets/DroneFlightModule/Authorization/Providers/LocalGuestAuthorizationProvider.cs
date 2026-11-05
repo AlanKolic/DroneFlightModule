@@ -6,9 +6,8 @@ using DroneFlightModule.Core;
 namespace DroneFlightModule.Authorization
 {
     /// <summary>
-    /// Guest mode: grants immediately, but only to the guest pilot flying from this machine. It
-    /// goes through the same request, grant and gate as any other provider; the origin rule is its
-    /// own decision, not a special case elsewhere.
+    /// Guest mode: grants immediately, but only to the guest pilot. It goes through the same
+    /// request, grant and gate as any other provider; nothing elsewhere treats the guest specially.
     /// </summary>
     public sealed class LocalGuestAuthorizationProvider : IAuthorizationProvider, IDisposable
     {
@@ -41,15 +40,11 @@ namespace DroneFlightModule.Authorization
                 return Task.FromCanceled<AuthorizationResult>(cancellationToken);
             }
 
-            if (request.Origin != PilotOrigin.Local)
-            {
-                return Task.FromResult(AuthorizationResult.Denied("Guest mode is only available on the local machine."));
-            }
             if (request.PilotId != guestPilot)
             {
-                return Task.FromResult(AuthorizationResult.Denied($"Guest mode only authorizes the guest, not {request.PilotId}."));
+                return Task.FromResult(new AuthorizationResult($"Guest mode only authorizes the guest, not {request.PilotId}."));
             }
-            return Task.FromResult(AuthorizationResult.Granted(grants.Issue(request.PilotId)));
+            return Task.FromResult(new AuthorizationResult(grants.Issue(request.PilotId)));
         }
 
         public void Dispose()

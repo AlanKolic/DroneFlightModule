@@ -7,6 +7,7 @@ namespace DroneFlightModule.Coordination
     {
         UnknownPilot,
         NotAuthorized,
+        PilotDisconnected,
         UnknownDrone,
         NoDroneAvailable
     }

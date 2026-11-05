@@ -8,11 +8,10 @@ namespace DroneFlightModule.Authorization
 {
     /// <summary>
     /// Stands in for a real authorization server: answers after a latency, approves or denies per
-    /// pilot from either origin, and can revoke a pilot's grant at any time. The policy is read when
-    /// the answer arrives, so a change during the latency counts. Approving or denying changes only
-    /// later answers: a pilot who is denied keeps a live grant until it is revoked. Disposing
-    /// cancels pending requests and revokes every grant, and an answer still in flight then issues
-    /// nothing.
+    /// pilot, and can revoke a pilot's grant at any time. The policy is read when the answer
+    /// arrives, so a change during the latency counts. Approving or denying changes only later
+    /// answers: a pilot who is denied keeps a live grant until it is revoked. Disposing cancels
+    /// pending requests and revokes every grant, and an answer still in flight then issues nothing.
     /// </summary>
     public sealed class SimulatedServerAuthorizationProvider : IRevokingAuthorizationProvider, IDisposable
     {
@@ -96,9 +95,9 @@ namespace DroneFlightModule.Authorization
             }
             if (!approved.Contains(pilot))
             {
-                return AuthorizationResult.Denied($"The server has not approved {pilot}.");
+                return new AuthorizationResult($"The server has not approved {pilot}.");
             }
-            return AuthorizationResult.Granted(grants.Issue(pilot));
+            return new AuthorizationResult(grants.Issue(pilot));
         }
     }
 }

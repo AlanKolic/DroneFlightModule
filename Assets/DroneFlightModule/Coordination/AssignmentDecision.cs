@@ -12,18 +12,19 @@ namespace DroneFlightModule.Coordination
         public readonly DroneId Drone;
         public readonly FlightDenial Denial;
 
-        private AssignmentDecision(AssignmentAction action, DroneId drone, FlightDenial denial)
+        public AssignmentDecision(AssignmentAction action, DroneId drone)
         {
             Action = action;
             Drone = drone;
-            Denial = denial;
+            Denial = default;
         }
 
-        public static AssignmentDecision Assign(DroneId drone) => new AssignmentDecision(AssignmentAction.Assign, drone, default);
-
-        public static AssignmentDecision TakeOver(DroneId drone) => new AssignmentDecision(AssignmentAction.TakeOver, drone, default);
-
-        public static AssignmentDecision Deny(FlightDenial denial) => new AssignmentDecision(AssignmentAction.Deny, default, denial);
+        public AssignmentDecision(FlightDenial denial)
+        {
+            Action = AssignmentAction.Deny;
+            Drone = default;
+            Denial = denial;
+        }
 
         public override string ToString() => Action == AssignmentAction.Deny ? $"deny ({Denial})" : $"{Action} {Drone}";
     }

@@ -28,9 +28,9 @@ namespace DroneFlightModule.Authorization.Tests
             server.Dispose();
         }
 
-        private Task<AuthorizationResult> Request(PilotId pilot, PilotOrigin origin = PilotOrigin.Remote, CancellationToken cancellationToken = default)
+        private Task<AuthorizationResult> Request(PilotId pilot, CancellationToken cancellationToken = default)
         {
-            return server.AuthorizeAsync(new AuthorizationRequest(pilot, origin), cancellationToken);
+            return server.AuthorizeAsync(new AuthorizationRequest(pilot), cancellationToken);
         }
 
         [Test]
@@ -57,15 +57,14 @@ namespace DroneFlightModule.Authorization.Tests
         }
 
         [Test]
-        public void ApprovedPilot_IsGrantedFromEitherOrigin()
+        public void ApprovedPilot_IsGranted_AndARepeatGetsTheSameGrant()
         {
-            var remote = Request(Alice, PilotOrigin.Remote);
-            var local = Request(Alice, PilotOrigin.Local);
+            var first = Request(Alice);
+            var second = Request(Alice);
             delay.CompleteAll();
 
-            Assert.That(remote.Result.IsGranted, Is.True);
-            Assert.That(local.Result.IsGranted, Is.True);
-            Assert.That(local.Result.Grant, Is.SameAs(remote.Result.Grant));
+            Assert.That(first.Result.IsGranted, Is.True);
+            Assert.That(second.Result.Grant, Is.SameAs(first.Result.Grant));
         }
 
         [Test]
@@ -156,7 +155,7 @@ namespace DroneFlightModule.Authorization.Tests
             var ignoresCancellation = new CancellationIgnoringDelay();
             using (var racing = new SimulatedServerAuthorizationProvider(new[] { Alice }, Latency, ignoresCancellation))
             {
-                var task = racing.AuthorizeAsync(new AuthorizationRequest(Alice, PilotOrigin.Remote), CancellationToken.None);
+                var task = racing.AuthorizeAsync(new AuthorizationRequest(Alice), CancellationToken.None);
 
                 racing.Dispose();
                 ignoresCancellation.Complete();
@@ -171,7 +170,7 @@ namespace DroneFlightModule.Authorization.Tests
         {
             using (var instant = new SimulatedServerAuthorizationProvider(new[] { Alice }, TimeSpan.Zero, new TaskDelay()))
             {
-                var task = instant.AuthorizeAsync(new AuthorizationRequest(Alice, PilotOrigin.Remote), CancellationToken.None);
+                var task = instant.AuthorizeAsync(new AuthorizationRequest(Alice), CancellationToken.None);
 
                 Assert.That(task.IsCompleted, Is.True);
                 Assert.That(task.Result.IsGranted, Is.True);

@@ -15,6 +15,8 @@ namespace DroneFlightModule.Unity
 
         private ChaseCameraRig rig;
 
+        public Transform Target => target;
+
         public void SetTarget(Transform target)
         {
             this.target = target;

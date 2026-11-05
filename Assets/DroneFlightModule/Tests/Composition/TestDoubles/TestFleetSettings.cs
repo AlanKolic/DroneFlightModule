@@ -1,20 +1,29 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using DroneFlightModule.Core;
 using DroneFlightModule.Pilots;
 using DroneFlightModule.Telemetry;
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 namespace DroneFlightModule.Composition.Tests
 {
     /// <summary>
-    /// Fleet settings for tests: the Core defaults, one registered pilot above the guest, and no
+    /// The controls and fleet settings for tests: the Core defaults, one registered pilot above the guest, and no
     /// starting drones, with the ground, server latency and spawn step each test needs. Stations
     /// go to the keyboard and gamepads unless a test names other device groups.
     /// </summary>
     internal sealed class TestFleetSettings
     {
+        public const string ControlsPath = "Assets/DroneFlightModule/Unity/Input/DroneControls.inputactions";
+
         public static readonly PilotProfile RegisteredPilot = new PilotProfile(new PilotId("ace"), "Ace", 50);
+
+        public InputActionAsset LoadControls()
+        {
+            return InputActionAsset.FromJson(File.ReadAllText(ControlsPath));
+        }
 
         public FleetSettings Create(float groundHeight, TimeSpan serverLatency, Vector3 spawnStep)
         {

@@ -21,7 +21,7 @@ namespace DroneFlightModule.Pilots
             this.store = store ?? throw new ArgumentNullException(nameof(store));
         }
 
-        public bool IsFlying(PilotId pilot, DroneId drone) => openFlights.TryGetValue(pilot, out var flight) && flight.Drone == drone;
+        internal bool IsFlying(PilotId pilot, DroneId drone) => openFlights.TryGetValue(pilot, out var flight) && flight.Drone == drone;
 
         public void FlightStarted(PilotId pilot, DroneId drone, double time)
         {

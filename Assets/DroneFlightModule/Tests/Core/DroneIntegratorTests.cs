@@ -11,7 +11,7 @@ namespace DroneFlightModule.Core.Tests
         public void FreeFall_GainsSpeedAtGravity()
         {
             var integrator = new DroneIntegrator(TestConfigs.Dragless, new FlatTerrain());
-            var state = DroneState.At(new Vec3(0f, 100f, 0f));
+            var state = new DroneState(new Vec3(0f, 100f, 0f));
 
             for (int i = 0; i < 50; i++)
             {
@@ -27,7 +27,7 @@ namespace DroneFlightModule.Core.Tests
         public void RestingOnGround_WithoutThrust_StaysGrounded()
         {
             var integrator = new DroneIntegrator(DroneConfig.Default, new FlatTerrain());
-            var state = DroneState.At(Vec3.Zero);
+            var state = new DroneState(Vec3.Zero);
 
             for (int i = 0; i < 10; i++)
             {
@@ -44,7 +44,7 @@ namespace DroneFlightModule.Core.Tests
         {
             var config = DroneConfig.Default;
             var integrator = new DroneIntegrator(config, new FlatTerrain());
-            var grounded = integrator.Step(DroneState.At(Vec3.Zero), ForceCommand.None, DeltaTime);
+            var grounded = integrator.Step(new DroneState(Vec3.Zero), ForceCommand.None, DeltaTime);
             var fullThrust = new ForceCommand(new Vec3(0f, config.MaxThrust, 0f), 0f);
 
             var state = integrator.Step(grounded, fullThrust, DeltaTime);
@@ -57,7 +57,7 @@ namespace DroneFlightModule.Core.Tests
         public void LateralForceWhileGrounded_DoesNotSlide()
         {
             var integrator = new DroneIntegrator(DroneConfig.Default, new FlatTerrain());
-            var state = DroneState.At(Vec3.Zero);
+            var state = new DroneState(Vec3.Zero);
             var sideways = new ForceCommand(new Vec3(5f, 0f, 5f), 0f);
 
             for (int i = 0; i < 10; i++)
@@ -73,7 +73,7 @@ namespace DroneFlightModule.Core.Tests
         public void Falling_LandsOnTerrainHeight()
         {
             var integrator = new DroneIntegrator(DroneConfig.Default, new FlatTerrain(height: 5f));
-            var state = DroneState.At(new Vec3(0f, 8f, 0f));
+            var state = new DroneState(new Vec3(0f, 8f, 0f));
 
             for (int i = 0; i < 200 && !state.IsGrounded; i++)
             {
@@ -90,7 +90,7 @@ namespace DroneFlightModule.Core.Tests
         {
             var config = DroneConfig.Default;
             var integrator = new DroneIntegrator(config, new FlatTerrain(), gravity: 0f);
-            var state = DroneState.At(new Vec3(0f, 10f, 0f));
+            var state = new DroneState(new Vec3(0f, 10f, 0f));
             var forward = new ForceCommand(new Vec3(0f, 0f, config.MaxLateralForce), 0f);
 
             for (int i = 0; i < 1000; i++)
@@ -107,7 +107,7 @@ namespace DroneFlightModule.Core.Tests
         {
             var config = DroneConfig.Default;
             var integrator = new DroneIntegrator(config, new FlatTerrain(), gravity: 0f);
-            var state = DroneState.At(new Vec3(0f, 10f, 0f));
+            var state = new DroneState(new Vec3(0f, 10f, 0f));
             var spin = new ForceCommand(Vec3.Zero, config.MaxYawTorque);
 
             for (int i = 0; i < 1000; i++)

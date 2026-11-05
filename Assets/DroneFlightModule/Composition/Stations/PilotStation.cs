@@ -14,21 +14,22 @@ namespace DroneFlightModule.Composition
     /// <summary>
     /// One input device and whoever flies with it. From it a pilot can fly as anyone in the
     /// registry: the guest through local guest mode, everyone else signing in through the server.
-    /// It knows nothing of other stations; they meet only in the coordinator. Switching keeps the
-    /// previous pilot on their drone with their hands off the sticks, so the next pilot can outrank
-    /// and take it over, and cancels the previous pilot's pending request, so nobody is given a
-    /// drone after they were switched away from. Its link can be cut, and it reports no pilot
-    /// while its device is unplugged. The latest outcome, including the selected pilot being
-    /// preempted, is kept for display, and StatusChanged fires whenever it or the fleet changes.
+    /// It knows nothing of other stations; they meet only in the coordinator, so it reports only
+    /// the drone its own session steers. Switching keeps the previous pilot on their drone with
+    /// their hands off the sticks, so the next pilot can outrank and take it over, and cancels the
+    /// previous pilot's pending request, so nobody is given a drone after they were switched away
+    /// from. Its link can be cut, and it reports no pilot while its device is unplugged. The latest
+    /// outcome, including a pilot here losing their drone, is kept for display, and StatusChanged
+    /// fires whenever it or the fleet changes.
     /// </summary>
     public sealed class PilotStation : IStationStatus, IDisposable
     {
         private readonly FlightCoordinator coordinator;
         private readonly DroneRegistry drones;
         private readonly IRevokingAuthorizationProvider server;
-        private readonly List<PilotSession> sessions = new List<PilotSession>();
-        private readonly Dictionary<PilotSession, LocalPilotInput> inputs = new Dictionary<PilotSession, LocalPilotInput>();
+        private readonly List<Seat> seats = new List<Seat>();
         private readonly CancellationToken lifetime;
+        private Seat selected;
         private bool isDisposed;
 
         public PilotStation(
@@ -59,20 +60,12 @@ namespace DroneFlightModule.Composition
             foreach (var profile in pilots.Profiles)
             {
                 var provider = profile.IsGuest ? (IAuthorizationProvider)guestProvider : server;
-                var pilotInput = new LocalPilotInput(link);
-                var session = new PilotSession(profile.Id, PilotOrigin.Local, provider, pilotInput);
-                sessions.Add(session);
-                inputs.Add(session, pilotInput);
-                if (profile.Id == startPilot)
-                {
-                    Session = session;
-                }
+                var input = new LocalPilotInput(link);
+                seats.Add(new Seat(new PilotSession(profile.Id, provider, input), input));
             }
-            if (Session == null)
-            {
-                throw new ArgumentException($"{startPilot} is not in the pilot registry.", nameof(startPilot));
-            }
-            inputs[Session].IsSelected = true;
+            selected = seats.Find(seat => seat.Session.PilotId == startPilot)
+                ?? throw new ArgumentException($"{startPilot} is not in the pilot registry.", nameof(startPilot));
+            selected.Input.IsSelected = true;
 
             coordinator.Assigned += OnAssigned;
             coordinator.Released += OnReleased;
@@ -81,13 +74,13 @@ namespace DroneFlightModule.Composition
 
         public string Name { get; }
         public DisconnectableInputProvider Link { get; }
-        public PilotSession Session { get; private set; }
+        public PilotSession Session => selected.Session;
         public string LastMessage { get; private set; } = "Request a drone to fly.";
         public event Action<PilotStation> StatusChanged;
 
         public bool TryGetDrone(out DroneId drone)
         {
-            return coordinator.TryGetDrone(Session.PilotId, out drone);
+            return coordinator.TryGetDrone(Session, out drone);
         }
 
         public string Describe()
@@ -97,7 +90,7 @@ namespace DroneFlightModule.Composition
             return $"{Name}: {Session.PilotId}, {flying}, {link}";
         }
 
-        // Never faults: a superseded or cancelled request ends quietly, and anything else is logged and reported.
+        // Faults only if a status listener throws: a superseded or cancelled request ends quietly, and anything else is logged and reported.
         public async Task RequestFlightAsync(DroneId? drone)
         {
             var session = Session;
@@ -136,24 +129,24 @@ namespace DroneFlightModule.Composition
 
         public void SwitchPilot()
         {
-            int next = (sessions.IndexOf(Session) + 1) % sessions.Count;
-            SelectPilot(sessions[next].PilotId);
+            int next = (seats.IndexOf(selected) + 1) % seats.Count;
+            SelectPilot(seats[next].Session.PilotId);
         }
 
         public void SelectPilot(PilotId pilot)
         {
-            var session = sessions.Find(candidate => candidate.PilotId == pilot)
+            var seat = seats.Find(candidate => candidate.Session.PilotId == pilot)
                 ?? throw new ArgumentException($"{pilot} is not in the pilot registry.", nameof(pilot));
-            if (session == Session)
+            if (seat == selected)
             {
                 return;
             }
-            var previous = Session;
-            inputs[previous].IsSelected = false;
-            inputs[session].IsSelected = true;
-            Session = session;
+            var previous = selected.Session;
+            selected.Input.IsSelected = false;
+            seat.Input.IsSelected = true;
+            selected = seat;
             string cancelled = coordinator.CancelRequest(previous) ? $" {previous.PilotId}'s request was cancelled." : "";
-            string kept = coordinator.TryGetDrone(previous.PilotId, out var parked)
+            string kept = coordinator.TryGetDrone(previous, out var parked)
                 ? $" {previous.PilotId} keeps {parked}, hands off."
                 : "";
             Report($"Now flying as {Session.PilotId}, authorized by {Session.Provider.Id}.{cancelled}{kept}");
@@ -202,23 +195,45 @@ namespace DroneFlightModule.Composition
 
         private void OnReleased(DroneReleased released)
         {
-            if (released.Reason == ReleaseReason.Removed && released.Pilot == Session.PilotId)
+            if (released.Pilot != Session.PilotId)
+            {
+                StatusChanged?.Invoke(this);
+            }
+            else if (released.Reason == ReleaseReason.Removed)
             {
                 Report($"{released.Drone} was removed from the fleet.");
-                return;
             }
-            StatusChanged?.Invoke(this);
+            else if (released.Reason == ReleaseReason.LinkLost)
+            {
+                Report($"{released.Drone} landed with no link and was released.");
+            }
+            else
+            {
+                StatusChanged?.Invoke(this);
+            }
         }
 
-        // The pilot who took over hears it from their request; the pilot this station flies as hears here that they lost a drone.
+        // The pilot who took over hears it from their own request; a pilot here, flying or parked, hears here that they lost a drone.
         private void OnTookOver(DroneTakenOver takenOver)
         {
-            if (takenOver.FromPilot == Session.PilotId && takenOver.Pilot != Session.PilotId)
+            if (seats.Exists(seat => seat.Session == takenOver.FromSession))
             {
                 Report($"{takenOver.Pilot} took {takenOver.Drone} over from {takenOver.FromPilot}.");
                 return;
             }
             StatusChanged?.Invoke(this);
+        }
+
+        private sealed class Seat
+        {
+            public Seat(PilotSession session, LocalPilotInput input)
+            {
+                Session = session;
+                Input = input;
+            }
+
+            public PilotSession Session { get; }
+            public LocalPilotInput Input { get; }
         }
     }
 }

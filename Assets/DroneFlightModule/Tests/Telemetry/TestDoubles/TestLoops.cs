@@ -30,7 +30,7 @@ namespace DroneFlightModule.Telemetry.Tests
                 new FlightSupervisor(new OpenGate(), DroneConfig.Default, FailsafeConfig.Default),
                 new DroneIntegrator(DroneConfig.Default, terrain),
                 new RangefinderAltitudeSensor(terrain, RangefinderConfig.Default),
-                DroneState.At(new Vec3(0f, 5f, 0f)));
+                new DroneState(new Vec3(0f, 5f, 0f)));
         }
 
         public void Run(FlightLoop loop, int ticks)

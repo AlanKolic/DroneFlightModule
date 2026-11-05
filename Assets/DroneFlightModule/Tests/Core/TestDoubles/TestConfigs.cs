@@ -1,6 +1,6 @@
 namespace DroneFlightModule.Core.Tests
 {
-    internal static class TestConfigs
+    internal sealed class TestConfigs
     {
         public const float DeltaTime = 0.02f;
 

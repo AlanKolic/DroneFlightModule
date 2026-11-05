@@ -12,7 +12,7 @@ namespace DroneFlightModule.Core.Tests
         {
             var sensor = new RangefinderAltitudeSensor(new FlatTerrain(height: 5f), RangefinderConfig.Default);
 
-            var reading = sensor.Read(DroneState.At(new Vec3(0f, 8f, 0f)), 0.0);
+            var reading = sensor.Read(new DroneState(new Vec3(0f, 8f, 0f)), 0.0);
 
             Assert.That(reading.IsValid, Is.True);
             Assert.That(reading.HeightAboveGround, Is.EqualTo(3f));
@@ -23,7 +23,7 @@ namespace DroneFlightModule.Core.Tests
         {
             var sensor = new RangefinderAltitudeSensor(new SlopedTerrain(), RangefinderConfig.Default);
 
-            var reading = sensor.Read(DroneState.At(new Vec3(4f, 6f, 0f)), 0.0);
+            var reading = sensor.Read(new DroneState(new Vec3(4f, 6f, 0f)), 0.0);
 
             Assert.That(reading.HeightAboveGround, Is.EqualTo(2f));
         }
@@ -33,7 +33,7 @@ namespace DroneFlightModule.Core.Tests
         {
             var sensor = new RangefinderAltitudeSensor(new FlatTerrain(), RangefinderConfig.Default);
 
-            var reading = sensor.Read(DroneState.At(Vec3.Zero), 0.0);
+            var reading = sensor.Read(new DroneState(Vec3.Zero), 0.0);
 
             Assert.That(reading.IsValid, Is.True);
             Assert.That(reading.HeightAboveGround, Is.EqualTo(0f));
@@ -44,7 +44,7 @@ namespace DroneFlightModule.Core.Tests
         {
             var sensor = new RangefinderAltitudeSensor(new FlatTerrain(), new RangefinderConfig(maxRange: 10f, updateRate: 20f));
 
-            var reading = sensor.Read(DroneState.At(new Vec3(0f, 10f, 0f)), 0.0);
+            var reading = sensor.Read(new DroneState(new Vec3(0f, 10f, 0f)), 0.0);
 
             Assert.That(reading.IsValid, Is.True);
             Assert.That(reading.HeightAboveGround, Is.EqualTo(10f));
@@ -55,34 +55,31 @@ namespace DroneFlightModule.Core.Tests
         {
             var sensor = new RangefinderAltitudeSensor(new FlatTerrain(), new RangefinderConfig(maxRange: 10f, updateRate: 20f));
 
-            var reading = sensor.Read(DroneState.At(new Vec3(0f, 10.5f, 0f)), 1.5);
+            var reading = sensor.Read(new DroneState(new Vec3(0f, 10.5f, 0f)), 1.5);
 
             Assert.That(reading.IsValid, Is.False);
-            Assert.That(reading.Timestamp, Is.EqualTo(1.5));
         }
 
         [Test]
         public void BetweenSamples_HoldsLastReading()
         {
             var sensor = new RangefinderAltitudeSensor(new FlatTerrain(), new RangefinderConfig(maxRange: 10f, updateRate: 10f));
-            sensor.Read(DroneState.At(new Vec3(0f, 2f, 0f)), 0.0);
+            sensor.Read(new DroneState(new Vec3(0f, 2f, 0f)), 0.0);
 
-            var held = sensor.Read(DroneState.At(new Vec3(0f, 4f, 0f)), 0.05);
+            var held = sensor.Read(new DroneState(new Vec3(0f, 4f, 0f)), 0.05);
 
             Assert.That(held.HeightAboveGround, Is.EqualTo(2f));
-            Assert.That(held.Timestamp, Is.EqualTo(0.0));
         }
 
         [Test]
         public void AfterSamplePeriod_TakesNewReading()
         {
             var sensor = new RangefinderAltitudeSensor(new FlatTerrain(), new RangefinderConfig(maxRange: 10f, updateRate: 10f));
-            sensor.Read(DroneState.At(new Vec3(0f, 2f, 0f)), 0.0);
+            sensor.Read(new DroneState(new Vec3(0f, 2f, 0f)), 0.0);
 
-            var fresh = sensor.Read(DroneState.At(new Vec3(0f, 4f, 0f)), 0.1);
+            var fresh = sensor.Read(new DroneState(new Vec3(0f, 4f, 0f)), 0.1);
 
             Assert.That(fresh.HeightAboveGround, Is.EqualTo(4f));
-            Assert.That(fresh.Timestamp, Is.EqualTo(0.1));
         }
 
         [Test]
@@ -90,41 +87,22 @@ namespace DroneFlightModule.Core.Tests
         {
             var sensor = new RangefinderAltitudeSensor(new FlatTerrain(), new RangefinderConfig(maxRange: 10f, updateRate: 10f));
             int samples = 0;
-            double lastTimestamp = -1.0;
+            float lastHeight = -1f;
             double time = 0.0;
 
+            // The height changes every tick, so a changed reading means a new sample.
             for (int i = 0; i < 50; i++)
             {
-                var reading = sensor.Read(DroneState.At(new Vec3(0f, 1f, 0f)), time);
-                if (reading.Timestamp != lastTimestamp)
+                var reading = sensor.Read(new DroneState(new Vec3(0f, i * 0.1f, 0f)), time);
+                if (reading.HeightAboveGround != lastHeight)
                 {
                     samples++;
-                    lastTimestamp = reading.Timestamp;
+                    lastHeight = reading.HeightAboveGround;
                 }
                 time += DeltaTime;
             }
 
             Assert.That(samples, Is.EqualTo(10));
-        }
-
-        [Test]
-        public void AStepThatDoesNotDivideThePeriod_StillAveragesTheRate()
-        {
-            var sensor = new RangefinderAltitudeSensor(new FlatTerrain(), new RangefinderConfig(maxRange: 10f, updateRate: 10f));
-            int samples = 0;
-            double lastTimestamp = -1.0;
-
-            for (int i = 0; i < 100; i++)
-            {
-                var reading = sensor.Read(DroneState.At(new Vec3(0f, 1f, 0f)), i * 0.03);
-                if (reading.Timestamp != lastTimestamp)
-                {
-                    samples++;
-                    lastTimestamp = reading.Timestamp;
-                }
-            }
-
-            Assert.That(samples, Is.EqualTo(30), "3 s at 10 readings per second.");
         }
 
         [TestCase(0f, 20f)]

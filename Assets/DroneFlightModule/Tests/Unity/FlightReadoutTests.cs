@@ -19,7 +19,7 @@ namespace DroneFlightModule.Unity.Tests
         [Test]
         public void Holding_ShowsCountdown()
         {
-            var text = readout.Format(Frame(FlightMode.Holding, 7.42, new AltitudeReading(3f, true, 1.0)), Pilot, false);
+            var text = readout.Format(Frame(FlightMode.Holding, 7.42, new AltitudeReading(3f, true)), Pilot, false);
 
             StringAssert.Contains("Mode: Holding, descending in 7.4 s", text);
             StringAssert.Contains("Pilot: local-pilot (link lost)", text);
@@ -28,7 +28,7 @@ namespace DroneFlightModule.Unity.Tests
         [Test]
         public void Piloted_ShowsHeightSpeedAndHeading()
         {
-            var text = readout.Format(Frame(FlightMode.Piloted, 0.0, new AltitudeReading(3.256f, true, 1.0), yaw: -1.5707964f), Pilot, true);
+            var text = readout.Format(Frame(FlightMode.Piloted, 0.0, new AltitudeReading(3.256f, true), yaw: -1.5707964f), Pilot, true);
 
             StringAssert.Contains("Mode: Piloted", text);
             StringAssert.Contains("Pilot: local-pilot (connected)", text);
@@ -40,7 +40,7 @@ namespace DroneFlightModule.Unity.Tests
         [Test]
         public void YawJustLeftOfNorth_ShowsZeroHeading()
         {
-            var text = readout.Format(Frame(FlightMode.Piloted, 0.0, new AltitudeReading(3f, true, 1.0), yaw: -0.0003f), Pilot, true);
+            var text = readout.Format(Frame(FlightMode.Piloted, 0.0, new AltitudeReading(3f, true), yaw: -0.0003f), Pilot, true);
 
             StringAssert.Contains("Heading: 0°", text);
         }
@@ -48,7 +48,7 @@ namespace DroneFlightModule.Unity.Tests
         [Test]
         public void InvalidReading_ShowsOutOfRange_NoPilot_ShowsNone()
         {
-            var text = readout.Format(Frame(FlightMode.Descending, 0.0, AltitudeReading.Invalid(1.0)), default, false);
+            var text = readout.Format(Frame(FlightMode.Descending, 0.0, AltitudeReading.Invalid), default, false);
 
             StringAssert.Contains("Height: out of range", text);
             StringAssert.Contains("Pilot: none", text);

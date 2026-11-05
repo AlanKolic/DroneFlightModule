@@ -10,7 +10,8 @@ namespace DroneFlightModule.Composition
     /// <summary>
     /// Everything the fleet is configured with, as validated plain objects: the drone frame,
     /// velocity controller, rangefinder, failsafe and telemetry configs, the registered pilots,
-    /// the simulated server's latency, the layout, and the input devices that get a pilot station. The scene reads it from a
+    /// the simulated server's latency, the layout, and the input devices that get a pilot station.
+    /// The layout is checked here, since nothing else owns it as a whole. The scene reads it from a
     /// <see cref="FleetSettingsAsset"/>; tests build it directly.
     /// </summary>
     public sealed class FleetSettings
@@ -36,13 +37,14 @@ namespace DroneFlightModule.Composition
             Pilots = pilots ?? throw new ArgumentNullException(nameof(pilots));
             Drones = drones ?? throw new ArgumentNullException(nameof(drones));
             DeviceGroups = deviceGroups ?? throw new ArgumentNullException(nameof(deviceGroups));
-            if (serverLatency < TimeSpan.Zero)
-            {
-                throw new ArgumentOutOfRangeException(nameof(serverLatency), serverLatency, "Must not be negative.");
-            }
             if (!float.IsFinite(groundHeight))
             {
                 throw new ArgumentOutOfRangeException(nameof(groundHeight), groundHeight, "Must be finite.");
+            }
+            RequireFinite(spawnStep, nameof(spawnStep));
+            foreach (var drone in drones)
+            {
+                RequireFinite(drone.SpawnPosition, nameof(drones));
             }
             ServerLatency = serverLatency;
             GroundHeight = groundHeight;
@@ -60,5 +62,13 @@ namespace DroneFlightModule.Composition
         public Vector3 SpawnStep { get; }
         public IReadOnlyList<FleetDroneEntry> Drones { get; }
         public IReadOnlyList<InputDeviceGroup> DeviceGroups { get; }
+
+        private void RequireFinite(Vector3 position, string name)
+        {
+            if (!float.IsFinite(position.x) || !float.IsFinite(position.y) || !float.IsFinite(position.z))
+            {
+                throw new ArgumentOutOfRangeException(name, position, "Must be finite.");
+            }
+        }
     }
 }

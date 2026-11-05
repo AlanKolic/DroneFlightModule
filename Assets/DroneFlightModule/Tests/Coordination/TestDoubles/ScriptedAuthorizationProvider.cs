@@ -62,8 +62,8 @@ namespace DroneFlightModule.Coordination.Tests
         private AuthorizationResult Answer(PilotId pilot)
         {
             return IsApproving
-                ? AuthorizationResult.Granted(grants.Issue(pilot))
-                : AuthorizationResult.Denied("The test provider denies everyone.");
+                ? new AuthorizationResult(grants.Issue(pilot))
+                : new AuthorizationResult("The test provider denies everyone.");
         }
     }
 }

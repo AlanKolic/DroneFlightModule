@@ -50,7 +50,7 @@ namespace DroneFlightModule.Core.Tests
         [Test]
         public void CentredSticks_AtRest_ThrustCancelsWeightExactly()
         {
-            var command = controller.Compute(ControlInput.Zero, DroneState.At(new Vec3(0f, 5f, 0f)));
+            var command = controller.Compute(ControlInput.Zero, new DroneState(new Vec3(0f, 5f, 0f)));
 
             Assert.That(command.Force.Y, Is.EqualTo(drone.Mass * Gravity).Within(Tolerance));
             Assert.That(command.Force.X, Is.EqualTo(0f));
@@ -61,7 +61,7 @@ namespace DroneFlightModule.Core.Tests
         [Test]
         public void CentredSticks_HoverHandsOff()
         {
-            var state = Fly(DroneState.At(new Vec3(0f, 5f, 0f)), ControlInput.Zero, 10f);
+            var state = Fly(new DroneState(new Vec3(0f, 5f, 0f)), ControlInput.Zero, 10f);
 
             Assert.That(state.Position.Y, Is.EqualTo(5f).Within(1e-3f));
             Assert.That(state.Velocity.Magnitude, Is.EqualTo(0f).Within(1e-3f));
@@ -102,7 +102,7 @@ namespace DroneFlightModule.Core.Tests
         [Test]
         public void FullDescent_SinksAtMaxClimbRateAndLands()
         {
-            var state = Fly(DroneState.At(new Vec3(0f, 10f, 0f)), new ControlInput(-Vec3.Up, 0f), 2f);
+            var state = Fly(new DroneState(new Vec3(0f, 10f, 0f)), new ControlInput(-Vec3.Up, 0f), 2f);
             Assert.That(state.Velocity.Y, Is.EqualTo(-config.MaxClimbRate).Within(0.01f));
 
             state = Fly(state, new ControlInput(-Vec3.Up, 0f), 5f);
@@ -112,7 +112,7 @@ namespace DroneFlightModule.Core.Tests
         [Test]
         public void FullForward_ReachesMaxHorizontalSpeedAlongHeading()
         {
-            var facingRight = DroneState.At(new Vec3(0f, 5f, 0f), yaw: MathF.PI / 2f);
+            var facingRight = new DroneState(new Vec3(0f, 5f, 0f), yaw: MathF.PI / 2f);
 
             var state = Fly(facingRight, new ControlInput(Vec3.Forward, 0f), 5f);
 
@@ -124,7 +124,7 @@ namespace DroneFlightModule.Core.Tests
         [Test]
         public void FullYaw_ReachesMaxYawRate()
         {
-            var state = Fly(DroneState.At(new Vec3(0f, 5f, 0f)), new ControlInput(Vec3.Zero, 1f), 2f);
+            var state = Fly(new DroneState(new Vec3(0f, 5f, 0f)), new ControlInput(Vec3.Zero, 1f), 2f);
 
             Assert.That(state.YawRate, Is.EqualTo(config.MaxYawRate).Within(0.01f));
         }
@@ -132,7 +132,7 @@ namespace DroneFlightModule.Core.Tests
         [Test]
         public void HorizontalForce_IsLimitedToMaxLateralForce()
         {
-            var command = controller.Compute(new ControlInput(new Vec3(1f, 0f, 1f), 0f), DroneState.At(new Vec3(0f, 5f, 0f)));
+            var command = controller.Compute(new ControlInput(new Vec3(1f, 0f, 1f), 0f), new DroneState(new Vec3(0f, 5f, 0f)));
 
             float horizontal = new Vec3(command.Force.X, 0f, command.Force.Z).Magnitude;
             Assert.That(horizontal, Is.EqualTo(drone.MaxLateralForce).Within(Tolerance));

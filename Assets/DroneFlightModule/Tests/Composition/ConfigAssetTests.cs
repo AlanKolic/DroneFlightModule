@@ -190,7 +190,10 @@ namespace DroneFlightModule.Composition.Tests
                 null, TimeSpan.Zero, 0f, Vector3.right, drones, groups));
             Assert.Throws<ArgumentOutOfRangeException>(() => new FleetSettings(
                 DroneConfig.Default, VelocityControllerConfig.Default, RangefinderConfig.Default, FailsafeConfig.Default, TelemetryConfig.Default,
-                pilots, TimeSpan.FromSeconds(-1), 0f, Vector3.right, drones, groups));
+                pilots, TimeSpan.Zero, 0f, new Vector3(float.NaN, 0f, 0f), drones, groups));
+            Assert.Throws<ArgumentOutOfRangeException>(() => new FleetSettings(
+                DroneConfig.Default, VelocityControllerConfig.Default, RangefinderConfig.Default, FailsafeConfig.Default, TelemetryConfig.Default,
+                pilots, TimeSpan.Zero, 0f, Vector3.right, new[] { new FleetDroneEntry("drone-1", new Vector3(0f, float.PositiveInfinity, 0f)) }, groups));
             Assert.Throws<ArgumentOutOfRangeException>(() => new FleetSettings(
                 DroneConfig.Default, VelocityControllerConfig.Default, RangefinderConfig.Default, FailsafeConfig.Default, TelemetryConfig.Default,
                 pilots, TimeSpan.Zero, float.NaN, Vector3.right, drones, groups));

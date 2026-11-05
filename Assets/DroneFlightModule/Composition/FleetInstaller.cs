@@ -87,7 +87,6 @@ namespace DroneFlightModule.Composition
             builder.Register<DroneInstantiator>(Lifetime.Singleton)
                 .WithParameter("prefab", dronePrefab)
                 .WithParameter("hud", hud)
-                .WithParameter("groundHeight", settings.GroundHeight)
                 .WithParameter("spawnStep", settings.SpawnStep);
             builder.Register<IFleetConsole, FleetConsole>(Lifetime.Singleton).AsSelf();
             builder.Register<FleetKeys>(Lifetime.Singleton);

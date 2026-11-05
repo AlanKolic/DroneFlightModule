@@ -56,7 +56,7 @@ namespace DroneFlightModule.UI.Tests
         public FlightRequestResult Fly(PilotId pilot, DroneId? drone)
         {
             var provider = pilot == Ace.Id ? (IAuthorizationProvider)server : guest;
-            var session = new PilotSession(pilot, PilotOrigin.Local, provider, new CentredSticks());
+            var session = new PilotSession(pilot, provider, new CentredSticks());
             return Coordinator.RequestFlightAsync(session, drone, CancellationToken.None).Result;
         }
 

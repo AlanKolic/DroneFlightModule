@@ -42,18 +42,22 @@ Centred sticks hold position and altitude, so the drone hovers hands-off.
 
 **Every input device is its own pilot station.** The keyboard and each gamepad, including one
 plugged in while the scene runs, fly as separate pilots on separate drones, and none reads the
-others' buttons. The keyboard starts as the guest and the first gamepad as Ace; a station
-starts as the first pilot no other station flies as. Unplugging a gamepad is link loss: its
-drone holds and lands, and plugging it back in resumes. Adding and removing drones and the
+others' buttons. A station starts as the lowest-ranked pilot no other station flies as, so the
+keyboard is the guest, the first gamepad Ace and the second John. Unplugging a gamepad is link
+loss: its drone holds and lands, and plugging it back in resumes. A drone that lands with no
+link is released, so a gamepad that never comes back doesn't keep it. Adding and removing drones and the
 dashboard stay on the keyboard, since they act on the whole fleet. The HUD lists the stations.
 
 You start as the **guest**, authorized at once by local guest mode, without a drone. **P**
-switches to the next pilot in the registry, such as **Ace**, a registered pilot with a higher
-priority who signs in through a simulated server that answers after 0.5 s. Switching leaves
-the previous pilot on their drone with their hands off the sticks, so it hovers, and only the
-selected pilot steers. That lets Ace take over the guest's drone from the same keyboard.
+switches to the next pilot in the registry, highest priority first: **John** (60), then **Ace**
+(50). Both are registered pilots who sign in through a simulated server that answers after
+0.5 s. Switching leaves the previous pilot on their drone with their hands off the sticks, so
+it hovers, and only the selected pilot steers. That lets John take over the guest's drone from
+the same keyboard.
 Switching also cancels the previous pilot's pending request, so nobody is handed a drone after
-you switched away from them. Requesting any drone while you fly one keeps you on it.
+you switched away from them. Requesting any drone while you fly one keeps you on it. A pilot
+with no link can't request a drone at all. To move a pilot to another device, select them there
+and request: their drone moves over without a release, and only that station shows it.
 
 The control panel and the dashboard both track takeovers: the dropdowns say who flies what,
 the panel's status shows the current pilot's takeovers and preemptions, and a pilot who loses
@@ -77,19 +81,20 @@ where the latest outcome shows: what you asked for, a denial, or that someone to
    (0.5 m/s above the rangefinder's 10 m range), slows to 0.3 m/s below 2 m, lands and cuts its
    motors. Cutting the link again soon after restoring it resumes the countdown rather than
    restarting it.
-6. With the link cut on the ground, the drone can't take off.
+6. A drone that lands with no link is released, and so is a grounded one whose link you cut. With
+   the link cut, a request is refused, so restore it first.
 7. Press **N** to add a drone next to the others. It joins the fleet at once and is free, so
    **R** can give it to you. **M** removes the newest drone; if you were flying it, it's
    released first and the control panel tells you.
-8. Press **P**, then **R**, to fly as Ace through the server. **V** makes the server revoke
-   Ace's grant: the drone is released at once and the failsafe takes over.
-9. Take a drone over: as the guest press **1**, then **P** to become Ace, who outranks the
-   guest, and press **1** again. Ace takes drone-1, the guest is preempted, and the dashboard
-   counts one takeover for Ace and one preemption for the guest.
+8. Press **P**, then **R**, to fly as John through the server. **V** makes the server revoke
+   John's grant: the drone is released at once and the failsafe takes over.
+9. Take a drone over: as the guest press **1**, then **P** to become John, who outranks the
+   guest, and press **1** again. John takes drone-1, the guest is preempted, and the dashboard
+   counts one takeover for John and one preemption for the guest.
 10. Plug in a gamepad: it appears in the HUD as `Gamepad 1`, flying as Ace. Press **R** on the
     keyboard and **South** on the pad, and the two fly separate drones at once. Unplug the pad
     and its drone holds, then lands; plug it back in within the hold to take over again.
-10. Watch the fleet dashboard on the right: every drone's pilot, mode, measured and true
+11. Watch the fleet dashboard on the right: every drone's pilot, mode, measured and true
    height, position and heading; each pilot's stats; and the latest events, denials
    included. **Tab** hides it.
 11. Or skip the keys: in the control panel, pick a pilot and a drone and press **Request**.
@@ -111,7 +116,7 @@ share: the coordinator, pilots and stats, the providers, and a pilot station per
 | Assembly | Depends on | Role |
 |---|---|---|
 | `Core` | nothing (`noEngineReferences`) | Math, state, input routing, controllers, gates, failsafe supervisor, rangefinder, integrator, `FlightLoop` |
-| `Unity` | Core, Input System | Input-actions provider, drone view with interpolation, debug HUD (drones and controls), follow camera |
+| `Unity` | Core, Input System | Input-actions provider, drone view with interpolation, debug HUD (drones, stations and controls), follow camera |
 | `Pilots` | Core | Pilot profiles and priorities, registry with a built-in guest, stats and their recorder |
 | `Authorization` | Core | Providers (local guest, simulated server that can revoke), revocable grants, per-drone grant holder gate |
 | `Telemetry` | Core | A recorder per drone sampling its flight at 10 Hz, sinks (a fleet-wide in-memory sink of the latest samples) |
@@ -171,14 +176,15 @@ variant is a new class plus one registration in `DroneInstaller`:
 - **Keys in two places.** `StationKeys` binds a station's buttons and `FleetKeys` the
   fleet-wide ones; the keys and the control panel drive the same objects. Only the dashboard's
   Tab toggle stays with the dashboard, so it goes when the UI is deleted.
-- **No per-tick allocations** in the simulation path, telemetry included. The HUD and the
-  control panel build their text at most once per rendered frame, and OnGUI only draws.
+- **No per-tick allocations** in the simulation path, telemetry included. The HUD's drone boxes
+  build their text at most once per rendered frame, the rest of the UI a few times a second,
+  and OnGUI only draws.
 - **Telemetry can't break flight.** It only reads, and a sink that throws is logged and
   skipped, so a broken sink never stops a tick.
 
 ## Tests
 
-- **Core**: 123 tests run headless in milliseconds. Unit tests for every class, plus
+- **Core**: 132 tests run headless in milliseconds. Unit tests for every class, plus
   closed-loop flights: hover, climb rate, top speed, hold for exactly 10 s, braking to a stop
   when the link drops at full speed, flared landing below 0.3 m/s, a closed gate on the ground
   blocking takeoff, sampling that averages its rate on any tick step, and a loop that starts
@@ -187,24 +193,22 @@ variant is a new class plus one registration in `DroneInstaller`:
   asset), the interpolator, the chase camera and the HUD text.
 - **Pilots**: 24 tests for profiles, the registry's guest and priority rules, and stats
   recording across flights and takeovers.
-- **Authorization**: 40 tests for grants and revocation, the grant holder (a grant for one
-  pilot never opens the gate for another), the guest's
-  local-only rule, and the server's latency, policy changes, cancellation and disposal. Async
+- **Authorization**: 39 tests for grants and revocation, the grant holder (a grant for one
+  pilot never opens the gate for another), guest mode, and the server's latency, policy changes, cancellation and disposal. Async
   code runs with no synchronization context and a hand-completed delay, so the tests are
   synchronous and never sleep.
-- **Coordination**: 56 tests on real flight loops: assignment preferring grounded drones,
+- **Coordination**: 60 tests on real flight loops: assignment preferring grounded drones,
   priority takeover with the gate open on every tick, equal priority never taking over,
   switching drones, denied switches, keeping your drone on "any drone", a second session for
   the same pilot, a throwing listener that can't interrupt a switch or reach a revoker, events
-  that see the change complete, revocation, release, ending a session, cancelled and
-  superseded requests, decisions on the fleet as it is once authorization completes, the
+  that see the change complete, revocation, release, a pilot with no link refused and their
+  landed drone released, cancelled and superseded requests, decisions on the fleet as it is once authorization completes, the
   drones joining and leaving at any time, the policy on its own, and stats timed by the simulation
   clock.
-- **Dashboard**: 22 tests for the event log, the readout's text (run in a comma-decimal
+- **Dashboard**: 23 tests for the event log, the readout's text (run in a comma-decimal
   culture to keep the formatting invariant), Tab toggling the dashboard, and the control
-  panel's pilot and drone choices, labels that follow a takeover, and each pilot's record.
-- **Telemetry**: 18 tests for the ring buffer, sampling on simulation time (also on a tick
-  step that doesn't divide the period), sink fan-out, a failing sink never breaking the flight,
+  panel's pilot and drone choices, labels that follow a takeover, and the status line.
+- **Telemetry**: 14 tests for sampling on simulation time, sink fan-out, a failing sink never breaking the flight,
   streams ending with the drone, and the in-memory sink.
 - **Composition**: the real fleet container with two drone scopes, driven by key presses:
   each drone in its own scope, drones added and removed while the fleet is in use, free
@@ -218,8 +222,10 @@ variant is a new class plus one registration in `DroneInstaller`:
   the Core types, a missing part named, and the shipped settings making a valid fleet. Input
   devices with virtual gamepads: a station per device and its starting pilot, the keyboard and
   pads flying separate drones at once, unplugging as link loss and plugging back in, one pilot
-  on two devices, takeovers between stations, per-station links, the console's station choice
-  and disposal.
+  on two devices, takeovers between stations, per-station links, a station with no link
+  refused and its landed drone freed, starting pilots, the console's station choice, the camera
+  following it, and disposal. The control panel's IMGUI drawing itself is not tested; its text
+  and choices are.
 
 ## Status and roadmap
 
@@ -239,7 +245,7 @@ Every planned commit is done.
 
 - A gamepad that comes back as a new device rather than the same one, which the Input System
   decides, gets a new station; the old one stays disconnected, its drone landed.
-- The roster has one registered pilot, so a second gamepad starts as the guest, the same pilot
+- The roster has two registered pilots, so a third gamepad starts as the guest, the same pilot
   as the keyboard: whichever requests last flies the guest's drone. Adding pilots to the roster
   asset gives every device its own.
 

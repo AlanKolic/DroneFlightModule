@@ -18,8 +18,8 @@ namespace DroneFlightModule.Telemetry.Tests
 
         private FlightFrame Sample(DroneId drone, double time)
         {
-            return new FlightFrame(drone, time, ControlInput.Zero, ForceCommand.None, DroneState.At(Vec3.Zero),
-                AltitudeReading.Invalid(time), FlightMode.Grounded, 0.0);
+            return new FlightFrame(drone, time, ControlInput.Zero, ForceCommand.None, new DroneState(Vec3.Zero),
+                AltitudeReading.Invalid, FlightMode.Grounded, 0.0);
         }
 
         [Test]
@@ -31,7 +31,8 @@ namespace DroneFlightModule.Telemetry.Tests
 
             Assert.That(sink.TryGetLatest(Drone1, out var latest), Is.True);
             Assert.That(latest.Time, Is.EqualTo(2.0));
-            Assert.That(sink.Drones, Is.EquivalentTo(new[] { Drone1, Drone2 }));
+            Assert.That(sink.TryGetLatest(Drone2, out var other), Is.True);
+            Assert.That(other.Time, Is.EqualTo(1.5));
         }
 
         [Test]
@@ -42,7 +43,6 @@ namespace DroneFlightModule.Telemetry.Tests
             sink.End(Drone1);
 
             Assert.That(sink.TryGetLatest(Drone1, out _), Is.False);
-            Assert.That(sink.Drones, Is.Empty);
         }
     }
 }

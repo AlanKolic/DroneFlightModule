@@ -22,7 +22,7 @@ namespace DroneFlightModule.Unity.Tests
         [TestCase(3f)]
         public void PoseRotation_MatchesCoreRotateYaw(float yaw)
         {
-            var unity = DroneState.At(Vec3.Zero, yaw).ToPose().rotation * Vector3.forward;
+            var unity = new DroneState(Vec3.Zero, yaw).ToPose().rotation * Vector3.forward;
             var core = Vec3.Forward.RotateYaw(yaw);
 
             Assert.That(unity.x, Is.EqualTo(core.X).Within(Tolerance));
@@ -33,7 +33,7 @@ namespace DroneFlightModule.Unity.Tests
         [Test]
         public void PositiveYaw_TurnsForwardTowardsRight()
         {
-            var turned = DroneState.At(Vec3.Zero, Mathf.PI / 2f).ToPose().rotation * Vector3.forward;
+            var turned = new DroneState(Vec3.Zero, Mathf.PI / 2f).ToPose().rotation * Vector3.forward;
 
             Assert.That(turned.x, Is.EqualTo(1f).Within(Tolerance));
             Assert.That(turned.z, Is.EqualTo(0f).Within(Tolerance));

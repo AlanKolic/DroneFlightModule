@@ -1,5 +1,4 @@
 using System;
-using System.IO;
 using System.Threading;
 using DroneFlightModule.Coordination;
 using DroneFlightModule.Core;
@@ -13,7 +12,11 @@ namespace DroneFlightModule.Composition.Tests
 {
     public class DroneInstantiatorTests
     {
-        private const string ControlsPath = "Assets/DroneFlightModule/Unity/Input/DroneControls.inputactions";
+        private sealed class SteppedTerrain : ITerrain
+        {
+            public float HeightAt(float x, float z) => x > 0f ? 3f : 0f;
+        }
+
         private const float GroundHeight = 1f;
 
         private static readonly Vector3 SpawnStep = new Vector3(4f, 0f, 0f);
@@ -26,7 +29,7 @@ namespace DroneFlightModule.Composition.Tests
         [SetUp]
         public void SetUp()
         {
-            controls = InputActionAsset.FromJson(File.ReadAllText(ControlsPath));
+            controls = new TestFleetSettings().LoadControls();
             var builder = new ContainerBuilder();
             new FleetInstaller(new TestFleetSettings().Create(GroundHeight, TimeSpan.Zero, SpawnStep), controls, CancellationToken.None, null, null).Install(builder);
             fleet = builder.Build();
@@ -46,7 +49,7 @@ namespace DroneFlightModule.Composition.Tests
         private DroneInstantiator Instantiator(DroneView dronePrefab)
         {
             return new DroneInstantiator(
-                fleet, fleet.Resolve<DroneRegistry>(), fleet.Resolve<FlightCoordinator>(), fleet.Resolve<ISimulationClock>(), dronePrefab, null, GroundHeight, SpawnStep);
+                fleet, fleet.Resolve<DroneRegistry>(), fleet.Resolve<FlightCoordinator>(), fleet.Resolve<ISimulationClock>(), dronePrefab, null, fleet.Resolve<ITerrain>(), SpawnStep);
         }
 
         private DroneRegistry Registry => fleet.Resolve<DroneRegistry>();
@@ -63,11 +66,13 @@ namespace DroneFlightModule.Composition.Tests
             var registry = Registry;
             var coordinator = fleet.Resolve<FlightCoordinator>();
             var clock = fleet.Resolve<ISimulationClock>();
+            var terrain = fleet.Resolve<ITerrain>();
 
-            Assert.Throws<ArgumentNullException>(() => new DroneInstantiator(null, registry, coordinator, clock, prefab, null, 0f, SpawnStep));
-            Assert.Throws<ArgumentNullException>(() => new DroneInstantiator(fleet, null, coordinator, clock, prefab, null, 0f, SpawnStep));
-            Assert.Throws<ArgumentNullException>(() => new DroneInstantiator(fleet, registry, null, clock, prefab, null, 0f, SpawnStep));
-            Assert.Throws<ArgumentNullException>(() => new DroneInstantiator(fleet, registry, coordinator, null, prefab, null, 0f, SpawnStep));
+            Assert.Throws<ArgumentNullException>(() => new DroneInstantiator(null, registry, coordinator, clock, prefab, null, terrain, SpawnStep));
+            Assert.Throws<ArgumentNullException>(() => new DroneInstantiator(fleet, null, coordinator, clock, prefab, null, terrain, SpawnStep));
+            Assert.Throws<ArgumentNullException>(() => new DroneInstantiator(fleet, registry, null, clock, prefab, null, terrain, SpawnStep));
+            Assert.Throws<ArgumentNullException>(() => new DroneInstantiator(fleet, registry, coordinator, null, prefab, null, terrain, SpawnStep));
+            Assert.Throws<ArgumentNullException>(() => new DroneInstantiator(fleet, registry, coordinator, clock, prefab, null, null, SpawnStep));
         }
 
         [Test]
@@ -76,8 +81,8 @@ namespace DroneFlightModule.Composition.Tests
             var high = new DroneId("high");
             var low = new DroneId("low");
 
-            drones.AddDrone(high, new Vector3(0f, 5f, 0f), null);
-            drones.AddDrone(low, new Vector3(4f, GroundHeight, 0f), null);
+            drones.AddDrone(high, new Vector3(0f, 5f, 0f));
+            drones.AddDrone(low, new Vector3(4f, GroundHeight, 0f));
 
             Assert.That(Registry.Drones[0].Id, Is.EqualTo(high));
             Assert.That(Registry.Drones[1].Id, Is.EqualTo(low));
@@ -88,7 +93,7 @@ namespace DroneFlightModule.Composition.Tests
         [Test]
         public void ADroneFromThePrefab_GetsTheNextIdAndSpawnsOneStepPastTheLast()
         {
-            drones.AddDrone(new DroneId("drone-1"), new Vector3(0f, GroundHeight, 0f), null);
+            drones.AddDrone(new DroneId("drone-1"), new Vector3(0f, GroundHeight, 0f));
 
             var id = drones.AddDrone();
 
@@ -116,7 +121,7 @@ namespace DroneFlightModule.Composition.Tests
         public void ATakenId_BuildsNoViewFromThePrefab()
         {
             var id = new DroneId("drone-1");
-            drones.AddDrone(id, Vector3.zero, null);
+            drones.AddDrone(id, Vector3.zero);
             int views = UnityEngine.Object.FindObjectsByType<DroneView>(FindObjectsSortMode.None).Length;
 
             Assert.Throws<ArgumentException>(() => drones.AddDrone(id, Vector3.zero));
@@ -127,28 +132,49 @@ namespace DroneFlightModule.Composition.Tests
         [Test]
         public void NewIds_SkipTakenOnes()
         {
-            drones.AddDrone(new DroneId("drone-2"), new Vector3(0f, GroundHeight, 0f), null);
+            drones.AddDrone(new DroneId("drone-2"), new Vector3(0f, GroundHeight, 0f));
 
             Assert.That(drones.AddDrone(), Is.EqualTo(new DroneId("drone-3")));
         }
 
         [Test]
-        public void WithoutAPrefab_AddingFromItThrows()
+        public void WithoutAPrefab_ADroneHasNoView()
         {
             var withoutPrefab = Instantiator(null);
 
-            Assert.Throws<InvalidOperationException>(() => withoutPrefab.AddDrone());
-            Assert.Throws<InvalidOperationException>(() => withoutPrefab.AddDrone(new DroneId("scout"), Vector3.zero));
-            Assert.That(Registry.Drones, Is.Empty);
+            var id = withoutPrefab.AddDrone();
+
+            Assert.That(Registry.TryGet(id, out _), Is.True);
+            Assert.That(withoutPrefab.TryGetView(id, out _), Is.False);
+            withoutPrefab.Dispose();
+        }
+
+        [Test]
+        public void GroundedAtSpawn_ComesFromTheTerrainUnderTheDrone()
+        {
+            var hill = new SteppedTerrain();
+            var onHill = new DroneInstantiator(
+                fleet, Registry, fleet.Resolve<FlightCoordinator>(), fleet.Resolve<ISimulationClock>(), null, null, hill, SpawnStep);
+            var hilltop = new DroneId("hilltop");
+            var valley = new DroneId("valley");
+
+            onHill.AddDrone(hilltop, new Vector3(1f, 3f, 0f));
+            onHill.AddDrone(valley, new Vector3(-1f, 3f, 0f));
+
+            onHill.TryGetScope(hilltop, out var hilltopScope);
+            onHill.TryGetScope(valley, out var valleyScope);
+            Assert.That(hilltopScope.Resolve<FlightLoop>().State.IsGrounded, Is.True);
+            Assert.That(valleyScope.Resolve<FlightLoop>().State.IsGrounded, Is.False);
+            onHill.Dispose();
         }
 
         [Test]
         public void ATakenId_IsRefusedBeforeAnythingIsBuilt()
         {
             var id = new DroneId("drone-1");
-            drones.AddDrone(id, Vector3.zero, null);
+            drones.AddDrone(id, Vector3.zero);
 
-            Assert.Throws<ArgumentException>(() => drones.AddDrone(id, Vector3.zero, null));
+            Assert.Throws<ArgumentException>(() => drones.AddDrone(id, Vector3.zero));
             Assert.That(Registry.Drones, Has.Count.EqualTo(1));
         }
 
@@ -215,18 +241,14 @@ namespace DroneFlightModule.Composition.Tests
         }
 
         [Test]
-        public void Dispose_DestroysOnlyTheViewsItBuilt()
+        public void Dispose_DestroysTheViews()
         {
-            var given = new GameObject("Given", typeof(DroneView)).GetComponent<DroneView>();
-            drones.AddDrone(new DroneId("given"), Vector3.zero, given);
-            var built = drones.AddDrone();
-            drones.TryGetView(built, out var builtView);
+            var id = drones.AddDrone();
+            drones.TryGetView(id, out var view);
 
             drones.Dispose();
 
-            Assert.That(builtView == null, Is.True);
-            Assert.That(given == null, Is.False);
-            UnityEngine.Object.DestroyImmediate(given.gameObject);
+            Assert.That(view == null, Is.True);
         }
     }
 }

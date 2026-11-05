@@ -35,7 +35,7 @@ namespace DroneFlightModule.Coordination
                     return Claim(pilot, drone);
                 }
             }
-            return AssignmentDecision.Deny(FlightDenial.UnknownDrone);
+            return new AssignmentDecision(FlightDenial.UnknownDrone);
         }
 
         private AssignmentDecision DecideForAny(PilotProfile pilot, IReadOnlyList<DroneSnapshot> fleet)
@@ -59,22 +59,22 @@ namespace DroneFlightModule.Coordination
 
             if (free != null)
             {
-                return AssignmentDecision.Assign(free.Value.Id);
+                return new AssignmentDecision(AssignmentAction.Assign, free.Value.Id);
             }
-            return lowest != null ? Claim(pilot, lowest.Value) : AssignmentDecision.Deny(FlightDenial.NoDroneAvailable);
+            return lowest != null ? Claim(pilot, lowest.Value) : new AssignmentDecision(FlightDenial.NoDroneAvailable);
         }
 
         private AssignmentDecision Claim(PilotProfile pilot, in DroneSnapshot drone)
         {
             if (drone.IsFree)
             {
-                return AssignmentDecision.Assign(drone.Id);
+                return new AssignmentDecision(AssignmentAction.Assign, drone.Id);
             }
             if (pilot.Priority > drone.Pilot.Priority)
             {
-                return AssignmentDecision.TakeOver(drone.Id);
+                return new AssignmentDecision(AssignmentAction.TakeOver, drone.Id);
             }
-            return AssignmentDecision.Deny(FlightDenial.NoDroneAvailable);
+            return new AssignmentDecision(FlightDenial.NoDroneAvailable);
         }
     }
 }

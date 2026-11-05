@@ -35,23 +35,22 @@ namespace DroneFlightModule.Telemetry.Tests
         }
 
         [Test]
-        public void BeforeTheFirstTick_HasNoSample()
+        public void BeforeTheFirstTick_NothingIsWritten()
         {
-            var recorder = Recorder(tenPerSecond, sink);
+            Recorder(tenPerSecond, sink);
 
-            Assert.That(recorder.HasSample, Is.False);
-            Assert.That(recorder.DroneId, Is.EqualTo(loop.DroneId));
+            Assert.That(sink.Written, Is.Empty);
         }
 
         [Test]
         public void TheFirstTick_IsSampled()
         {
-            var recorder = Recorder(tenPerSecond, sink);
+            Recorder(tenPerSecond, sink);
 
             loops.Run(loop, 1);
 
-            Assert.That(recorder.HasSample, Is.True);
-            Assert.That(recorder.Latest.Time, Is.EqualTo(TestLoops.DeltaTime).Within(1e-6));
+            Assert.That(sink.Written, Has.Count.EqualTo(1));
+            Assert.That(sink.Written[0].Time, Is.EqualTo(TestLoops.DeltaTime).Within(1e-6));
         }
 
         [Test]
@@ -95,14 +94,15 @@ namespace DroneFlightModule.Telemetry.Tests
         }
 
         [Test]
-        public void KeepsTheLatestSample()
+        public void ASample_IsTheFrameOfItsTick()
         {
-            var recorder = Recorder(new TelemetryConfig(sampleRate: 50f), sink);
+            Recorder(new TelemetryConfig(sampleRate: 50f), sink);
 
             loops.Run(loop, 5);
 
-            Assert.That(recorder.Latest.Time, Is.EqualTo(loop.Time).Within(1e-6));
-            Assert.That(recorder.Latest.State.Position, Is.EqualTo(loop.State.Position));
+            var latest = sink.Written[sink.Written.Count - 1];
+            Assert.That(latest.Time, Is.EqualTo(loop.Time).Within(1e-6));
+            Assert.That(latest.State.Position, Is.EqualTo(loop.State.Position));
         }
 
         [Test]

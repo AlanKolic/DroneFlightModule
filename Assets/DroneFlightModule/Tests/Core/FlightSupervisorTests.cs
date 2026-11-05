@@ -12,7 +12,7 @@ namespace DroneFlightModule.Core.Tests
         private readonly DroneConfig drone = DroneConfig.Default;
         private readonly FailsafeConfig config = FailsafeConfig.Default;
         private readonly ForceCommand pilotCommand = new ForceCommand(new Vec3(1f, 20f, 2f), 0.3f);
-        private readonly DroneState airborne = DroneState.At(new Vec3(0f, 5f, 0f));
+        private readonly DroneState airborne = new DroneState(new Vec3(0f, 5f, 0f));
         private readonly DroneState grounded = new DroneState(Vec3.Zero, Vec3.Zero, 0f, 0f, isGrounded: true);
 
         private ScriptedFlightGate gate;
@@ -27,7 +27,7 @@ namespace DroneFlightModule.Core.Tests
 
         private AltitudeReading Altitude(float heightAboveGround)
         {
-            return new AltitudeReading(heightAboveGround, true, 0.0);
+            return new AltitudeReading(heightAboveGround, true);
         }
 
         private ForceCommand Supervise(in DroneState state, float heightAboveGround = 5f)
@@ -312,7 +312,7 @@ namespace DroneFlightModule.Core.Tests
             HoldUntilDescending();
             float sinkRate = -config.FallbackSinkRate;
 
-            var command = supervisor.Supervise(pilotCommand, Sinking(sinkRate), AltitudeReading.Invalid(0.0), DeltaTime);
+            var command = supervisor.Supervise(pilotCommand, Sinking(sinkRate), AltitudeReading.Invalid, DeltaTime);
 
             Assert.That(NetVerticalForce(command, sinkRate), Is.EqualTo(0f).Within(Tolerance));
         }

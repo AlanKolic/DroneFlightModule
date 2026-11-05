@@ -53,7 +53,7 @@ namespace DroneFlightModule.Core.Tests
         [TestCase(float.PositiveInfinity)]
         public void Tick_RejectsInvalidDuration(float deltaTime)
         {
-            var loop = CreateLoop(DroneState.At(Vec3.Zero));
+            var loop = CreateLoop(new DroneState(Vec3.Zero));
 
             Assert.Throws<ArgumentOutOfRangeException>(() => loop.Tick(deltaTime));
         }
@@ -70,7 +70,7 @@ namespace DroneFlightModule.Core.Tests
                 new FlightSupervisor(gate, config, FailsafeConfig.Default),
                 new DroneIntegrator(config, terrain),
                 new RangefinderAltitudeSensor(terrain, RangefinderConfig.Default),
-                DroneState.At(Vec3.Zero),
+                new DroneState(Vec3.Zero),
                 startTime: 12.5);
             double ticked = -1.0;
             loop.Ticked += frame => ticked = frame.Time;
@@ -96,7 +96,7 @@ namespace DroneFlightModule.Core.Tests
                 new FlightSupervisor(gate, config, FailsafeConfig.Default),
                 new DroneIntegrator(config, terrain),
                 new RangefinderAltitudeSensor(terrain, RangefinderConfig.Default),
-                DroneState.At(Vec3.Zero),
+                new DroneState(Vec3.Zero),
                 startTime));
         }
 
@@ -113,7 +113,7 @@ namespace DroneFlightModule.Core.Tests
                 new FlightSupervisor(gate, config, FailsafeConfig.Default),
                 new DroneIntegrator(config, terrain),
                 new RangefinderAltitudeSensor(terrain, RangefinderConfig.Default),
-                DroneState.At(Vec3.Zero)));
+                new DroneState(Vec3.Zero)));
         }
 
         [Test]
@@ -128,7 +128,7 @@ namespace DroneFlightModule.Core.Tests
                 new FlightSupervisor(gate, config, FailsafeConfig.Default),
                 new DroneIntegrator(config, new FlatTerrain()),
                 null,
-                DroneState.At(Vec3.Zero)));
+                new DroneState(Vec3.Zero)));
         }
 
         [Test]
@@ -144,13 +144,13 @@ namespace DroneFlightModule.Core.Tests
                 null,
                 new DroneIntegrator(config, terrain),
                 new RangefinderAltitudeSensor(terrain, RangefinderConfig.Default),
-                DroneState.At(Vec3.Zero)));
+                new DroneState(Vec3.Zero)));
         }
 
         [Test]
         public void NoInput_FallsAndLands()
         {
-            var loop = CreateLoop(DroneState.At(new Vec3(0f, 10f, 0f)));
+            var loop = CreateLoop(new DroneState(new Vec3(0f, 10f, 0f)));
 
             Run(loop, 5f);
 
@@ -161,7 +161,7 @@ namespace DroneFlightModule.Core.Tests
         [Test]
         public void FullClimb_TakesOffFromGround()
         {
-            var loop = CreateLoop(DroneState.At(Vec3.Zero));
+            var loop = CreateLoop(new DroneState(Vec3.Zero));
             input.Current = new ControlInput(Vec3.Up, 0f);
 
             Run(loop, 1f);
@@ -173,7 +173,7 @@ namespace DroneFlightModule.Core.Tests
         [Test]
         public void Forward_FliesAlongHeading()
         {
-            var facingRight = DroneState.At(new Vec3(0f, 10f, 0f), yaw: MathF.PI / 2f);
+            var facingRight = new DroneState(new Vec3(0f, 10f, 0f), yaw: MathF.PI / 2f);
             var loop = CreateLoop(facingRight, gravity: 0f);
             input.Current = new ControlInput(Vec3.Forward, 0f);
 
@@ -186,7 +186,7 @@ namespace DroneFlightModule.Core.Tests
         [Test]
         public void Ticked_PublishesOneFrameMatchingStatePerTick()
         {
-            var loop = CreateLoop(DroneState.At(new Vec3(0f, 10f, 0f)));
+            var loop = CreateLoop(new DroneState(new Vec3(0f, 10f, 0f)));
             var frames = new List<FlightFrame>();
             loop.Ticked += frames.Add;
 
@@ -201,7 +201,7 @@ namespace DroneFlightModule.Core.Tests
         [Test]
         public void InputChange_TakesEffectOnNextTick()
         {
-            var loop = CreateLoop(DroneState.At(Vec3.Zero));
+            var loop = CreateLoop(new DroneState(Vec3.Zero));
             var frames = new List<FlightFrame>();
             loop.Ticked += frames.Add;
 
@@ -218,7 +218,7 @@ namespace DroneFlightModule.Core.Tests
         {
             var router = new InputRouter();
             var loop = CreateLoop(
-                DroneState.At(Vec3.Zero),
+                new DroneState(Vec3.Zero),
                 inputProvider: router,
                 flightGate: new PilotInControlGate(router));
             input.Current = new ControlInput(Vec3.Up, 0f);
@@ -234,7 +234,7 @@ namespace DroneFlightModule.Core.Tests
         [Test]
         public void Ticked_CarriesAltitudeSampledBeforeTheStep()
         {
-            var loop = CreateLoop(DroneState.At(new Vec3(0f, 10f, 0f)));
+            var loop = CreateLoop(new DroneState(new Vec3(0f, 10f, 0f)));
             var frames = new List<FlightFrame>();
             loop.Ticked += frames.Add;
 
@@ -242,14 +242,13 @@ namespace DroneFlightModule.Core.Tests
 
             Assert.That(frames[0].Altitude.IsValid, Is.True);
             Assert.That(frames[0].Altitude.HeightAboveGround, Is.EqualTo(10f));
-            Assert.That(frames[0].Altitude.Timestamp, Is.EqualTo(0.0));
             Assert.That(frames[1].Altitude.HeightAboveGround, Is.EqualTo(frames[0].State.Position.Y));
         }
 
         [Test]
         public void GateClosedOnGround_CannotTakeOff()
         {
-            var loop = CreateLoop(DroneState.At(Vec3.Zero));
+            var loop = CreateLoop(new DroneState(Vec3.Zero));
             gate.IsFlightAllowed = false;
             input.Current = new ControlInput(Vec3.Up, 0f);
 
@@ -262,7 +261,7 @@ namespace DroneFlightModule.Core.Tests
         [Test]
         public void GateClosesInFlight_HoldsAltitudeForHoldDuration()
         {
-            var loop = CreateLoop(DroneState.At(new Vec3(0f, 5f, 0f)));
+            var loop = CreateLoop(new DroneState(new Vec3(0f, 5f, 0f)));
             gate.IsFlightAllowed = false;
 
             Run(loop, FailsafeConfig.Default.HoldDuration - 1f);
@@ -274,7 +273,7 @@ namespace DroneFlightModule.Core.Tests
         [Test]
         public void GateClosesInFlight_DescendsAfterHoldAndLandsGently()
         {
-            var loop = CreateLoop(DroneState.At(new Vec3(0f, 5f, 0f)));
+            var loop = CreateLoop(new DroneState(new Vec3(0f, 5f, 0f)));
             gate.IsFlightAllowed = false;
             var frames = new List<FlightFrame>();
             loop.Ticked += frames.Add;
@@ -293,7 +292,7 @@ namespace DroneFlightModule.Core.Tests
         [Test]
         public void Descending_HighUp_SinksAtDescentRate()
         {
-            var loop = CreateLoop(DroneState.At(new Vec3(0f, 8f, 0f)));
+            var loop = CreateLoop(new DroneState(new Vec3(0f, 8f, 0f)));
             gate.IsFlightAllowed = false;
 
             Run(loop, FailsafeConfig.Default.HoldDuration + 2f);
@@ -305,7 +304,7 @@ namespace DroneFlightModule.Core.Tests
         [Test]
         public void GateReopensDuringHold_PilotFliesAgain()
         {
-            var loop = CreateLoop(DroneState.At(new Vec3(0f, 5f, 0f)));
+            var loop = CreateLoop(new DroneState(new Vec3(0f, 5f, 0f)));
             gate.IsFlightAllowed = false;
             input.Current = new ControlInput(Vec3.Up, 0f);
             Run(loop, 1f);
@@ -321,7 +320,7 @@ namespace DroneFlightModule.Core.Tests
         [Test]
         public void Ticked_CarriesModeAndHoldTimeRemaining()
         {
-            var loop = CreateLoop(DroneState.At(new Vec3(0f, 5f, 0f)));
+            var loop = CreateLoop(new DroneState(new Vec3(0f, 5f, 0f)));
             var frames = new List<FlightFrame>();
             loop.Ticked += frames.Add;
 

@@ -6,10 +6,9 @@ namespace DroneFlightModule.Core
     /// Decides each tick whether the pilot's command reaches the actuators. While the gate is open
     /// the pilot flies. When it closes in the air the drone brakes to a stop and holds for the hold
     /// duration, then descends straight down, flaring near the ground, until touchdown cuts the
-    /// motors. Holding spends a hold
-    /// budget that flying earns back at the same rate and landing refills, so a link that drops
-    /// again soon after it returns resumes the hold where it left off instead of restarting it,
-    /// and a flapping link cannot keep the drone in the air forever.
+    /// motors. Holding spends a hold budget that flying earns back at the same rate and landing
+    /// refills, so a link that drops again soon after it returns resumes the hold where it left off
+    /// instead of restarting it, and a flapping link cannot keep the drone in the air forever.
     /// </summary>
     public sealed class FlightSupervisor
     {

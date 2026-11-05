@@ -57,7 +57,7 @@ namespace DroneFlightModule.Coordination.Tests
 
         private PilotSession Session(PilotId pilot, IAuthorizationProvider authorizer = null)
         {
-            return new PilotSession(pilot, PilotOrigin.Local, authorizer ?? provider, new ScriptedInput());
+            return new PilotSession(pilot, authorizer ?? provider, new ScriptedInput());
         }
 
         private Task<FlightRequestResult> Start(PilotSession session, DroneId? preferred = null)
@@ -95,11 +95,10 @@ namespace DroneFlightModule.Coordination.Tests
             Assert.Throws<ArgumentNullException>(() => Start(null));
             Assert.Throws<ArgumentException>(() => Start(Session(Alice), default(DroneId)));
             Assert.Throws<ArgumentNullException>(() => coordinator.Release(null));
-            Assert.Throws<ArgumentNullException>(() => coordinator.EndSession(null));
             Assert.Throws<ArgumentNullException>(() => coordinator.CancelRequest(null));
-            Assert.Throws<ArgumentException>(() => new PilotSession(default, PilotOrigin.Local, provider, new ScriptedInput()));
-            Assert.Throws<ArgumentNullException>(() => new PilotSession(Alice, PilotOrigin.Local, null, new ScriptedInput()));
-            Assert.Throws<ArgumentNullException>(() => new PilotSession(Alice, PilotOrigin.Local, provider, null));
+            Assert.Throws<ArgumentException>(() => new PilotSession(default, provider, new ScriptedInput()));
+            Assert.Throws<ArgumentNullException>(() => new PilotSession(Alice, null, new ScriptedInput()));
+            Assert.Throws<ArgumentNullException>(() => new PilotSession(Alice, provider, null));
         }
 
         [Test]
@@ -134,7 +133,7 @@ namespace DroneFlightModule.Coordination.Tests
             provider.AnswersAtOnce = false;
             Start(session);
 
-            coordinator.EndSession(session);
+            coordinator.CancelRequest(session);
             provider.AnswerAll();
 
             Assert.That(denied, Is.Empty);
@@ -353,14 +352,14 @@ namespace DroneFlightModule.Coordination.Tests
         {
             var local = Session(Alice);
             Request(local, airborne.Id);
-            var phone = new PilotSession(Alice, PilotOrigin.Remote, provider, new ScriptedInput());
+            var pad = new PilotSession(Alice, provider, new ScriptedInput());
 
-            Request(phone, grounded.Id);
+            Request(pad, grounded.Id);
 
             AssertFlying(Alice, grounded);
             AssertFree(airborne);
             Assert.That(coordinator.Release(local), Is.False, "The local session no longer routes a drone.");
-            Assert.That(coordinator.Release(phone), Is.True);
+            Assert.That(coordinator.Release(pad), Is.True);
         }
 
         [Test]
@@ -432,8 +431,8 @@ namespace DroneFlightModule.Coordination.Tests
         {
             var first = Session(Alice);
             Request(first, airborne.Id);
-            var phone = new ScriptedInput { Current = new ControlInput(Vec3.Forward, 0f) };
-            var second = new PilotSession(Alice, PilotOrigin.Remote, provider, phone);
+            var pad = new ScriptedInput { Current = new ControlInput(Vec3.Forward, 0f) };
+            var second = new PilotSession(Alice, provider, pad);
 
             var result = Request(second, airborne.Id);
 
@@ -441,8 +440,11 @@ namespace DroneFlightModule.Coordination.Tests
             Assert.That(airborne.Router.Read().Move, Is.EqualTo(Vec3.Forward));
             Assert.That(assigned, Has.Count.EqualTo(1), "The flight goes on, so nothing new starts.");
 
-            coordinator.EndSession(first);
+            Assert.That(coordinator.Release(first), Is.False, "The first session no longer steers it.");
             AssertFlying(Alice, airborne);
+            Assert.That(coordinator.TryGetDrone(first, out _), Is.False);
+            Assert.That(coordinator.TryGetDrone(second, out var steered), Is.True);
+            Assert.That(steered, Is.EqualTo(airborne.Id));
         }
 
         [Test]
@@ -483,20 +485,76 @@ namespace DroneFlightModule.Coordination.Tests
         }
 
         [Test]
-        public void EndSession_CancelsThePendingRequestAndReleases()
+        public void Release_AlsoCancelsThePendingRequest()
         {
             var session = Session(Alice);
             Request(session, airborne.Id);
             provider.AnswersAtOnce = false;
             var pending = Start(session, grounded.Id);
 
-            coordinator.EndSession(session);
+            coordinator.Release(session);
             provider.AnswerAll();
 
             Assert.That(pending.IsCanceled, Is.True);
             AssertFree(airborne);
             AssertFree(grounded);
-            Assert.That(released[0].Reason, Is.EqualTo(ReleaseReason.SessionEnded));
+        }
+
+        [Test]
+        public void ADisconnectedPilot_IsDenied_AndTakesNothingOver()
+        {
+            var flown = Session(Bob);
+            Request(flown, airborne.Id);
+            var unplugged = new PilotSession(Alice, provider, new ScriptedInput { IsConnected = false });
+
+            var result = Request(unplugged, airborne.Id);
+
+            Assert.That(result.Denial, Is.EqualTo(FlightDenial.PilotDisconnected));
+            AssertFlying(Bob, airborne);
+            Assert.That(tookOver, Is.Empty);
+        }
+
+        [Test]
+        public void ALinkLostDuringAuthorization_IsDenied()
+        {
+            var input = new ScriptedInput();
+            var session = new PilotSession(Alice, provider, input);
+            provider.AnswersAtOnce = false;
+            var pending = Start(session, airborne.Id);
+
+            input.IsConnected = false;
+            provider.AnswerAll();
+
+            Assert.That(pending.Result.Denial, Is.EqualTo(FlightDenial.PilotDisconnected));
+            AssertFree(airborne);
+        }
+
+        [Test]
+        public void ADroneThatLandedWithoutItsPilot_IsReleased()
+        {
+            var input = new ScriptedInput();
+            Request(new PilotSession(Alice, provider, input), grounded.Id);
+
+            coordinator.ReleaseLandedWithoutPilot();
+            AssertFlying(Alice, grounded);
+
+            input.IsConnected = false;
+            coordinator.ReleaseLandedWithoutPilot();
+
+            AssertFree(grounded);
+            Assert.That(released[0].Reason, Is.EqualTo(ReleaseReason.LinkLost));
+        }
+
+        [Test]
+        public void AnAirborneDroneWithoutItsPilot_StaysAssignedForTheFailsafe()
+        {
+            var input = new ScriptedInput();
+            Request(new PilotSession(Alice, provider, input), airborne.Id);
+
+            input.IsConnected = false;
+            coordinator.ReleaseLandedWithoutPilot();
+
+            Assert.That(coordinator.TryGetDrone(Alice, out _), Is.True);
         }
 
         [Test]
@@ -564,7 +622,7 @@ namespace DroneFlightModule.Coordination.Tests
 
             public Task<AuthorizationResult> AuthorizeAsync(AuthorizationRequest request, CancellationToken cancellationToken)
             {
-                return Task.FromResult(AuthorizationResult.Granted(grants.Issue(request.PilotId)));
+                return Task.FromResult(new AuthorizationResult(grants.Issue(request.PilotId)));
             }
         }
 
@@ -579,7 +637,7 @@ namespace DroneFlightModule.Coordination.Tests
             {
                 var grant = grants.Issue(request.PilotId);
                 grants.Revoke(request.PilotId);
-                return Task.FromResult(AuthorizationResult.Granted(grant));
+                return Task.FromResult(new AuthorizationResult(grant));
             }
         }
     }

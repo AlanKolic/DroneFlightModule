@@ -27,10 +27,12 @@ namespace DroneFlightModule.UI
             builder.Register<ControlPanelChoices>(Lifetime.Singleton);
             builder.RegisterBuildCallback(container =>
             {
+                var panel = GetComponent<ControlPanel>();
+                panel.Bind(container.Resolve<IFleetConsole>(), container.Resolve<ControlPanelChoices>());
                 GetComponent<FleetDashboard>().Bind(
                     container.Resolve<FleetDashboardReadout>(),
-                    container.Resolve<InputActionAsset>().FindAction("Debug/ToggleDashboard", throwIfNotFound: true));
-                GetComponent<ControlPanel>().Bind(container.Resolve<IFleetConsole>(), container.Resolve<ControlPanelChoices>());
+                    container.Resolve<InputActionAsset>().FindAction("Debug/ToggleDashboard", throwIfNotFound: true),
+                    panel);
             });
         }
     }

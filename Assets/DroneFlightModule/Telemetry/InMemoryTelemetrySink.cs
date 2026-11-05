@@ -11,8 +11,6 @@ namespace DroneFlightModule.Telemetry
     {
         private readonly Dictionary<DroneId, FlightFrame> latest = new Dictionary<DroneId, FlightFrame>();
 
-        public IReadOnlyCollection<DroneId> Drones => latest.Keys;
-
         public bool TryGetLatest(DroneId drone, out FlightFrame sample)
         {
             return latest.TryGetValue(drone, out sample);

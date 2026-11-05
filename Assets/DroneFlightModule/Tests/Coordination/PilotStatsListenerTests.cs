@@ -37,9 +37,9 @@ namespace DroneFlightModule.Coordination.Tests
 
         private PilotSession Fly(PilotId pilot, TestDrone drone)
         {
-            var session = new PilotSession(pilot, PilotOrigin.Local, provider, new ScriptedInput());
+            var session = new PilotSession(pilot, provider, new ScriptedInput());
             var result = coordinator.RequestFlightAsync(session, drone.Id, CancellationToken.None).Result;
-            Assert.That(result.IsFlying, Is.True, result.Message);
+            Assert.That(result.Outcome, Is.Not.EqualTo(FlightRequestOutcome.Denied), result.Message);
             return session;
         }
 

@@ -454,7 +454,6 @@ MonoBehaviour:
   m_EditorClassIdentifier: DroneFlightModule.UI::DroneFlightModule.UI.FleetDashboard
   width: 460
   margin: 12
-  reservedBottom: 260
   refreshInterval: 0.25
   eventCount: 8
   isVisible: 1

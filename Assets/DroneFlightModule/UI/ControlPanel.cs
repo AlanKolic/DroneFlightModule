@@ -15,16 +15,20 @@ namespace DroneFlightModule.UI
     /// switches to them, leaving the previous pilot on their drone, hands off, so a higher-priority
     /// pilot can take it over; both dropdowns say who flies what. The drone dropdown chooses what
     /// Request and Remove act on. It drives the fleet only through <see cref="IFleetConsole"/>.
-    /// Text is built once per frame in Update and OnGUI only draws. IMGUI has no dropdown, so each
-    /// opens as a list in place.
+    /// Text is built a few times a second in Update, and at once after a click; OnGUI only draws.
+    /// IMGUI has no dropdown, so each opens as a list in place, and the panel scrolls when it would
+    /// not fit the screen. The dashboard reads its height to stay clear of it.
     /// </summary>
     public sealed class ControlPanel : MonoBehaviour
     {
         private const float RowHeight = 24f;
         private const float Padding = 16f;
+        // Three dropdowns, two rows of buttons, and one row of slack for the skin's spacing.
+        private const int FixedRows = 6;
 
         [SerializeField] private float width = 340f;
         [SerializeField] private float margin = 12f;
+        [SerializeField] private float refreshInterval = 0.25f;
 
         private readonly GUIContent status = new GUIContent(string.Empty);
         private readonly List<string> stationOptions = new List<string>();
@@ -37,9 +41,13 @@ namespace DroneFlightModule.UI
         private string droneLabel = string.Empty;
         private string linkLabel = string.Empty;
         private float statusHeight;
+        private float nextRefresh;
+        private Vector2 scroll;
         private bool isStationListOpen;
         private bool isPilotListOpen;
         private bool isDroneListOpen;
+
+        public float Height { get; private set; }
 
         public void Bind(IFleetConsole console, ControlPanelChoices choices)
         {
@@ -49,14 +57,13 @@ namespace DroneFlightModule.UI
 
         private void Update()
         {
-            if (console == null)
+            if (console == null || Time.unscaledTime < nextRefresh)
             {
                 return;
             }
-            string flying = console.TryGetDrone(out var drone) ? $"flying {drone}" : "no drone";
-            string text = console.Stations.Count == 0
-                ? console.LastMessage
-                : $"{console.Station}: {console.Pilot}, {flying}, {choices.Record(console.Pilot)}\n{console.LastMessage}";
+            nextRefresh = Time.unscaledTime + refreshInterval;
+            DroneId? flown = console.TryGetDrone(out var drone) ? drone : (DroneId?)null;
+            string text = choices.Status(console.Station, console.Pilot, flown, console.LastMessage);
             if (text != status.text)
             {
                 status.text = text;
@@ -97,13 +104,19 @@ namespace DroneFlightModule.UI
             {
                 return;
             }
+            if (Event.current.type == EventType.MouseUp)
+            {
+                nextRefresh = 0f;
+            }
             // Measured here because the GUI skin is only available inside OnGUI; once per new text.
             if (statusHeight <= 0f)
             {
                 statusHeight = GUI.skin.label.CalcHeight(status, width - Padding);
             }
-            float height = statusHeight + (6 + stationOptions.Count + pilotOptions.Count + droneOptions.Count) * RowHeight + Padding;
-            GUILayout.BeginArea(new Rect(Screen.width - width - margin, Screen.height - height - margin, width, height), GUI.skin.box);
+            float wanted = statusHeight + (FixedRows + stationOptions.Count + pilotOptions.Count + droneOptions.Count) * RowHeight + Padding;
+            Height = Mathf.Min(wanted, Screen.height - 2f * margin);
+            GUILayout.BeginArea(new Rect(Screen.width - width - margin, Screen.height - Height - margin, width, Height), GUI.skin.box);
+            scroll = GUILayout.BeginScrollView(scroll);
 
             GUILayout.Label(status, GUILayout.Height(statusHeight));
             StationDropdown();
@@ -111,6 +124,7 @@ namespace DroneFlightModule.UI
             DroneDropdown();
             Buttons();
 
+            GUILayout.EndScrollView();
             GUILayout.EndArea();
         }
 

@@ -89,13 +89,23 @@ namespace DroneFlightModule.UI.Tests
         }
 
         [Test]
-        public void Record_CountsTakeoversAndPreemptions()
+        public void Status_GivesTheStationPilotDroneRecordAndLatestOutcome()
         {
             fleet.Stats.Save(TestFleet.Ace.Id, fleet.Stats.Get(TestFleet.Ace.Id).WithTakeover());
             fleet.Stats.Save(PilotProfile.Guest.Id, fleet.Stats.Get(PilotProfile.Guest.Id).WithPreemption());
 
-            Assert.That(choices.Record(TestFleet.Ace.Id), Is.EqualTo("takeovers 1, preempted 0"));
-            Assert.That(choices.Record(PilotProfile.Guest.Id), Is.EqualTo("takeovers 0, preempted 1"));
+            Assert.That(
+                choices.Status("Gamepad 1", TestFleet.Ace.Id, TestFleet.Drone1, "Flying drone-1."),
+                Is.EqualTo("Gamepad 1: ace, flying drone-1, takeovers 1, preempted 0\nFlying drone-1."));
+            Assert.That(
+                choices.Status("Keyboard 1", PilotProfile.Guest.Id, null, "Lost it."),
+                Is.EqualTo("Keyboard 1: guest, no drone, takeovers 0, preempted 1\nLost it."));
+        }
+
+        [Test]
+        public void Status_WithoutAStation_IsJustTheMessage()
+        {
+            Assert.That(choices.Status(string.Empty, default, null, "No input device is connected."), Is.EqualTo("No input device is connected."));
         }
     }
 }

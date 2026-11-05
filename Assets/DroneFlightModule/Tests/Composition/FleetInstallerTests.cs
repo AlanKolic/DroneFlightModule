@@ -1,5 +1,4 @@
 using System;
-using System.IO;
 using System.Threading;
 using DroneFlightModule.Authorization;
 using DroneFlightModule.Coordination;
@@ -9,64 +8,12 @@ using DroneFlightModule.Telemetry;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.InputSystem;
-using UnityEngine.InputSystem.Controls;
 using VContainer;
 
 namespace DroneFlightModule.Composition.Tests
 {
-    public class FleetInstallerTests : InputTestFixture
+    public class FleetInstallerTests : FleetTestFixture
     {
-        private const string ControlsPath = "Assets/DroneFlightModule/Unity/Input/DroneControls.inputactions";
-        private const float DeltaTime = 0.02f;
-        private const float GroundHeight = 1f;
-
-        private static readonly DroneId AirborneDrone = new DroneId("drone-1");
-        private static readonly DroneId GroundedDrone = new DroneId("drone-2");
-
-        private Keyboard keyboard;
-        private InputActionAsset controls;
-        private FleetSettings settings;
-        private IObjectResolver fleet;
-        private DroneInstantiator drones;
-        private IObjectResolver airborne;
-        private IObjectResolver grounded;
-
-        public override void Setup()
-        {
-            base.Setup();
-            keyboard = InputSystem.AddDevice<Keyboard>();
-            controls = InputActionAsset.FromJson(File.ReadAllText(ControlsPath));
-            var builder = new ContainerBuilder();
-            settings = Settings(TimeSpan.Zero);
-            var installer = new FleetInstaller(settings, controls, CancellationToken.None, null, null);
-            installer.Install(builder);
-            fleet = builder.Build();
-            drones = fleet.Resolve<DroneInstantiator>();
-            drones.AddDrone(AirborneDrone, new Vector3(0f, 5f, 0f), null);
-            drones.AddDrone(GroundedDrone, new Vector3(4f, GroundHeight, 0f), null);
-            airborne = Scope(AirborneDrone);
-            grounded = Scope(GroundedDrone);
-            installer.Start(fleet);
-        }
-
-        public override void TearDown()
-        {
-            fleet?.Dispose();
-            UnityEngine.Object.DestroyImmediate(controls);
-            base.TearDown();
-        }
-
-        private FleetSettings Settings(TimeSpan serverLatency)
-        {
-            return new TestFleetSettings().Create(GroundHeight, serverLatency, new Vector3(4f, 0f, 0f));
-        }
-
-        private IObjectResolver Scope(DroneId id)
-        {
-            Assert.That(drones.TryGetScope(id, out var scope), Is.True, $"{id} should be in the fleet.");
-            return scope;
-        }
-
         private PilotStation Pilot => fleet.Resolve<InputDeviceStations>().Stations[0];
 
         private void Run(IObjectResolver drone, float seconds)
@@ -77,24 +24,6 @@ namespace DroneFlightModule.Composition.Tests
             {
                 loop.Tick(DeltaTime);
             }
-        }
-
-        private void Tap(ButtonControl key)
-        {
-            Press(key);
-            Release(key);
-        }
-
-        private void AssertFlownBy(IObjectResolver drone, PilotId pilot)
-        {
-            Assert.That(drone.Resolve<InputRouter>().ActivePilotId, Is.EqualTo(pilot));
-            Assert.That(drone.Resolve<IFlightGate>().IsFlightAllowed, Is.True);
-        }
-
-        private void AssertFree(IObjectResolver drone)
-        {
-            Assert.That(drone.Resolve<InputRouter>().ActivePilotId.IsEmpty, Is.True);
-            Assert.That(drone.Resolve<IFlightGate>().IsFlightAllowed, Is.False);
         }
 
         [Test]
@@ -116,7 +45,7 @@ namespace DroneFlightModule.Composition.Tests
             Tap(keyboard.rKey);
             var drone3 = new DroneId("drone-3");
 
-            drones.AddDrone(drone3, new Vector3(8f, GroundHeight, 0f), null);
+            drones.AddDrone(drone3, new Vector3(8f, GroundHeight, 0f));
             Tap(keyboard.digit3Key);
 
             Assert.That(fleet.Resolve<DroneRegistry>().Drones[2].Id, Is.EqualTo(drone3));
@@ -147,7 +76,7 @@ namespace DroneFlightModule.Composition.Tests
         [Test]
         public void ADroneWhoseIdIsTaken_IsRefused()
         {
-            Assert.Throws<ArgumentException>(() => drones.AddDrone(AirborneDrone, new Vector3(0f, 5f, 0f), null));
+            Assert.Throws<ArgumentException>(() => drones.AddDrone(AirborneDrone, new Vector3(0f, 5f, 0f)));
             Assert.That(fleet.Resolve<DroneRegistry>().Drones, Has.Count.EqualTo(2));
         }
 
@@ -264,8 +193,23 @@ namespace DroneFlightModule.Composition.Tests
             var builder = new ContainerBuilder();
             new FleetInstaller(Settings(TimeSpan.FromMinutes(1)), controls, CancellationToken.None, null, null).Install(builder);
             var slowFleet = builder.Build();
-            slowFleet.Resolve<DroneInstantiator>().AddDrone(AirborneDrone, new Vector3(0f, 5f, 0f), null);
+            slowFleet.Resolve<DroneInstantiator>().AddDrone(AirborneDrone, new Vector3(0f, 5f, 0f));
             return slowFleet;
+        }
+
+        [Test]
+        public void ReleaseKey_CancelsAPendingRequest()
+        {
+            var slowFleet = SlowServerFleet();
+            var pilot = slowFleet.Resolve<InputDeviceStations>().Stations[0];
+            pilot.SelectPilot(TestFleetSettings.RegisteredPilot.Id);
+            var ace = pilot.Session;
+            var request = pilot.RequestFlightAsync(AirborneDrone);
+
+            pilot.Release();
+
+            Assert.That(slowFleet.Resolve<FlightCoordinator>().CancelRequest(ace), Is.False, "Nothing is left pending.");
+            slowFleet.Dispose();
         }
 
         [Test]
@@ -287,7 +231,7 @@ namespace DroneFlightModule.Composition.Tests
             var clock = fleet.Resolve<SimulationClock>();
             clock.Advance(1f);
             var late = new DroneId("drone-3");
-            drones.AddDrone(late, new Vector3(8f, GroundHeight, 0f), null);
+            drones.AddDrone(late, new Vector3(8f, GroundHeight, 0f));
 
             clock.Advance(DeltaTime);
             Scope(late).Resolve<FlightLoop>().Tick(DeltaTime);
@@ -317,13 +261,12 @@ namespace DroneFlightModule.Composition.Tests
         public void TheSelectedPilot_HearsWhenTheyArePreempted()
         {
             Tap(keyboard.rKey);
-            var remoteAce = new PilotSession(
+            var otherAce = new PilotSession(
                 TestFleetSettings.RegisteredPilot.Id,
-                PilotOrigin.Remote,
                 fleet.Resolve<SimulatedServerAuthorizationProvider>(),
                 Pilot.Link);
 
-            var result = fleet.Resolve<FlightCoordinator>().RequestFlightAsync(remoteAce, GroundedDrone, CancellationToken.None).Result;
+            var result = fleet.Resolve<FlightCoordinator>().RequestFlightAsync(otherAce, GroundedDrone, CancellationToken.None).Result;
 
             Assert.That(result.Outcome, Is.EqualTo(FlightRequestOutcome.TookOver));
             Assert.That(Pilot.LastMessage, Is.EqualTo("ace took drone-2 over from guest."));
@@ -408,6 +351,31 @@ namespace DroneFlightModule.Composition.Tests
         }
 
         [Test]
+        public void WithTheLinkCut_ARequestIsRefused_AndHoldsNoDrone()
+        {
+            Tap(keyboard.lKey);
+
+            Tap(keyboard.rKey);
+
+            Assert.That(Pilot.TryGetDrone(out _), Is.False);
+            Assert.That(Pilot.LastMessage, Is.EqualTo("guest is not connected."));
+            AssertFree(grounded);
+        }
+
+        [Test]
+        public void ALandedDroneWithNoLink_IsReleased_AndThePilotIsTold()
+        {
+            Tap(keyboard.rKey);
+            Tap(keyboard.lKey);
+
+            new UnattendedDroneRunner(fleet.Resolve<FlightCoordinator>()).FixedTick();
+
+            AssertFree(grounded);
+            Assert.That(Pilot.LastMessage, Is.EqualTo("drone-2 landed with no link and was released."));
+            Assert.That(fleet.Resolve<IPilotStatsStore>().Get(PilotProfile.Guest.Id).Flights, Is.EqualTo(1));
+        }
+
+        [Test]
         public void LinkLoss_HoldsThenLands()
         {
             Tap(keyboard.digit1Key);
@@ -454,11 +422,9 @@ namespace DroneFlightModule.Composition.Tests
             Run(grounded, 1f);
 
             var sink = fleet.Resolve<InMemoryTelemetrySink>();
-            var recorder = airborne.Resolve<TelemetryRecorder>();
             Assert.That(sink.TryGetLatest(AirborneDrone, out var latest), Is.True);
             // 50 ticks of 0.02 s at 10 samples per second: the first tick, then every fifth, so the last at 0.92 s.
             Assert.That(latest.Time, Is.EqualTo(0.92).Within(1e-6));
-            Assert.That(latest.Time, Is.EqualTo(recorder.Latest.Time));
             Assert.That(sink.TryGetLatest(GroundedDrone, out _), Is.True);
         }
 

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using DroneFlightModule.Core;
 
 namespace DroneFlightModule.Composition
@@ -14,7 +15,6 @@ namespace DroneFlightModule.Composition
     {
         private readonly InputDeviceStations stations;
         private readonly DroneInstantiator drones;
-        private readonly List<string> names = new List<string>();
         private PilotStation selected;
 
         public FleetConsole(InputDeviceStations stations, DroneInstantiator drones)
@@ -30,7 +30,7 @@ namespace DroneFlightModule.Composition
 
         public event Action Changed;
 
-        public IReadOnlyList<string> Stations => names;
+        public IReadOnlyList<string> Stations => stations.Stations.Select(station => station.Name).ToList();
         public string Station => selected?.Name ?? string.Empty;
         public PilotId Pilot => selected?.Session.PilotId ?? default;
         public string LastMessage => selected?.LastMessage ?? "No input device is connected.";
@@ -38,7 +38,8 @@ namespace DroneFlightModule.Composition
 
         public void SelectStation(string station)
         {
-            var chosen = Find(station) ?? throw new ArgumentException($"There is no station {station}.", nameof(station));
+            var chosen = stations.Stations.FirstOrDefault(candidate => candidate.Name == station)
+                ?? throw new ArgumentException($"There is no station {station}.", nameof(station));
             if (chosen == selected)
             {
                 return;
@@ -101,21 +102,8 @@ namespace DroneFlightModule.Composition
             }
         }
 
-        private PilotStation Find(string name)
-        {
-            foreach (var station in stations.Stations)
-            {
-                if (station.Name == name)
-                {
-                    return station;
-                }
-            }
-            return null;
-        }
-
         private void OnStationAdded(PilotStation station)
         {
-            names.Add(station.Name);
             station.StatusChanged += OnStatusChanged;
             if (selected == null)
             {

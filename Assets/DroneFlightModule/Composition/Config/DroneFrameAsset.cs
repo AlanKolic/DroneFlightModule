@@ -5,18 +5,18 @@ namespace DroneFlightModule.Composition
 {
     /// <summary>
     /// Editable values of the drone frame, mapped to a <see cref="DroneConfig"/>, which validates
-    /// them. Defaults match <see cref="DroneConfig.Default"/>. SI units.
+    /// them. Defaults come from <see cref="DroneConfig.Default"/>. SI units.
     /// </summary>
     [CreateAssetMenu(menuName = "DroneFlightModule/Drone Frame", fileName = "DroneFrame")]
     public sealed class DroneFrameAsset : ScriptableObject
     {
-        [SerializeField] private float mass = 1.5f;
-        [SerializeField] private float yawInertia = 0.05f;
-        [SerializeField] private float linearDrag = 1f;
-        [SerializeField] private float angularDrag = 0.2f;
-        [SerializeField] private float maxThrust = 30f;
-        [SerializeField] private float maxLateralForce = 10f;
-        [SerializeField] private float maxYawTorque = 0.5f;
+        [SerializeField] private float mass = DroneConfig.Default.Mass;
+        [SerializeField] private float yawInertia = DroneConfig.Default.YawInertia;
+        [SerializeField] private float linearDrag = DroneConfig.Default.LinearDrag;
+        [SerializeField] private float angularDrag = DroneConfig.Default.AngularDrag;
+        [SerializeField] private float maxThrust = DroneConfig.Default.MaxThrust;
+        [SerializeField] private float maxLateralForce = DroneConfig.Default.MaxLateralForce;
+        [SerializeField] private float maxYawTorque = DroneConfig.Default.MaxYawTorque;
 
         public DroneConfig ToConfig()
         {

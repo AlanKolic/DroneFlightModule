@@ -14,8 +14,8 @@ namespace DroneFlightModule.Unity.Tests
         public void SetUp()
         {
             interpolator = new StateInterpolator();
-            interpolator.Reset(DroneState.At(Vec3.Zero));
-            interpolator.Push(DroneState.At(new Vec3(0f, 2f, 0f)));
+            interpolator.Reset(new DroneState(Vec3.Zero));
+            interpolator.Push(new DroneState(new Vec3(0f, 2f, 0f)));
         }
 
         [Test]
@@ -46,7 +46,7 @@ namespace DroneFlightModule.Unity.Tests
         [Test]
         public void Reset_SnapsWithoutBlending()
         {
-            interpolator.Reset(DroneState.At(new Vec3(5f, 0f, 0f)));
+            interpolator.Reset(new DroneState(new Vec3(5f, 0f, 0f)));
 
             Assert.That(interpolator.Sample(0f).position.x, Is.EqualTo(5f).Within(Tolerance));
         }
@@ -54,8 +54,8 @@ namespace DroneFlightModule.Unity.Tests
         [Test]
         public void YawAcrossWrap_TakesShortWay()
         {
-            interpolator.Reset(DroneState.At(Vec3.Zero, yaw: Mathf.PI - 0.1f));
-            interpolator.Push(DroneState.At(Vec3.Zero, yaw: -Mathf.PI + 0.1f));
+            interpolator.Reset(new DroneState(Vec3.Zero, yaw: Mathf.PI - 0.1f));
+            interpolator.Push(new DroneState(Vec3.Zero, yaw: -Mathf.PI + 0.1f));
 
             var halfway = interpolator.Sample(0.5f).rotation * Vector3.forward;
 

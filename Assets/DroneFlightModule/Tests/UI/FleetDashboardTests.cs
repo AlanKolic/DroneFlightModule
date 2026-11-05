@@ -24,7 +24,7 @@ namespace DroneFlightModule.UI.Tests
             var log = new FleetEventLog(fleet.Coordinator, fleet.Clock, capacity: 10);
             readout = new FleetDashboardReadout(
                 fleet.Drones, fleet.Coordinator, fleet.Pilots, fleet.Stats, fleet.Telemetry, fleet.Terrain, log);
-            dashboard = new GameObject("Dashboard", typeof(FleetDashboard)).GetComponent<FleetDashboard>();
+            dashboard = new GameObject("Dashboard", typeof(FleetDashboard), typeof(ControlPanel)).GetComponent<FleetDashboard>();
         }
 
         public override void TearDown()
@@ -34,19 +34,21 @@ namespace DroneFlightModule.UI.Tests
             base.TearDown();
         }
 
+        private ControlPanel Panel => dashboard.GetComponent<ControlPanel>();
         private InputAction Toggle => controls.FindAction("Debug/ToggleDashboard", throwIfNotFound: true);
 
         [Test]
-        public void Bind_RequiresTheReadoutAndTheToggle()
+        public void Bind_RequiresTheReadoutTheToggleAndThePanel()
         {
-            Assert.Throws<ArgumentNullException>(() => dashboard.Bind(null, Toggle));
-            Assert.Throws<ArgumentNullException>(() => dashboard.Bind(readout, null));
+            Assert.Throws<ArgumentNullException>(() => dashboard.Bind(null, Toggle, Panel));
+            Assert.Throws<ArgumentNullException>(() => dashboard.Bind(readout, null, Panel));
+            Assert.Throws<ArgumentNullException>(() => dashboard.Bind(readout, Toggle, null));
         }
 
         [Test]
         public void TheToggle_IsBoundToTab_AndEnabledByBinding()
         {
-            dashboard.Bind(readout, Toggle);
+            dashboard.Bind(readout, Toggle, Panel);
 
             Assert.That(Toggle.enabled, Is.True);
             Assert.That(Toggle.bindings[0].path, Is.EqualTo("<Keyboard>/tab"));
@@ -55,7 +57,7 @@ namespace DroneFlightModule.UI.Tests
         [Test]
         public void Tab_HidesAndShowsTheDashboard()
         {
-            dashboard.Bind(readout, Toggle);
+            dashboard.Bind(readout, Toggle, Panel);
             Assert.That(dashboard.IsVisible, Is.True);
 
             Press(keyboard.tabKey);

@@ -8,11 +8,24 @@ namespace DroneFlightModule.Coordination
     /// </summary>
     public sealed class FlightRequestResult
     {
-        private FlightRequestResult(FlightRequestOutcome outcome, DroneId drone, PilotId fromPilot, FlightDenial denial, string message)
+        public FlightRequestResult(DroneId drone)
         {
-            Outcome = outcome;
+            Outcome = FlightRequestOutcome.Assigned;
+            Drone = drone;
+            Message = $"Flying {drone}.";
+        }
+
+        public FlightRequestResult(DroneId drone, PilotId fromPilot)
+        {
+            Outcome = FlightRequestOutcome.TookOver;
             Drone = drone;
             FromPilot = fromPilot;
+            Message = $"Took over {drone} from {fromPilot}.";
+        }
+
+        public FlightRequestResult(FlightDenial denial, string message)
+        {
+            Outcome = FlightRequestOutcome.Denied;
             Denial = denial;
             Message = message;
         }
@@ -22,16 +35,6 @@ namespace DroneFlightModule.Coordination
         public PilotId FromPilot { get; }
         public FlightDenial Denial { get; }
         public string Message { get; }
-        public bool IsFlying => Outcome != FlightRequestOutcome.Denied;
-
-        public static FlightRequestResult Assigned(DroneId drone) =>
-            new FlightRequestResult(FlightRequestOutcome.Assigned, drone, default, default, $"Flying {drone}.");
-
-        public static FlightRequestResult TookOver(DroneId drone, PilotId fromPilot) =>
-            new FlightRequestResult(FlightRequestOutcome.TookOver, drone, fromPilot, default, $"Took over {drone} from {fromPilot}.");
-
-        public static FlightRequestResult Denied(FlightDenial denial, string message) =>
-            new FlightRequestResult(FlightRequestOutcome.Denied, default, default, denial, message);
 
         public override string ToString() => Message;
     }

@@ -19,7 +19,7 @@ namespace DroneFlightModule.Coordination.Tests
 
             var terrain = new FlatTerrain();
             var start = isAirborne
-                ? DroneState.At(new Vec3(0f, 5f, 0f))
+                ? new DroneState(new Vec3(0f, 5f, 0f))
                 : new DroneState(Vec3.Zero, Vec3.Zero, 0f, 0f, isGrounded: true);
             Loop = new FlightLoop(
                 Id,

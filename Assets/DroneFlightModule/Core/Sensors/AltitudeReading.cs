@@ -5,20 +5,15 @@ namespace DroneFlightModule.Core
     /// </summary>
     public readonly struct AltitudeReading
     {
+        public static readonly AltitudeReading Invalid = new AltitudeReading(0f, false);
+
         public readonly float HeightAboveGround;
         public readonly bool IsValid;
-        public readonly double Timestamp;
 
-        public AltitudeReading(float heightAboveGround, bool isValid, double timestamp)
+        public AltitudeReading(float heightAboveGround, bool isValid)
         {
             HeightAboveGround = heightAboveGround;
             IsValid = isValid;
-            Timestamp = timestamp;
-        }
-
-        public static AltitudeReading Invalid(double timestamp)
-        {
-            return new AltitudeReading(0f, false, timestamp);
         }
     }
 }

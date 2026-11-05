@@ -58,7 +58,7 @@ namespace DroneFlightModule.UI.Tests
         public void AFlownDrone_ShowsItsPilotAndTelemetry()
         {
             fleet.Fly(TestFleet.Ace.Id, TestFleet.Drone1);
-            Report(TestFleet.Drone1, FlightMode.Piloted, new Vec3(1f, 3.5f, 2f), new AltitudeReading(2.5f, true, 3.0));
+            Report(TestFleet.Drone1, FlightMode.Piloted, new Vec3(1f, 3.5f, 2f), new AltitudeReading(2.5f, true));
 
             var text = readout.Drones();
 
@@ -70,7 +70,7 @@ namespace DroneFlightModule.UI.Tests
         [Test]
         public void Holding_ShowsTheCountdown_AndAnOutOfRangeHeight()
         {
-            Report(TestFleet.Drone2, FlightMode.Holding, new Vec3(0f, 13f, 0f), AltitudeReading.Invalid(3.0), holdTimeRemaining: 7.5);
+            Report(TestFleet.Drone2, FlightMode.Holding, new Vec3(0f, 13f, 0f), AltitudeReading.Invalid, holdTimeRemaining: 7.5);
 
             StringAssert.Contains("Holding, descending in 7.5 s, height out of range (true 12.00 m)", readout.Drones());
         }

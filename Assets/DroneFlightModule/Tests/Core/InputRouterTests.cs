@@ -12,14 +12,11 @@ namespace DroneFlightModule.Core.Tests
         private static readonly ControlInput Forward = new ControlInput(Vec3.Forward, 0f);
 
         private InputRouter router;
-        private List<PilotId> changes;
 
         [SetUp]
         public void SetUp()
         {
             router = new InputRouter();
-            changes = new List<PilotId>();
-            router.ActiveChanged += changes.Add;
         }
 
         [Test]
@@ -43,10 +40,10 @@ namespace DroneFlightModule.Core.Tests
         [Test]
         public void DisconnectedSource_ReadsZeroButKeepsPilot()
         {
-            var phone = new ScriptedInputProvider { Current = Climb };
-            router.Assign(Pilot1, phone);
+            var pad = new ScriptedInputProvider { Current = Climb };
+            router.Assign(Pilot1, pad);
 
-            phone.IsConnected = false;
+            pad.IsConnected = false;
 
             Assert.That(router.Read(), Is.EqualTo(ControlInput.Zero));
             Assert.That(router.IsConnected, Is.False);
@@ -56,16 +53,16 @@ namespace DroneFlightModule.Core.Tests
         [Test]
         public void ReconnectedSource_RoutesAgain()
         {
-            var phone = new ScriptedInputProvider { Current = Climb, IsConnected = false };
-            router.Assign(Pilot1, phone);
+            var pad = new ScriptedInputProvider { Current = Climb, IsConnected = false };
+            router.Assign(Pilot1, pad);
 
-            phone.IsConnected = true;
+            pad.IsConnected = true;
 
             Assert.That(router.Read(), Is.EqualTo(Climb));
         }
 
         [Test]
-        public void AssigningAnotherPilot_SwitchesInputAndRaisesChange()
+        public void AssigningAnotherPilot_SwitchesInput()
         {
             router.Assign(Pilot1, new ScriptedInputProvider { Current = Climb });
 
@@ -73,42 +70,21 @@ namespace DroneFlightModule.Core.Tests
 
             Assert.That(router.Read(), Is.EqualTo(Forward));
             Assert.That(router.ActivePilotId, Is.EqualTo(Pilot2));
-            Assert.That(changes, Is.EqualTo(new[] { Pilot1, Pilot2 }));
         }
 
         [Test]
-        public void SamePilotWithNewSource_SwitchesInputAndRaisesOnlySourceChange()
+        public void SamePilotWithNewSource_SwitchesInput()
         {
-            var sourceChanges = new List<PilotId>();
-            router.SourceChanged += sourceChanges.Add;
             router.Assign(Pilot1, new ScriptedInputProvider { Current = Climb });
 
             router.Assign(Pilot1, new ScriptedInputProvider { Current = Forward });
 
             Assert.That(router.Read(), Is.EqualTo(Forward));
-            Assert.That(changes, Is.EqualTo(new[] { Pilot1 }));
-            Assert.That(sourceChanges, Is.EqualTo(new[] { Pilot1, Pilot1 }));
+            Assert.That(router.ActivePilotId, Is.EqualTo(Pilot1));
         }
 
         [Test]
-        public void SameSourceAgain_RaisesNoSourceChange_ClearRaisesOne()
-        {
-            var sourceChanges = new List<PilotId>();
-            var keyboard = new ScriptedInputProvider { Current = Climb };
-            router.Assign(Pilot1, keyboard);
-            router.SourceChanged += sourceChanges.Add;
-
-            router.Assign(Pilot1, keyboard);
-            Assert.That(sourceChanges, Is.Empty);
-
-            router.Clear();
-            router.Clear();
-            Assert.That(sourceChanges, Has.Count.EqualTo(1));
-            Assert.That(sourceChanges[0].IsEmpty, Is.True);
-        }
-
-        [Test]
-        public void Clear_StopsRoutingAndRaisesEmptyPilot()
+        public void Clear_StopsRouting()
         {
             router.Assign(Pilot1, new ScriptedInputProvider { Current = Climb });
 
@@ -117,16 +93,6 @@ namespace DroneFlightModule.Core.Tests
             Assert.That(router.Read(), Is.EqualTo(ControlInput.Zero));
             Assert.That(router.IsConnected, Is.False);
             Assert.That(router.ActivePilotId.IsEmpty, Is.True);
-            Assert.That(changes, Has.Count.EqualTo(2));
-            Assert.That(changes[1].IsEmpty, Is.True);
-        }
-
-        [Test]
-        public void ClearWhenEmpty_RaisesNothing()
-        {
-            router.Clear();
-
-            Assert.That(changes, Is.Empty);
         }
 
         [Test]
