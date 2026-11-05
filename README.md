@@ -28,17 +28,24 @@ The full design, including the parts that are planned but not built yet, is in
 | Climb / descend | Space / Left Ctrl | Left stick up / down |
 | Yaw | Q / E | Left stick left / right |
 | Request any drone | R | South button |
-| Request drone 1, 2 or 3 | 1 / 2 / 3 | |
+| Request drone 1, 2 or 3 | 1 / 2 / 3 | D-pad left / up / right |
 | Release the drone | X | East button |
 | Switch to the next pilot | P | Start |
-| Make the server revoke your grant | V | |
-| Cut or restore the pilot's link | L | Select |
+| Make the server revoke your grant | V | North button |
+| Cut or restore the station's link | L | Select |
 | Add a drone | N | |
 | Remove the newest drone | M | |
 | Show or hide the fleet dashboard | Tab | |
 
 Bindings live in `Assets/DroneFlightModule/Unity/Input/DroneControls.inputactions`, not in code.
 Centred sticks hold position and altitude, so the drone hovers hands-off.
+
+**Every input device is its own pilot station.** The keyboard and each gamepad, including one
+plugged in while the scene runs, fly as separate pilots on separate drones, and none reads the
+others' buttons. The keyboard starts as the guest and the first gamepad as Ace; a station
+starts as the first pilot no other station flies as. Unplugging a gamepad is link loss: its
+drone holds and lands, and plugging it back in resumes. Adding and removing drones and the
+dashboard stay on the keyboard, since they act on the whole fleet. The HUD lists the stations.
 
 You start as the **guest**, authorized at once by local guest mode, without a drone. **P**
 switches to the next pilot in the registry, such as **Ace**, a registered pilot with a higher
@@ -52,7 +59,8 @@ The control panel and the dashboard both track takeovers: the dropdowns say who 
 the panel's status shows the current pilot's takeovers and preemptions, and a pilot who loses
 their drone is told who took it.
 
-Every action also has a button in the **control panel** at the bottom right: a pilot
+Every action also has a button in the **control panel** at the bottom right: a station
+dropdown (the panel acts for the chosen station, and the camera follows its drone), a pilot
 dropdown, a drone dropdown ("Any drone" or one of the fleet), and Request, Release, Revoke
 grant, Cut/Restore link, Add drone and Remove drone (for the chosen drone). Its status line is
 where the latest outcome shows: what you asked for, a denial, or that someone took your drone.
@@ -78,6 +86,9 @@ where the latest outcome shows: what you asked for, a denial, or that someone to
 9. Take a drone over: as the guest press **1**, then **P** to become Ace, who outranks the
    guest, and press **1** again. Ace takes drone-1, the guest is preempted, and the dashboard
    counts one takeover for Ace and one preemption for the guest.
+10. Plug in a gamepad: it appears in the HUD as `Gamepad 1`, flying as Ace. Press **R** on the
+    keyboard and **South** on the pad, and the two fly separate drones at once. Unplug the pad
+    and its drone holds, then lands; plug it back in within the hold to take over again.
 10. Watch the fleet dashboard on the right: every drone's pilot, mode, measured and true
    height, position and heading; each pilot's stats; and the latest events, denials
    included. **Tab** hides it.
@@ -95,7 +106,7 @@ Request ─► pilot registry ─► authorization provider ─► assignment po
 ```
 
 Each drone has its own child scope and ticks independently. The fleet scope holds what they
-share: the coordinator, pilots and stats, the providers, and the local pilot's input.
+share: the coordinator, pilots and stats, the providers, and a pilot station per input device.
 
 | Assembly | Depends on | Role |
 |---|---|---|
@@ -105,7 +116,7 @@ share: the coordinator, pilots and stats, the providers, and the local pilot's i
 | `Authorization` | Core | Providers (local guest, simulated server that can revoke), revocable grants, per-drone grant holder gate |
 | `Telemetry` | Core | A recorder per drone sampling its flight at 10 Hz, sinks (a fleet-wide in-memory sink of the latest samples) |
 | `Coordination` | Core, Pilots, Authorization | `FlightCoordinator`: pilot sessions, drone registry, request pipeline, priority assignment policy, takeover and release, stats from its events |
-| `Composition` | everything above, VContainer, Input System | Fleet scope and installer, config assets mapped to `FleetSettings`, `DroneInstantiator` (adds and removes drones, one child scope each), the local pilot, `FleetKeys` (every non-flight key), the `IFleetConsole` a panel drives, runners (the only places Unity's clock reaches the sim) |
+| `Composition` | everything above, VContainer, Input System | Fleet scope and installer, config assets mapped to `FleetSettings`, `DroneInstantiator` (adds and removes drones, one child scope each), a pilot station per input device, `FleetKeys` (fleet-wide keys), the `IFleetConsole` a panel drives, runners (the only places Unity's clock reaches the sim) |
 | `UI` | Core, Pilots, Coordination, Telemetry, Composition, VContainer, Input System | Fleet dashboard and control panel in their own child scope; nothing references it, so it can be deleted |
 | `Editor` | the above | Menu item that builds the prototype scene |
 | `*.Tests` | their target | EditMode tests |
@@ -149,13 +160,16 @@ variant is a new class plus one registration in `DroneInstaller`:
 - **One timebase.** A drone that joins a running fleet starts its loop at the fleet's
   simulation time, so telemetry, stats and the event log all share one clock.
 - **IMGUI for the debug HUD, the dashboard and the control panel.** The HUD is a developer
-  readout of the drones and the controls. The dashboard and the control panel, which is the one
-  place the local pilot's status shows, live in their own `UI` assembly and child scope, which
+  readout of the drones, the stations and the controls. The dashboard and the control panel,
+  which is the one place a station's full status shows, live in their own `UI` assembly and child scope, which
   nothing else references (the scene builder adds it by type name), so deleting the UI folder
   leaves flight, the scene and every other test intact.
-- **Keys in one place.** `FleetKeys` binds every key that isn't a flight stick; the keys and the
-  control panel drive the same objects. Only the dashboard's Tab toggle stays with the
-  dashboard, so it goes when the UI is deleted.
+- **Input sources don't matter.** A pilot station per input device, each on its own copy of
+  the controls restricted to that device, so the coordinator only ever sees sessions. A new
+  device type is a binding group and one row in `InputDeviceStations`.
+- **Keys in two places.** `StationKeys` binds a station's buttons and `FleetKeys` the
+  fleet-wide ones; the keys and the control panel drive the same objects. Only the dashboard's
+  Tab toggle stays with the dashboard, so it goes when the UI is deleted.
 - **No per-tick allocations** in the simulation path, telemetry included. The HUD and the
   control panel build their text at most once per rendered frame, and OnGUI only draws.
 - **Telemetry can't break flight.** It only reads, and a sink that throws is logged and
@@ -195,12 +209,16 @@ variant is a new class plus one registration in `DroneInstaller`:
   each drone in its own scope, drones added and removed while the fleet is in use, free
   drones holding and landing, the guest getting a grounded drone, flying with the keyboard,
   number keys switching drones, release, signing in through the server, switching away
-  cancelling a pending request, takeovers between local pilots, revocation, link loss, stats
+  cancelling a pending request, takeovers between pilots at one station, revocation, link loss, stats
   on simulation time, drones added later sharing the fleet's timebase, telemetry reaching the
   fleet sink, and disposal disabling the controls. The drone instantiator on its own: ids and
   spawn spots from the prefab, refused ids, a late drone starting at the fleet's time, removal
   and disposal. The config assets: defaults matching Core, edits and invalid values reaching
-  the Core types, a missing part named, and the shipped settings making a valid fleet.
+  the Core types, a missing part named, and the shipped settings making a valid fleet. Input
+  devices with virtual gamepads: a station per device and its starting pilot, the keyboard and
+  pads flying separate drones at once, unplugging as link loss and plugging back in, one pilot
+  on two devices, takeovers between stations, per-station links, the console's station choice
+  and disposal.
 
 ## Status and roadmap
 
@@ -209,13 +227,20 @@ gating and failsafe, velocity controller, Input System controls, debug HUD, foll
 the pilot registry with stats, authorization (guest and simulated server providers, revocable
 grants, the grant holder gate), the flight coordinator (sessions, priority assignment and
 takeover, switching, release, stats), and the fleet scene (a fleet scope with one child scope
-per drone, three drones and more added or removed at runtime, the local pilot's keys),
-telemetry (a recorder per drone, a fleet-wide in-memory sink), the deletable fleet
-dashboard, and ScriptableObject config assets for every tuning value.
+per drone, three drones and more added or removed at runtime), telemetry (a recorder per
+drone, a fleet-wide in-memory sink), the deletable fleet dashboard, ScriptableObject config
+assets for every tuning value, and a pilot station per input device, so the keyboard and each
+gamepad fly as separate pilots.
 
-Planned (details in the architecture doc): gamepad pilots: one pilot station per input device, so the keyboard and each gamepad fly as separate pilots, and unplugging a pad counts as link loss.
+Every planned commit is done.
 
 ## Known limitations
+
+- A gamepad that comes back as a new device rather than the same one, which the Input System
+  decides, gets a new station; the old one stays disconnected, its drone landed.
+- The roster has one registered pilot, so a second gamepad starts as the guest, the same pilot
+  as the keyboard: whichever requests last flies the guest's drone. Adding pilots to the roster
+  asset gives every device its own.
 
 - The drone doesn't pitch or roll; lateral force is applied directly. Good enough to exercise
   the loop, not a multirotor model.

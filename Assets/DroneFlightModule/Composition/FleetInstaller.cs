@@ -18,9 +18,9 @@ namespace DroneFlightModule.Composition
     /// <summary>
     /// Registers what the whole fleet shares: the configs from the <see cref="FleetSettings"/>,
     /// the ground, pilots and their stats, both authorization providers, the coordinator, the
-    /// simulation clock, the fleet-wide in-memory telemetry sink, the pilot at this machine and
-    /// their keys, the console a control panel drives, and the instantiator that adds and removes
-    /// drones. Every registered pilot signs in through the simulated server. The fleet starts
+    /// simulation clock, the fleet-wide in-memory telemetry sink, a pilot station per input
+    /// device, the fleet-wide keys, the console a control panel drives, and the instantiator that
+    /// adds and removes drones. Every registered pilot signs in through the simulated server. The fleet starts
     /// empty: each drone's child scope adds its own objects with <see cref="DroneInstaller"/> and
     /// joins it, at startup or later. Kept apart from the scope so tests can build the fleet
     /// without a scene; they pass no prefab or HUD.
@@ -79,10 +79,8 @@ namespace DroneFlightModule.Composition
             builder.Register<InMemoryTelemetrySink>(Lifetime.Singleton);
 
             builder.RegisterInstance(controls);
-            builder.Register<InputActionInputProvider>(Lifetime.Singleton);
-            builder.Register<DisconnectableInputProvider>(Lifetime.Singleton)
-                .WithParameter<IInputProvider>(resolver => resolver.Resolve<InputActionInputProvider>());
-            builder.Register<LocalPilotControls>(Lifetime.Singleton)
+            builder.Register<InputDeviceStations>(Lifetime.Singleton)
+                .WithParameter("hud", hud)
                 .WithParameter("lifetime", lifetime);
 
             builder.Register<DroneInstantiator>(Lifetime.Singleton)
@@ -90,7 +88,7 @@ namespace DroneFlightModule.Composition
                 .WithParameter("hud", hud)
                 .WithParameter("groundHeight", settings.GroundHeight)
                 .WithParameter("spawnStep", settings.SpawnStep);
-            builder.Register<IFleetConsole, FleetConsole>(Lifetime.Singleton);
+            builder.Register<IFleetConsole, FleetConsole>(Lifetime.Singleton).AsSelf();
             builder.Register<FleetKeys>(Lifetime.Singleton);
         }
 
@@ -103,6 +101,7 @@ namespace DroneFlightModule.Composition
             }
             fleet.Resolve<FlightCoordinator>().ListenerFailed += Debug.LogException;
             fleet.Resolve<PilotStatsListener>();
+            fleet.Resolve<InputDeviceStations>();
             fleet.Resolve<FleetKeys>();
         }
     }

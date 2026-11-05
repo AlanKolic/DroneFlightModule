@@ -6,20 +6,22 @@ using DroneFlightModule.Authorization;
 using DroneFlightModule.Coordination;
 using DroneFlightModule.Core;
 using DroneFlightModule.Pilots;
+using DroneFlightModule.Unity;
 using UnityEngine;
 
 namespace DroneFlightModule.Composition
 {
     /// <summary>
-    /// The pilot at this machine. They can fly as any pilot in the registry: the guest through
-    /// local guest mode, everyone else signing in through the server. They start as the guest.
-    /// Switching keeps the previous pilot on their drone with their hands off the sticks, so the
-    /// next pilot can outrank and take it over, and cancels the previous pilot's pending request,
-    /// so nobody is given a drone after they were switched away from. The latest outcome,
-    /// including a local pilot being preempted, is kept for display, and StatusChanged fires
-    /// whenever it or the fleet changes.
+    /// One input device and whoever flies with it. From it a pilot can fly as anyone in the
+    /// registry: the guest through local guest mode, everyone else signing in through the server.
+    /// It knows nothing of other stations; they meet only in the coordinator. Switching keeps the
+    /// previous pilot on their drone with their hands off the sticks, so the next pilot can outrank
+    /// and take it over, and cancels the previous pilot's pending request, so nobody is given a
+    /// drone after they were switched away from. Its link can be cut, and it reports no pilot
+    /// while its device is unplugged. The latest outcome, including the selected pilot being
+    /// preempted, is kept for display, and StatusChanged fires whenever it or the fleet changes.
     /// </summary>
-    public sealed class LocalPilotControls : IDisposable
+    public sealed class PilotStation : IStationStatus, IDisposable
     {
         private readonly FlightCoordinator coordinator;
         private readonly DroneRegistry drones;
@@ -29,18 +31,26 @@ namespace DroneFlightModule.Composition
         private readonly CancellationToken lifetime;
         private bool isDisposed;
 
-        public LocalPilotControls(
+        public PilotStation(
+            string name,
             FlightCoordinator coordinator,
             DroneRegistry drones,
             IPilotRegistry pilots,
             LocalGuestAuthorizationProvider guestProvider,
             IRevokingAuthorizationProvider server,
-            DisconnectableInputProvider input,
+            DisconnectableInputProvider link,
+            PilotId startPilot,
             CancellationToken lifetime)
         {
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                throw new ArgumentException("A station needs a name.", nameof(name));
+            }
+            Name = name;
             this.coordinator = coordinator ?? throw new ArgumentNullException(nameof(coordinator));
             this.drones = drones ?? throw new ArgumentNullException(nameof(drones));
             this.server = server ?? throw new ArgumentNullException(nameof(server));
+            Link = link ?? throw new ArgumentNullException(nameof(link));
             this.lifetime = lifetime;
             if (pilots == null)
             {
@@ -49,18 +59,18 @@ namespace DroneFlightModule.Composition
             foreach (var profile in pilots.Profiles)
             {
                 var provider = profile.IsGuest ? (IAuthorizationProvider)guestProvider : server;
-                var pilotInput = new LocalPilotInput(input);
+                var pilotInput = new LocalPilotInput(link);
                 var session = new PilotSession(profile.Id, PilotOrigin.Local, provider, pilotInput);
                 sessions.Add(session);
                 inputs.Add(session, pilotInput);
-                if (profile.IsGuest)
+                if (profile.Id == startPilot)
                 {
                     Session = session;
                 }
             }
             if (Session == null)
             {
-                throw new ArgumentException("The pilot registry has no guest to start as.", nameof(pilots));
+                throw new ArgumentException($"{startPilot} is not in the pilot registry.", nameof(startPilot));
             }
             inputs[Session].IsSelected = true;
 
@@ -69,13 +79,22 @@ namespace DroneFlightModule.Composition
             coordinator.TookOver += OnTookOver;
         }
 
+        public string Name { get; }
+        public DisconnectableInputProvider Link { get; }
         public PilotSession Session { get; private set; }
-        public string LastMessage { get; private set; } = "Press R for any drone.";
-        public event Action StatusChanged;
+        public string LastMessage { get; private set; } = "Request a drone to fly.";
+        public event Action<PilotStation> StatusChanged;
 
         public bool TryGetDrone(out DroneId drone)
         {
             return coordinator.TryGetDrone(Session.PilotId, out drone);
+        }
+
+        public string Describe()
+        {
+            string flying = TryGetDrone(out var drone) ? $"flying {drone}" : "no drone";
+            string link = Link.IsLinkCut ? "link cut" : Link.IsConnected ? "connected" : "disconnected";
+            return $"{Name}: {Session.PilotId}, {flying}, {link}";
         }
 
         // Never faults: a superseded or cancelled request ends quietly, and anything else is logged and reported.
@@ -148,6 +167,12 @@ namespace DroneFlightModule.Composition
             return revoked;
         }
 
+        public void ToggleLink()
+        {
+            Link.IsLinkCut = !Link.IsLinkCut;
+            Report(Link.IsLinkCut ? "Link cut." : "Link restored.");
+        }
+
         public void Dispose()
         {
             if (isDisposed)
@@ -167,12 +192,12 @@ namespace DroneFlightModule.Composition
                 return;
             }
             LastMessage = message;
-            StatusChanged?.Invoke();
+            StatusChanged?.Invoke(this);
         }
 
         private void OnAssigned(DroneAssigned assigned)
         {
-            StatusChanged?.Invoke();
+            StatusChanged?.Invoke(this);
         }
 
         private void OnReleased(DroneReleased released)
@@ -182,18 +207,18 @@ namespace DroneFlightModule.Composition
                 Report($"{released.Drone} was removed from the fleet.");
                 return;
             }
-            StatusChanged?.Invoke();
+            StatusChanged?.Invoke(this);
         }
 
-        // The pilot who took over hears it from their request; a local pilot who lost a drone hears it here.
+        // The pilot who took over hears it from their request; the pilot this station flies as hears here that they lost a drone.
         private void OnTookOver(DroneTakenOver takenOver)
         {
-            if (takenOver.Pilot != Session.PilotId && sessions.Exists(session => session.PilotId == takenOver.FromPilot))
+            if (takenOver.FromPilot == Session.PilotId && takenOver.Pilot != Session.PilotId)
             {
                 Report($"{takenOver.Pilot} took {takenOver.Drone} over from {takenOver.FromPilot}.");
                 return;
             }
-            StatusChanged?.Invoke();
+            StatusChanged?.Invoke(this);
         }
     }
 }

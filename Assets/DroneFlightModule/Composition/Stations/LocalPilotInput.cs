@@ -4,7 +4,7 @@ using DroneFlightModule.Core;
 namespace DroneFlightModule.Composition
 {
     /// <summary>
-    /// The input of one pilot at this machine. Every local pilot shares the keyboard and its link,
+    /// The input of one pilot at a station. Every pilot at a station shares its device and link,
     /// but only the selected one steers with it; the others keep their drones with their hands off
     /// the sticks, so a parked pilot's drone holds where it is. A cut link cuts them all.
     /// </summary>

@@ -1,19 +1,25 @@
+using System.Collections.Generic;
 using DroneFlightModule.Core;
 
 namespace DroneFlightModule.Composition
 {
     /// <summary>
-    /// What the pilot at this machine can do from a control panel: choose which registered pilot
-    /// to fly as, request a drone or any drone, release it, have the server revoke their grant,
-    /// cut or restore their link, and add or remove drones. It spans pilots, links and drone
-    /// spawning, so it lives with the composition that implements it; a panel needs nothing else
-    /// and can be deleted with no trace here.
+    /// What a control panel can do at this machine: choose a pilot station (one per input device),
+    /// and for it choose which registered pilot to fly as, request a drone or any drone, release
+    /// it, have the server revoke their grant and cut or restore its link; and for the fleet, add
+    /// or remove drones. It spans stations, pilots and drone spawning, so it lives with the
+    /// composition that implements it; a panel needs nothing else and can be deleted with no trace
+    /// here. With no station, the station's actions do nothing.
     /// </summary>
     public interface IFleetConsole
     {
+        IReadOnlyList<string> Stations { get; }
+        string Station { get; }
         PilotId Pilot { get; }
         string LastMessage { get; }
         bool IsLinkCut { get; }
+
+        void SelectStation(string station);
 
         bool TryGetDrone(out DroneId drone);
 

@@ -12,10 +12,12 @@ namespace DroneFlightModule.Composition
     /// <summary>
     /// Composition root of the fleet scene. Installs the fleet with the settings its
     /// <see cref="FleetSettingsAsset"/> maps to, then has the <see cref="DroneInstantiator"/> build
-    /// the layout's drones from the prefab. The local pilot starts as the guest without a drone;
-    /// the camera starts on the first drone and then follows the drone they fly. The scope flies with its
-    /// own copy of the controls asset, and its lifetime token, which pending requests use, is
-    /// cancelled when it is destroyed or play mode exits.
+    /// the layout's drones from the prefab. Each input device gets a pilot station, the keyboard's
+    /// starting as the guest without a drone; the camera starts on the first drone and then
+    /// follows the drone of the station the console has chosen. The scope keeps its own copy of
+    /// the controls asset, for the fleet-wide keys and as the template each station copies, and its
+    /// lifetime token, which pending requests use, is cancelled when it is destroyed or play mode
+    /// exits.
     /// </summary>
     public sealed class FleetLifetimeScope : LifetimeScope
     {
@@ -28,7 +30,7 @@ namespace DroneFlightModule.Composition
 
         private InputActionAsset ownControls;
         private CancellationTokenSource lifetime;
-        private LocalPilotControls localPilot;
+        private FleetConsole console;
         private Transform followed;
 
         public DroneInstantiator Instantiator { get; private set; }
@@ -69,17 +71,17 @@ namespace DroneFlightModule.Composition
                 }
 
                 fleet.Start(container);
-                localPilot = container.Resolve<LocalPilotControls>();
-                localPilot.StatusChanged += OnLocalPilotChanged;
+                console = container.Resolve<FleetConsole>();
+                console.Changed += OnConsoleChanged;
             });
         }
 
         protected override void OnDestroy()
         {
             // Unhooked first: disposing the fleet releases drones, and the views may already be gone.
-            if (localPilot != null)
+            if (console != null)
             {
-                localPilot.StatusChanged -= OnLocalPilotChanged;
+                console.Changed -= OnConsoleChanged;
             }
             lifetime?.Cancel();
             base.OnDestroy();
@@ -101,10 +103,10 @@ namespace DroneFlightModule.Composition
             groundPlane.position = new Vector3(position.x, groundHeight, position.z);
         }
 
-        private void OnLocalPilotChanged()
+        private void OnConsoleChanged()
         {
             // Compared by transform: a removed drone's id can come back on a new drone.
-            if (localPilot.TryGetDrone(out var drone) && Instantiator.TryGetView(drone, out var view) && view.transform != followed)
+            if (console.TryGetDrone(out var drone) && Instantiator.TryGetView(drone, out var view) && view.transform != followed)
             {
                 Follow(view.transform);
             }

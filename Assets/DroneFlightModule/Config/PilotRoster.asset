@@ -16,3 +16,6 @@ MonoBehaviour:
   - id: ace
     displayName: Ace
     priority: 50
+  - id: john
+    displayName: John
+    priority: 60

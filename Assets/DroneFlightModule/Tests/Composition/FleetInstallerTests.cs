@@ -67,7 +67,7 @@ namespace DroneFlightModule.Composition.Tests
             return scope;
         }
 
-        private LocalPilotControls Pilot => fleet.Resolve<LocalPilotControls>();
+        private PilotStation Pilot => fleet.Resolve<InputDeviceStations>().Stations[0];
 
         private void Run(IObjectResolver drone, float seconds)
         {
@@ -79,7 +79,7 @@ namespace DroneFlightModule.Composition.Tests
             }
         }
 
-        private void Tap(KeyControl key)
+        private void Tap(ButtonControl key)
         {
             Press(key);
             Release(key);
@@ -245,7 +245,7 @@ namespace DroneFlightModule.Composition.Tests
         public void SwitchingAway_CancelsThePreviousPilotsPendingRequest()
         {
             var slowFleet = SlowServerFleet();
-            var pilot = slowFleet.Resolve<LocalPilotControls>();
+            var pilot = slowFleet.Resolve<InputDeviceStations>().Stations[0];
             pilot.SelectPilot(TestFleetSettings.RegisteredPilot.Id);
             var ace = pilot.Session;
 
@@ -321,7 +321,7 @@ namespace DroneFlightModule.Composition.Tests
                 TestFleetSettings.RegisteredPilot.Id,
                 PilotOrigin.Remote,
                 fleet.Resolve<SimulatedServerAuthorizationProvider>(),
-                fleet.Resolve<DisconnectableInputProvider>());
+                Pilot.Link);
 
             var result = fleet.Resolve<FlightCoordinator>().RequestFlightAsync(remoteAce, GroundedDrone, CancellationToken.None).Result;
 
@@ -421,10 +421,10 @@ namespace DroneFlightModule.Composition.Tests
         }
 
         [Test]
-        public void StatusChanged_FiresAsTheLocalPilotFliesAndLetsGo()
+        public void StatusChanged_FiresAsTheStationsPilotFliesAndLetsGo()
         {
             int changes = 0;
-            Pilot.StatusChanged += () => changes++;
+            Pilot.StatusChanged += station => changes++;
 
             Tap(keyboard.rKey);
             int afterRequest = changes;
@@ -488,15 +488,17 @@ namespace DroneFlightModule.Composition.Tests
         [Test]
         public void DisposingTheFleet_DisablesTheControls()
         {
-            Assert.That(controls.FindActionMap("Flight").enabled, Is.True);
-            Assert.That(controls.FindActionMap("Fleet").enabled, Is.True);
+            var station = Pilot;
+            Assert.That(controls.FindAction("Debug/AddDrone").enabled, Is.True);
+            Assert.That(station.Link.IsConnected, Is.True);
 
             fleet.Dispose();
             fleet = null;
 
-            Assert.That(controls.FindActionMap("Flight").enabled, Is.False);
-            Assert.That(controls.FindActionMap("Fleet").enabled, Is.False);
-            Assert.That(controls.FindAction("Debug/ToggleLink").enabled, Is.False);
+            Assert.That(controls.FindAction("Debug/AddDrone").enabled, Is.False);
+            Assert.That(controls.FindAction("Debug/RemoveDrone").enabled, Is.False);
+            Assert.That(station.Link.IsConnected, Is.False, "The station's own controls are disabled.");
+            Assert.DoesNotThrow(() => Tap(keyboard.rKey));
         }
     }
 }

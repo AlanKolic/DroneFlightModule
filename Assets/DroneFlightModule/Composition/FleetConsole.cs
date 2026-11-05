@@ -1,60 +1,85 @@
 using System;
-using DroneFlightModule.Coordination;
+using System.Collections.Generic;
 using DroneFlightModule.Core;
 
 namespace DroneFlightModule.Composition
 {
     /// <summary>
-    /// The fleet scene's console for the local pilot: forwards to the local pilot's controls, the
-    /// link they fly through and the drone instantiator, so a control panel can do everything the
-    /// keys do. A request runs on and reports through the local pilot's controls.
+    /// The fleet scene's console: forwards to the chosen pilot station, the first one until
+    /// another is chosen, and to the drone instantiator, so a control panel can do everything the
+    /// keys do. A request runs on and reports through the station. Changed fires when another
+    /// station is chosen or the chosen one's status changes, which the camera follows.
     /// </summary>
-    public sealed class FleetConsole : IFleetConsole
+    public sealed class FleetConsole : IFleetConsole, IDisposable
     {
-        private readonly LocalPilotControls localPilot;
-        private readonly DisconnectableInputProvider link;
+        private readonly InputDeviceStations stations;
         private readonly DroneInstantiator drones;
+        private readonly List<string> names = new List<string>();
+        private PilotStation selected;
 
-        public FleetConsole(LocalPilotControls localPilot, DisconnectableInputProvider link, DroneInstantiator drones)
+        public FleetConsole(InputDeviceStations stations, DroneInstantiator drones)
         {
-            this.localPilot = localPilot ?? throw new ArgumentNullException(nameof(localPilot));
-            this.link = link ?? throw new ArgumentNullException(nameof(link));
+            this.stations = stations ?? throw new ArgumentNullException(nameof(stations));
             this.drones = drones ?? throw new ArgumentNullException(nameof(drones));
+            foreach (var station in stations.Stations)
+            {
+                OnStationAdded(station);
+            }
+            stations.StationAdded += OnStationAdded;
         }
 
-        public PilotId Pilot => localPilot.Session.PilotId;
-        public string LastMessage => localPilot.LastMessage;
-        public bool IsLinkCut => link.IsLinkCut;
+        public event Action Changed;
+
+        public IReadOnlyList<string> Stations => names;
+        public string Station => selected?.Name ?? string.Empty;
+        public PilotId Pilot => selected?.Session.PilotId ?? default;
+        public string LastMessage => selected?.LastMessage ?? "No input device is connected.";
+        public bool IsLinkCut => selected != null && selected.Link.IsLinkCut;
+
+        public void SelectStation(string station)
+        {
+            var chosen = Find(station) ?? throw new ArgumentException($"There is no station {station}.", nameof(station));
+            if (chosen == selected)
+            {
+                return;
+            }
+            selected = chosen;
+            Changed?.Invoke();
+        }
 
         public bool TryGetDrone(out DroneId drone)
         {
-            return localPilot.TryGetDrone(out drone);
+            drone = default;
+            return selected != null && selected.TryGetDrone(out drone);
         }
 
         public void SelectPilot(PilotId pilot)
         {
-            localPilot.SelectPilot(pilot);
+            selected?.SelectPilot(pilot);
         }
 
         public void RequestFlight(DroneId? drone)
         {
             // The request never faults, so nothing is lost by not awaiting it.
-            _ = localPilot.RequestFlightAsync(drone);
+            if (selected != null)
+            {
+                _ = selected.RequestFlightAsync(drone);
+            }
         }
 
         public void Release()
         {
-            localPilot.Release();
+            selected?.Release();
         }
 
         public void RevokeGrant()
         {
-            localPilot.RevokeServerGrant();
+            selected?.RevokeServerGrant();
         }
 
         public void ToggleLink()
         {
-            link.IsLinkCut = !link.IsLinkCut;
+            selected?.ToggleLink();
         }
 
         public void AddDrone()
@@ -65,6 +90,46 @@ namespace DroneFlightModule.Composition
         public void RemoveDrone(DroneId drone)
         {
             drones.RemoveDrone(drone);
+        }
+
+        public void Dispose()
+        {
+            stations.StationAdded -= OnStationAdded;
+            foreach (var station in stations.Stations)
+            {
+                station.StatusChanged -= OnStatusChanged;
+            }
+        }
+
+        private PilotStation Find(string name)
+        {
+            foreach (var station in stations.Stations)
+            {
+                if (station.Name == name)
+                {
+                    return station;
+                }
+            }
+            return null;
+        }
+
+        private void OnStationAdded(PilotStation station)
+        {
+            names.Add(station.Name);
+            station.StatusChanged += OnStatusChanged;
+            if (selected == null)
+            {
+                selected = station;
+                Changed?.Invoke();
+            }
+        }
+
+        private void OnStatusChanged(PilotStation station)
+        {
+            if (station == selected)
+            {
+                Changed?.Invoke();
+            }
         }
     }
 }
