@@ -163,9 +163,39 @@ namespace DroneFlightModule.Unity.Tests
         }
 
         [Test]
+        public void CentredSticks_GetTheLongerTimeout()
+        {
+            var pad = InputSystem.AddDevice<Gamepad>();
+            var watching = new InputActionInputProvider(InputActionAsset.FromJson(File.ReadAllText(ControlsPath)), 15f, 120f);
+            watching.Attach(pad);
+
+            currentTime += 16.0;
+            Assert.That(watching.IsConnected, Is.True, "A hands-off hover is not a drop yet.");
+
+            currentTime += 105.0;
+            Assert.That(watching.IsConnected, Is.False);
+            watching.Dispose();
+        }
+
+        [Test]
+        public void ADeflectedStick_KeepsTheShortTimeout()
+        {
+            var pad = InputSystem.AddDevice<Gamepad>();
+            var watching = new InputActionInputProvider(InputActionAsset.FromJson(File.ReadAllText(ControlsPath)), 15f, 120f);
+            watching.Attach(pad);
+            Set(pad.leftStick, new Vector2(0f, 1f));
+
+            currentTime += 16.0;
+
+            Assert.That(watching.IsConnected, Is.False, "A stick stuck on stale input must not fly on.");
+            watching.Dispose();
+        }
+
+        [Test]
         public void ANegativeTimeout_IsRefused()
         {
             Assert.Throws<System.ArgumentOutOfRangeException>(() => new InputActionInputProvider(actions, silenceTimeout: -1f));
+            Assert.Throws<System.ArgumentOutOfRangeException>(() => new InputActionInputProvider(actions, 15f, -1f));
         }
 
         [Test]

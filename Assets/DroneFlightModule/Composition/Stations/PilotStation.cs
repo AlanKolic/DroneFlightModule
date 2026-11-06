@@ -39,6 +39,7 @@ namespace DroneFlightModule.Composition
             InputDevice device,
             InputActionAsset controls,
             float silenceTimeout,
+            float centredSilenceTimeout,
             PatrolAutopilot autopilot,
             FlightCoordinator coordinator,
             PilotSeating seating,
@@ -56,7 +57,7 @@ namespace DroneFlightModule.Composition
             this.seating = seating ?? throw new ArgumentNullException(nameof(seating));
             this.lifetime = lifetime;
 
-            input = new InputActionInputProvider(controls, silenceTimeout);
+            input = new InputActionInputProvider(controls, silenceTimeout, centredSilenceTimeout);
             input.Attach(device);
             source = new SwitchableInputProvider(input);
             Link = new DisconnectableInputProvider(source);

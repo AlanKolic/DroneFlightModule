@@ -581,10 +581,12 @@ matters only to the composition root that built it.
   in `InputSystem.devices` and simply stops updating, seen on a real Xbox pad, and an idle pad looks
   the same. So `InputActionInputProvider` reports a device as disconnected once it has sent nothing
   for its group's `SilenceTimeout` (15 s for gamepads, zero and never for keyboards), and any input
-  reconnects it. It only closes the gate, so the pilot keeps the drone: the failsafe holds and
-  lands it, and a landed drone is released. A pilot who leaves the pad untouched that long sees the
-  same thing, the price of catching a real drop; a false hold can be recovered and a missed drop
-  flies on stale input. A station whose device is merely silent stays, because a live pad would
+  reconnects it. With the sticks centred it waits for the longer `CentredSilenceTimeout` (120 s for
+  gamepads), because centred sticks only hover, so a pilot can hover hands-off, while a deflected
+  stick could be stale input flying the drone away. It only closes the gate, so the pilot keeps the
+  drone: the failsafe holds and lands it, and a landed drone is released. A pilot who leaves the
+  pad untouched past the timeout sees the same thing, the price of catching a real drop; a false
+  hold can be recovered and a missed drop flies on stale input. A station whose device is merely silent stays, because a live pad would
   raise no event to bring it back.
 - **One pad, one station.** A physical pad is known by its layout and serial, not its device
   object. After a silent drop the old device stays listed, as a stale entry, and the pad connects
@@ -763,6 +765,8 @@ Each commit is small, logically separate and includes its own tests.
   stay the same. It stops when the device is removed, so a lost device never keeps a drone.
 - **Seating:** in Coordination behind `IPilotDesk`, because who sits where is a rule of the domain,
   not wiring. Which provider a pilot uses stays a composition choice (`GuestOrServerSelector`).
+- **Silent pads:** a longer timeout with centred sticks rather than none, so a hands-off hover
+  isn't cut short and a lost pad still can't hold a drone forever.
 - **Altitude sensor:** a rangefinder only, measuring height above ground.
 - **Sensor noise:** zero for now. Noise can be added later as a decorator.
 - **Guest mode:** authorizes only the guest pilot, from any device. It goes through the same

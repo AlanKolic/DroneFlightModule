@@ -37,6 +37,7 @@ namespace DroneFlightModule.UI.Tests
                 InputSystem.AddDevice<Keyboard>(),
                 Object.Instantiate(controls),
                 0f,
+                0f,
                 new PatrolAutopilot(fleet.Clock),
                 fleet.Coordinator,
                 new PilotSeating(fleet.Coordinator, fleet.Pilots, new NoProviders()),

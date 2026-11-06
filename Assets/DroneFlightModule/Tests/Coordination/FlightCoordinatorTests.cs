@@ -962,6 +962,18 @@ namespace DroneFlightModule.Coordination.Tests
         }
 
         [Test]
+        public void ASecondSessionOfTheSamePilot_KeepsItArmed()
+        {
+            var session = Session(Alice);
+            Request(session, grounded.Id);
+            coordinator.ToggleArm(session);
+
+            Request(Session(Alice), grounded.Id);
+
+            Assert.That(grounded.Arming.IsArmed, Is.True);
+        }
+
+        [Test]
         public void Reroute_KeepsItArmed()
         {
             var session = Session(Alice);

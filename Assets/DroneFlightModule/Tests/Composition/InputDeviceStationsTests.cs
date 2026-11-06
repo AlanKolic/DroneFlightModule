@@ -365,6 +365,18 @@ namespace DroneFlightModule.Composition.Tests
         }
 
         [Test]
+        public void AHoveringPad_KeepsItsLink_PastTheSilenceTimeout()
+        {
+            var hovering = Stations(new InputDeviceGroup("Gamepad", "Gamepad", "Gamepad", 15f, 120f));
+            var pad = InputSystem.AddDevice<Gamepad>();
+
+            currentTime += 16.0;
+
+            Assert.That(hovering.Stations.First(station => station.Device == pad).Link.IsConnected, Is.True);
+            hovering.Dispose();
+        }
+
+        [Test]
         public void AnIdlePad_LeavesTheAutopilotOn()
         {
             var pad = AddPad("pad-1");

@@ -37,7 +37,7 @@ namespace DroneFlightModule.Composition
         {
             var controls = Object.Instantiate(template);
             controls.bindingMask = InputBinding.MaskByGroup(group.BindingGroup);
-            return new PilotStation(name, device, controls, group.SilenceTimeout, new PatrolAutopilot(clock), coordinator, seating, lifetime);
+            return new PilotStation(name, device, controls, group.SilenceTimeout, group.CentredSilenceTimeout, new PatrolAutopilot(clock), coordinator, seating, lifetime);
         }
     }
 }

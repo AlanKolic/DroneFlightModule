@@ -14,13 +14,16 @@ namespace DroneFlightModule.Unity
     /// reports that device as lost once it has sent nothing for that long, because macOS can drop a
     /// Bluetooth pad without telling the Input System. An idle pad looks the same, so any input
     /// reconnects it at once, and a device gets the full timeout from the moment it is attached or
-    /// someone sits down at it.
+    /// someone sits down at it. Centred sticks only hover, so they can have a longer timeout, while a
+    /// deflected stick might be stale input flying the drone away. A centred timeout shorter than the
+    /// silence timeout changes nothing.
     /// </summary>
     public sealed class InputActionInputProvider : IInputProvider, IDisposable
     {
         private readonly ArgumentGuard guard = new ArgumentGuard();
         private readonly InputActionAsset actions;
         private readonly float silenceTimeout;
+        private readonly float centredSilenceTimeout;
         private readonly InputActionMap map;
         private readonly InputAction move;
         private readonly InputAction climb;
@@ -28,7 +31,7 @@ namespace DroneFlightModule.Unity
         private InputDevice device;
         private double silenceStart;
 
-        public InputActionInputProvider(InputActionAsset actions, float silenceTimeout = 0f)
+        public InputActionInputProvider(InputActionAsset actions, float silenceTimeout = 0f, float centredSilenceTimeout = 0f)
         {
             if (actions == null)
             {
@@ -36,6 +39,7 @@ namespace DroneFlightModule.Unity
             }
             this.actions = actions;
             this.silenceTimeout = guard.RequireNonNegative(silenceTimeout, nameof(silenceTimeout));
+            this.centredSilenceTimeout = Math.Max(silenceTimeout, guard.RequireNonNegative(centredSilenceTimeout, nameof(centredSilenceTimeout)));
             map = actions.FindActionMap("Flight", throwIfNotFound: true);
             move = map.FindAction("Move", throwIfNotFound: true);
             climb = map.FindAction("Climb", throwIfNotFound: true);
@@ -53,9 +57,12 @@ namespace DroneFlightModule.Unity
                 {
                     return false;
                 }
-                return InputState.currentTime - Math.Max(device.lastUpdateTime, silenceStart) > silenceTimeout;
+                float timeout = IsCentred ? centredSilenceTimeout : silenceTimeout;
+                return InputState.currentTime - Math.Max(device.lastUpdateTime, silenceStart) > timeout;
             }
         }
+
+        private bool IsCentred => move.ReadValue<Vector2>() == Vector2.zero && climb.ReadValue<float>() == 0f && yaw.ReadValue<float>() == 0f;
 
         // Also for the same device returning: removing it took it out of the actions' device list.
         public void Attach(InputDevice device)

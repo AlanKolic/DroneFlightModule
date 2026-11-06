@@ -17,11 +17,14 @@ MonoBehaviour:
     layout: Keyboard
     bindingGroup: Keyboard
     silenceTimeout: 0
+    centredSilenceTimeout: 0
   - stationName: Screen panel
     layout: ScreenPanelGamepad
     bindingGroup: Gamepad
     silenceTimeout: 0
+    centredSilenceTimeout: 0
   - stationName: Gamepad
     layout: Gamepad
     bindingGroup: Gamepad
     silenceTimeout: 15
+    centredSilenceTimeout: 120

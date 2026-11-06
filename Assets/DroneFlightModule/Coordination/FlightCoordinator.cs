@@ -314,7 +314,7 @@ namespace DroneFlightModule.Coordination
             if (assignments.TryGetValue(drone.Id, out var replaced))
             {
                 replaced.Revocation.Dispose();
-                if (replaced.Session != session)
+                if (replaced.Session.PilotId != session.PilotId)
                 {
                     drone.Arming.Disarm();
                 }

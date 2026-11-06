@@ -224,7 +224,7 @@ Three others are added elsewhere:
   never opens the gate for another), guest mode, and the server's latency, policy changes,
   cancellation and disposal. Async code runs with no synchronization context and a hand-completed
   delay, so the tests are synchronous and never sleep.
-- **Coordination**: 104 tests on real flight loops: assignment preferring grounded drones, priority
+- **Coordination**: 105 tests on real flight loops: assignment preferring grounded drones, priority
   takeover with the gate open on every tick, equal priority never taking over, switching drones,
   denied switches, keeping your drone on "any drone", a second session for the same pilot, ending
   and re-routing sessions, a throwing listener that can't interrupt a switch or reach a revoker,
@@ -277,11 +277,12 @@ Every planned commit is done.
 - The number keys and D-pad ask for `drone-1` to `drone-3` by id, so they don't reach drones with
   other ids; the control panel reaches every drone.
 - macOS can drop a Bluetooth pad without reporting it, and a silent pad can't be told from an
-  idle one. So a pad that sends nothing for its silence timeout (15 s, in
-  `Config/InputDevices.asset`) counts as disconnected until it next sends something. A pilot who
-  leaves the pad untouched that long sees the drone hold and descend, and a grounded drone is
-  released; touching the pad restores the link. Until then a dropped pad's last input stays in
-  force, and a stick held perfectly still may count as silence.
+  idle one. So a pad that sends nothing counts as disconnected until it next sends something: after
+  15 s with a stick deflected, which could be stale input flying the drone away, and after 120 s
+  with the sticks centred, so a pilot can hover hands-off (both in `Config/InputDevices.asset`). A
+  pilot who leaves the pad untouched past that sees the drone hold and descend, and a grounded drone
+  is released; touching the pad restores the link. A dropped pad with centred sticks hovers for
+  those 120 s, and a stick held perfectly still may count as silence.
 - A pad with no serial that returns as a new device gets a new station.
 - The autopilot is timed stick values with no feedback from the drone. It only leaves the ground
   on its climb, so it restarts when armed, and it keeps running after its drone is lost. A pad that
