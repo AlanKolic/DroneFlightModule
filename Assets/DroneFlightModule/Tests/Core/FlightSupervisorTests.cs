@@ -16,13 +16,15 @@ namespace DroneFlightModule.Core.Tests
         private readonly DroneState grounded = new DroneState(Vec3.Zero, Vec3.Zero, 0f, 0f, isGrounded: true);
 
         private ScriptedFlightGate gate;
+        private ArmingSwitch arming;
         private FlightSupervisor supervisor;
 
         [SetUp]
         public void SetUp()
         {
             gate = new ScriptedFlightGate();
-            supervisor = new FlightSupervisor(gate, drone, config);
+            arming = new ArmingSwitch();
+            supervisor = new FlightSupervisor(gate, arming, drone, config);
         }
 
         private AltitudeReading Altitude(float heightAboveGround)
@@ -67,13 +69,13 @@ namespace DroneFlightModule.Core.Tests
                 maxLateralForce: 10f,
                 maxYawTorque: 0.5f);
 
-            Assert.Throws<ArgumentException>(() => new FlightSupervisor(gate, weak, config));
+            Assert.Throws<ArgumentException>(() => new FlightSupervisor(gate, arming, weak, config));
         }
 
         [Test]
-        public void StartsGroundedWithNoCountdown()
+        public void StartsDisarmedWithNoCountdown()
         {
-            Assert.That(supervisor.Mode, Is.EqualTo(FlightMode.Grounded));
+            Assert.That(supervisor.Mode, Is.EqualTo(FlightMode.Disarmed));
             Assert.That(supervisor.HoldTimeRemaining, Is.EqualTo(0.0));
         }
 
@@ -88,12 +90,72 @@ namespace DroneFlightModule.Core.Tests
         }
 
         [Test]
-        public void GateOpen_Grounded_PilotCommandPassesForTakeoff()
+        public void Armed_OnTheGround_PassesThePilotsCommand()
+        {
+            arming.Arm();
+
+            var command = Supervise(grounded);
+
+            Assert.That(supervisor.Mode, Is.EqualTo(FlightMode.Armed));
+            Assert.That(command.Force, Is.EqualTo(pilotCommand.Force));
+        }
+
+        [Test]
+        public void Disarmed_OnTheGround_IgnoresThePilot()
         {
             var command = Supervise(grounded);
 
-            Assert.That(supervisor.Mode, Is.EqualTo(FlightMode.Grounded));
+            Assert.That(supervisor.Mode, Is.EqualTo(FlightMode.Disarmed));
+            Assert.That(command.Force, Is.EqualTo(Vec3.Zero));
+            Assert.That(command.YawTorque, Is.EqualTo(0f));
+        }
+
+        [Test]
+        public void Touchdown_Disarms()
+        {
+            arming.Arm();
+            Supervise(airborne);
+
+            var command = Supervise(grounded);
+
+            Assert.That(arming.IsArmed, Is.False);
+            Assert.That(supervisor.Mode, Is.EqualTo(FlightMode.Disarmed));
+            Assert.That(command.Force, Is.EqualTo(Vec3.Zero));
+        }
+
+        [Test]
+        public void ArmedBeforeTakeoff_StaysArmed()
+        {
+            arming.Arm();
+
+            Supervise(grounded);
+            Supervise(grounded);
+
+            Assert.That(arming.IsArmed, Is.True);
+        }
+
+        [Test]
+        public void TheSwitch_IsIgnoredInTheAir()
+        {
+            var command = Supervise(airborne);
+
+            Assert.That(arming.IsArmed, Is.False);
+            Assert.That(supervisor.Mode, Is.EqualTo(FlightMode.Piloted));
             Assert.That(command.Force, Is.EqualTo(pilotCommand.Force));
+        }
+
+        [Test]
+        public void AGateClosingOnTheGround_Disarms()
+        {
+            arming.Arm();
+            gate.IsFlightAllowed = false;
+            Supervise(grounded);
+            gate.IsFlightAllowed = true;
+
+            var command = Supervise(grounded);
+
+            Assert.That(arming.IsArmed, Is.False);
+            Assert.That(command.Force, Is.EqualTo(Vec3.Zero));
         }
 
         [Test]
@@ -103,7 +165,7 @@ namespace DroneFlightModule.Core.Tests
 
             var command = Supervise(grounded);
 
-            Assert.That(supervisor.Mode, Is.EqualTo(FlightMode.Grounded));
+            Assert.That(supervisor.Mode, Is.EqualTo(FlightMode.Disarmed));
             Assert.That(supervisor.HoldTimeRemaining, Is.EqualTo(0.0));
             Assert.That(command.Force, Is.EqualTo(Vec3.Zero));
             Assert.That(command.YawTorque, Is.EqualTo(0f));
@@ -324,7 +386,7 @@ namespace DroneFlightModule.Core.Tests
 
             var command = Supervise(grounded);
 
-            Assert.That(supervisor.Mode, Is.EqualTo(FlightMode.Grounded));
+            Assert.That(supervisor.Mode, Is.EqualTo(FlightMode.Disarmed));
             Assert.That(command.Force, Is.EqualTo(Vec3.Zero));
         }
 

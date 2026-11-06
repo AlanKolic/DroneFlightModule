@@ -27,7 +27,7 @@ namespace DroneFlightModule.Telemetry.Tests
                 new DroneId(id),
                 new CentredSticks(),
                 new VelocityFlightController(DroneConfig.Default, VelocityControllerConfig.Default),
-                new FlightSupervisor(new OpenGate(), DroneConfig.Default, FailsafeConfig.Default),
+                new FlightSupervisor(new OpenGate(), new ArmingSwitch(), DroneConfig.Default, FailsafeConfig.Default),
                 new DroneIntegrator(DroneConfig.Default, terrain),
                 new RangefinderAltitudeSensor(terrain, RangefinderConfig.Default),
                 new DroneState(new Vec3(0f, 5f, 0f)));

@@ -1,4 +1,4 @@
-namespace DroneFlightModule.Coordination
+namespace DroneFlightModule.Core
 {
     /// <summary>
     /// The simulation's current time in seconds, shared by the whole fleet.

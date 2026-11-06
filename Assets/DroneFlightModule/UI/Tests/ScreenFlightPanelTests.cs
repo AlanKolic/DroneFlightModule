@@ -43,6 +43,14 @@ namespace DroneFlightModule.UI.Tests
                 return false;
             }
 
+            public void ToggleArm()
+            {
+            }
+
+            public void ToggleAutopilot()
+            {
+            }
+
             public void SelectPilot(PilotId pilot)
             {
             }

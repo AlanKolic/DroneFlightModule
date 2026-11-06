@@ -1,35 +1,53 @@
 using System;
 using System.IO;
+using System.Threading;
+using DroneFlightModule.Authorization;
+using DroneFlightModule.Composition;
+using DroneFlightModule.Core;
+using DroneFlightModule.Pilots;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using Object = UnityEngine.Object;
 
-namespace DroneFlightModule.Unity.Tests
+namespace DroneFlightModule.UI.Tests
 {
-    public class FlightDebugHudTests
+    public class FlightDebugHudTests : InputTestFixture
     {
         private const string ControlsPath = "Assets/DroneFlightModule/Unity/Input/DroneControls.inputactions";
 
-        private sealed class FixedStatus : IStationStatus
+        private sealed class NoProviders : IAuthorizationProviderSelector
         {
-            public string Describe() => "Keyboard: guest, no drone, connected";
+            public IAuthorizationProvider For(PilotProfile pilot) => null;
         }
 
         private FlightDebugHud hud;
         private InputActionAsset controls;
+        private PilotStation station;
 
-        [SetUp]
-        public void SetUp()
+        public override void Setup()
         {
+            base.Setup();
             hud = new GameObject("HUD", typeof(FlightDebugHud)).GetComponent<FlightDebugHud>();
             controls = InputActionAsset.FromJson(File.ReadAllText(ControlsPath));
+            var fleet = new TestFleet();
+            station = new PilotStation(
+                "Keyboard",
+                InputSystem.AddDevice<Keyboard>(),
+                Object.Instantiate(controls),
+                0f,
+                new PatrolAutopilot(fleet.Clock),
+                fleet.Coordinator,
+                new PilotSeating(fleet.Coordinator, fleet.Pilots, new NoProviders()),
+                CancellationToken.None);
         }
 
-        [TearDown]
-        public void TearDown()
+        public override void TearDown()
         {
-            UnityEngine.Object.DestroyImmediate(hud.gameObject);
-            UnityEngine.Object.DestroyImmediate(controls);
+            station.Dispose();
+            Object.DestroyImmediate(hud.gameObject);
+            Object.DestroyImmediate(controls);
+            base.TearDown();
         }
 
         [Test]
@@ -39,21 +57,20 @@ namespace DroneFlightModule.Unity.Tests
 
             Assert.That(hud.ControlsText, Does.Contain("request any drone"));
             Assert.That(hud.ControlsText, Does.Contain("remove the newest drone"));
-            Assert.That(hud.ControlsText.Split('\n'), Has.Length.EqualTo(13));
+            Assert.That(hud.ControlsText.Split('\n'), Has.Length.EqualTo(15));
         }
 
         [Test]
         public void AStation_IsListedWithItsDescription()
         {
-            hud.AddStation(new FixedStatus());
+            hud.AddStation(station);
 
-            Assert.That(hud.StationTexts, Is.EqualTo(new[] { "Keyboard: guest, no drone, connected" }));
+            Assert.That(hud.StationTexts, Is.EqualTo(new[] { "Keyboard: empty, connected" }));
         }
 
         [Test]
         public void ARemovedStation_LeavesTheList()
         {
-            var station = new FixedStatus();
             hud.AddStation(station);
 
             hud.RemoveStation(station);

@@ -3,7 +3,7 @@ using DroneFlightModule.Core;
 namespace DroneFlightModule.Coordination
 {
     /// <summary>
-    /// A pilot's flight request was refused. Preferred is the drone they asked for, or null for any.
+    /// A pilot's flight request or arm was refused. Preferred is the drone they asked for, or null for any.
     /// </summary>
     public readonly struct FlightDenied
     {

@@ -1,3 +1,4 @@
+using DroneFlightModule.Core;
 using DroneFlightModule.Coordination;
 
 namespace DroneFlightModule.UI.Tests

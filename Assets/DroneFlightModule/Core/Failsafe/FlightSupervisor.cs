@@ -4,7 +4,8 @@ namespace DroneFlightModule.Core
 {
     /// <summary>
     /// Decides each tick whether the pilot's command reaches the actuators. While the gate is open
-    /// the pilot flies. When it closes in the air the drone brakes to a stop and holds for the hold
+    /// the pilot flies, though on the ground only once armed; touchdown disarms, and so does the
+    /// gate closing on the ground, so motors never restart by themselves. When it closes in the air the drone brakes to a stop and holds for the hold
     /// duration, then descends straight down, flaring near the ground, until touchdown cuts the
     /// motors. Holding spends a hold budget that flying earns back at the same rate and landing
     /// refills, so a link that drops again soon after it returns resumes the hold where it left off
@@ -15,25 +16,29 @@ namespace DroneFlightModule.Core
         private const double TimeTolerance = 1e-6;
 
         private readonly IFlightGate gate;
+        private readonly ArmingSwitch arming;
         private readonly FailsafeConfig config;
         private readonly HorizontalSpeedController horizontalSpeed;
         private readonly VerticalSpeedController verticalSpeed;
         private double holdBudget;
+        private bool wasAirborne;
 
         public FlightSupervisor(
             IFlightGate gate,
+            ArmingSwitch arming,
             DroneConfig droneConfig,
             FailsafeConfig config,
             float gravity = DroneIntegrator.StandardGravity)
         {
             this.gate = gate ?? throw new ArgumentNullException(nameof(gate));
+            this.arming = arming ?? throw new ArgumentNullException(nameof(arming));
             this.config = config ?? throw new ArgumentNullException(nameof(config));
             horizontalSpeed = new HorizontalSpeedController(droneConfig, config.SpeedGain);
             verticalSpeed = new VerticalSpeedController(droneConfig, config.SpeedGain, gravity);
             holdBudget = config.HoldDuration;
         }
 
-        public FlightMode Mode { get; private set; } = FlightMode.Grounded;
+        public FlightMode Mode { get; private set; } = FlightMode.Disarmed;
         public double HoldTimeRemaining { get; private set; }
 
         public ForceCommand Supervise(
@@ -42,23 +47,35 @@ namespace DroneFlightModule.Core
             in AltitudeReading altitude,
             float deltaTime)
         {
+            if (state.IsGrounded && wasAirborne)
+            {
+                arming.Disarm();
+            }
+            wasAirborne = !state.IsGrounded;
+
             if (gate.IsFlightAllowed)
             {
                 holdBudget = state.IsGrounded ? config.HoldDuration : Math.Min(config.HoldDuration, holdBudget + deltaTime);
                 HoldTimeRemaining = 0;
-                Mode = state.IsGrounded ? FlightMode.Grounded : FlightMode.Piloted;
+                if (state.IsGrounded && !arming.IsArmed)
+                {
+                    Mode = FlightMode.Disarmed;
+                    return ForceCommand.None;
+                }
+                Mode = state.IsGrounded ? FlightMode.Armed : FlightMode.Piloted;
                 return pilotCommand;
             }
 
             if (state.IsGrounded)
             {
+                arming.Disarm();
                 holdBudget = config.HoldDuration;
                 HoldTimeRemaining = 0;
-                Mode = FlightMode.Grounded;
+                Mode = FlightMode.Disarmed;
                 return ForceCommand.None;
             }
 
-            if (Mode == FlightMode.Grounded || Mode == FlightMode.Piloted)
+            if (Mode != FlightMode.Holding && Mode != FlightMode.Descending)
             {
                 Mode = FlightMode.Holding;
                 HoldTimeRemaining = holdBudget;

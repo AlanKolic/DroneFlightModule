@@ -15,6 +15,7 @@ namespace DroneFlightModule.Coordination.Tests
             Id = new DroneId(id);
             Router = new InputRouter();
             Holder = new DroneGrantHolder(Router);
+            Arming = new ArmingSwitch();
             Gate = new AllOfFlightGate(new IFlightGate[] { new PilotInControlGate(Router), Holder });
 
             var terrain = new FlatTerrain();
@@ -25,16 +26,17 @@ namespace DroneFlightModule.Coordination.Tests
                 Id,
                 Router,
                 new VelocityFlightController(DroneConfig.Default, VelocityControllerConfig.Default),
-                new FlightSupervisor(Gate, DroneConfig.Default, FailsafeConfig.Default),
+                new FlightSupervisor(Gate, Arming, DroneConfig.Default, FailsafeConfig.Default),
                 new DroneIntegrator(DroneConfig.Default, terrain),
                 new RangefinderAltitudeSensor(terrain, RangefinderConfig.Default),
                 start);
-            Fleet = new FleetDrone(Id, Router, Holder, new FlightLoopStatus(Loop));
+            Fleet = new FleetDrone(Id, Router, Holder, Arming, new FlightLoopStatus(Loop));
         }
 
         public DroneId Id { get; }
         public InputRouter Router { get; }
         public DroneGrantHolder Holder { get; }
+        public ArmingSwitch Arming { get; }
         public IFlightGate Gate { get; }
         public FlightLoop Loop { get; }
         public FleetDrone Fleet { get; }

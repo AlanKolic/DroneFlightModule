@@ -105,6 +105,14 @@ namespace DroneFlightModule.UI.Tests
         }
 
         [Test]
+        public void ARefusedArm_ShowsInTheEvents()
+        {
+            fleet.Arm(TestFleet.Ace.Id);
+
+            StringAssert.Contains("ace can't arm: Unauthorized", readout.Events(1));
+        }
+
+        [Test]
         public void Events_NewestFirst_UpToTheCount()
         {
             Assert.That(readout.Events(5), Is.EqualTo("Nothing yet."));

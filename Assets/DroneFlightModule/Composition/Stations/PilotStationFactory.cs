@@ -1,6 +1,7 @@
 using System;
 using System.Threading;
 using DroneFlightModule.Coordination;
+using DroneFlightModule.Core;
 using UnityEngine.InputSystem;
 using Object = UnityEngine.Object;
 
@@ -15,17 +16,20 @@ namespace DroneFlightModule.Composition
         private readonly InputActionAsset template;
         private readonly FlightCoordinator coordinator;
         private readonly PilotSeating seating;
+        private readonly ISimulationClock clock;
         private readonly CancellationToken lifetime;
 
         public PilotStationFactory(
             InputActionAsset template,
             FlightCoordinator coordinator,
             PilotSeating seating,
+            ISimulationClock clock,
             CancellationToken lifetime)
         {
             this.template = template ?? throw new ArgumentNullException(nameof(template));
             this.coordinator = coordinator ?? throw new ArgumentNullException(nameof(coordinator));
             this.seating = seating ?? throw new ArgumentNullException(nameof(seating));
+            this.clock = clock ?? throw new ArgumentNullException(nameof(clock));
             this.lifetime = lifetime;
         }
 
@@ -33,7 +37,7 @@ namespace DroneFlightModule.Composition
         {
             var controls = Object.Instantiate(template);
             controls.bindingMask = InputBinding.MaskByGroup(group.BindingGroup);
-            return new PilotStation(name, device, controls, group.SilenceTimeout, coordinator, seating, lifetime);
+            return new PilotStation(name, device, controls, group.SilenceTimeout, new PatrolAutopilot(clock), coordinator, seating, lifetime);
         }
     }
 }

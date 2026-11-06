@@ -62,12 +62,14 @@ namespace DroneFlightModule.Coordination.Tests
         {
             var router = new InputRouter();
             var holder = new DroneGrantHolder(router);
+            var arming = new ArmingSwitch();
             var status = Drone("drone-2").Status;
 
-            Assert.Throws<ArgumentException>(() => new FleetDrone(default, router, holder, status));
-            Assert.Throws<ArgumentNullException>(() => new FleetDrone(new DroneId("drone-1"), null, holder, status));
-            Assert.Throws<ArgumentNullException>(() => new FleetDrone(new DroneId("drone-1"), router, null, status));
-            Assert.Throws<ArgumentNullException>(() => new FleetDrone(new DroneId("drone-1"), router, holder, null));
+            Assert.Throws<ArgumentException>(() => new FleetDrone(default, router, holder, arming, status));
+            Assert.Throws<ArgumentNullException>(() => new FleetDrone(new DroneId("drone-1"), null, holder, arming, status));
+            Assert.Throws<ArgumentNullException>(() => new FleetDrone(new DroneId("drone-1"), router, null, arming, status));
+            Assert.Throws<ArgumentNullException>(() => new FleetDrone(new DroneId("drone-1"), router, holder, null, status));
+            Assert.Throws<ArgumentNullException>(() => new FleetDrone(new DroneId("drone-1"), router, holder, arming, null));
         }
 
         [Test]

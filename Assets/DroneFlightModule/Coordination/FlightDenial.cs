@@ -1,7 +1,7 @@
 namespace DroneFlightModule.Coordination
 {
     /// <summary>
-    /// Why a flight request was refused.
+    /// Why a flight request or an arm was refused.
     /// </summary>
     public enum FlightDenial
     {
@@ -9,6 +9,7 @@ namespace DroneFlightModule.Coordination
         NotAuthorized,
         PilotDisconnected,
         UnknownDrone,
-        NoDroneAvailable
+        NoDroneAvailable,
+        NotArmed
     }
 }

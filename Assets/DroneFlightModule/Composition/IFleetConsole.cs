@@ -35,6 +35,10 @@ namespace DroneFlightModule.Composition
 
         void Release();
 
+        void ToggleArm();
+
+        void ToggleAutopilot();
+
         void RevokeGrant();
 
         void ToggleLink();

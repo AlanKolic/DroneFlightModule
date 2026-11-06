@@ -132,13 +132,11 @@ namespace DroneFlightModule.Editor
         private void CreateScope(FleetSettingsAsset settings, DroneView prefab, FollowCamera camera, Transform ground, InputActionAsset controls)
         {
             var scopeObject = new GameObject("Fleet Scope");
-            var hud = scopeObject.AddComponent<FlightDebugHud>();
             var scope = scopeObject.AddComponent<FleetLifetimeScope>();
 
             var serialized = new SerializedObject(scope);
             SetReference(serialized, "settings", settings);
             SetReference(serialized, "controls", controls);
-            SetReference(serialized, "debugHud", hud);
             SetReference(serialized, "followCamera", camera);
             SetReference(serialized, "groundPlane", ground);
             SetReference(serialized, "dronePrefab", prefab);

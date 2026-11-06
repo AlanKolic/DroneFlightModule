@@ -112,6 +112,7 @@ namespace DroneFlightModule.Composition.Tests
         public void TheKeyboard_FliesTheDroneItWasGiven()
         {
             Tap(keyboard.rKey);
+            Tap(keyboard.fKey);
 
             Press(keyboard.spaceKey);
             Run(grounded, 1f);

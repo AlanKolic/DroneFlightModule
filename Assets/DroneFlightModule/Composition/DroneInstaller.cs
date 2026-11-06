@@ -45,6 +45,7 @@ namespace DroneFlightModule.Composition
             builder.Register<IFlightGate, AllOfFlightGate>(Lifetime.Singleton)
                 .WithParameter<IReadOnlyList<IFlightGate>>(resolver =>
                     new IFlightGate[] { resolver.Resolve<PilotInControlGate>(), resolver.Resolve<DroneGrantHolder>() });
+            builder.Register<ArmingSwitch>(Lifetime.Singleton);
             builder.Register<FlightSupervisor>(Lifetime.Singleton)
                 .WithParameter("gravity", DroneIntegrator.StandardGravity);
 

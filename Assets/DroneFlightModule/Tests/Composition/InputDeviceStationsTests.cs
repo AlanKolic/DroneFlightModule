@@ -232,6 +232,196 @@ namespace DroneFlightModule.Composition.Tests
         }
 
         [Test]
+        public void TheArmKey_ArmsTheDrone()
+        {
+            Tap(keyboard.rKey);
+
+            Tap(keyboard.fKey);
+
+            Assert.That(grounded.Resolve<ArmingSwitch>().IsArmed, Is.True);
+        }
+
+        [Test]
+        public void TheArmKey_WithNoDrone_ReportsTheRefusal()
+        {
+            Tap(keyboard.fKey);
+
+            StringAssert.Contains("can't arm: Unauthorized", KeyboardStation.LastMessage);
+        }
+
+        [Test]
+        public void AnEmptyDesk_CantArmOrUseTheAutopilot()
+        {
+            var pad = InputSystem.AddDevice<Gamepad>();
+
+            Tap(pad.buttonWest);
+            Assert.That(StationOf(pad).LastMessage, Is.EqualTo("Nobody is at this desk."));
+
+            Tap(pad.dpad.down);
+            Assert.That(StationOf(pad).IsOnAutopilot, Is.False);
+        }
+
+        [Test]
+        public void TheAutopilotKey_SwapsTheSource_WithoutTouchingTheDrone()
+        {
+            Tap(keyboard.digit1Key);
+            float start = Height(airborne);
+
+            Tap(keyboard.tKey);
+            RunBoth(1f);
+
+            Assert.That(KeyboardStation.Describe(), Is.EqualTo("Keyboard: guest, Granted, autopilot, flying drone-1, connected"));
+            AssertFlownBy(airborne, Guest);
+            Assert.That(Height(airborne), Is.GreaterThan(start + 0.5f), "The routine climbs first.");
+        }
+
+        [Test]
+        public void Arming_RestartsARunningRoutine()
+        {
+            Tap(keyboard.rKey);
+            Tap(keyboard.tKey);
+            for (int i = 0; i < 4f / Time.fixedDeltaTime; i++)
+            {
+                Runner.FixedTick();
+            }
+
+            Tap(keyboard.fKey);
+            RunBoth(1f);
+
+            Assert.That(Height(grounded), Is.GreaterThan(GroundHeight + 0.2f), "Only a climb leaves the ground.");
+        }
+
+        [Test]
+        public void TheLinkKey_CutsTheAutopilot()
+        {
+            Tap(keyboard.digit1Key);
+            Tap(keyboard.tKey);
+
+            Tap(keyboard.lKey);
+            RunBoth(0.1f);
+
+            Assert.That(KeyboardStation.Link.IsConnected, Is.False);
+            Assert.That(airborne.Resolve<FlightLoop>().Mode, Is.EqualTo(FlightMode.Holding));
+        }
+
+        [Test]
+        public void ASeatChange_TurnsTheAutopilotOff()
+        {
+            Tap(keyboard.tKey);
+
+            KeyboardStation.SelectPilot(Ace);
+
+            Assert.That(KeyboardStation.IsOnAutopilot, Is.False);
+        }
+
+        [Test]
+        public void MovingDesks_FliesFromTheNewDesksDevice()
+        {
+            Tap(keyboard.digit1Key);
+            Tap(keyboard.tKey);
+            var pad = InputSystem.AddDevice<Gamepad>();
+
+            Seat(pad, Guest);
+
+            AssertFlownBy(airborne, Guest);
+            Assert.That(KeyboardStation.IsOnAutopilot, Is.False);
+            Assert.That(StationOf(pad).IsOnAutopilot, Is.False);
+            float start = Height(airborne);
+            Set(pad.leftStick, new Vector2(0f, -1f));
+            RunBoth(1f);
+            Assert.That(Height(airborne), Is.LessThan(start - 0.5f), "The pad flies now, not the routine.");
+        }
+
+        [Test]
+        public void RemovingTheDevice_TurnsTheAutopilotOff_AndTheDroneIsReleasedOnceLanded()
+        {
+            var pad = InputSystem.AddDevice<Gamepad>();
+            var station = StationOf(pad);
+            Seat(pad, Ace);
+            Tap(pad.dpad.left);
+            Tap(pad.dpad.down);
+
+            InputSystem.RemoveDevice(pad);
+
+            Assert.That(station.IsOnAutopilot, Is.False);
+            RunBoth(30f);
+            Runner.FixedTick();
+            AssertFree(airborne);
+        }
+
+        [Test]
+        public void TheAutopilot_CantStartAtADeskWhoseDeviceIsGone()
+        {
+            var pad = InputSystem.AddDevice<Gamepad>();
+            var station = StationOf(pad);
+            Seat(pad, Ace);
+            Tap(pad.dpad.left);
+            InputSystem.RemoveDevice(pad);
+
+            station.ToggleAutopilot();
+
+            Assert.That(station.IsOnAutopilot, Is.False);
+            Assert.That(station.Link.IsConnected, Is.False);
+        }
+
+        [Test]
+        public void AnIdlePad_LeavesTheAutopilotOn()
+        {
+            var pad = AddPad("pad-1");
+            Seat(pad, Ace);
+            Tap(pad.dpad.left);
+            Tap(pad.dpad.down);
+
+            currentTime += TestFleetSettings.SilenceTimeout + 1f;
+
+            Assert.That(StationOf(pad).IsOnAutopilot, Is.True);
+            Assert.That(StationOf(pad).Link.IsConnected, Is.True);
+        }
+
+        [Test]
+        public void TurningTheAutopilotOff_AfterAnIdlePad_KeepsTheLink()
+        {
+            var pad = AddPad("pad-1");
+            Seat(pad, Ace);
+            Tap(pad.dpad.left);
+            Tap(pad.dpad.down);
+            currentTime += TestFleetSettings.SilenceTimeout + 1f;
+
+            StationOf(pad).ToggleAutopilot();
+
+            Assert.That(StationOf(pad).Link.IsConnected, Is.True);
+        }
+
+        [Test]
+        public void AReturningPad_FliesWithTheAutopilotOff()
+        {
+            var pad = AddPad("pad-1");
+            var station = StationOf(pad);
+            Seat(pad, Ace);
+            Tap(pad.dpad.left);
+            Tap(pad.dpad.down);
+            InputSystem.RemoveDevice(pad);
+
+            InputSystem.AddDevice(pad);
+
+            Assert.That(station.IsOnAutopilot, Is.False);
+            Assert.That(station.Link.IsConnected, Is.True);
+        }
+
+        [Test]
+        public void TheConsole_ArmsAndTogglesTheSelectedDesk()
+        {
+            var console = fleet.Resolve<IFleetConsole>();
+            Tap(keyboard.rKey);
+
+            console.ToggleArm();
+            console.ToggleAutopilot();
+
+            Assert.That(grounded.Resolve<ArmingSwitch>().IsArmed, Is.True);
+            Assert.That(KeyboardStation.IsOnAutopilot, Is.True);
+        }
+
+        [Test]
         public void ChangingThePilot_CancelsAPendingRequest()
         {
             var slow = SlowServerFleet(out var coordinator);
@@ -336,6 +526,7 @@ namespace DroneFlightModule.Composition.Tests
             Assert.That(Height(airborne), Is.GreaterThan(start + 0.5f), "The pad climbs its own drone.");
             Assert.That(grounded.Resolve<FlightLoop>().State.IsGrounded, Is.True, "The pad never reaches the keyboard's drone.");
 
+            Tap(keyboard.fKey);
             Press(keyboard.spaceKey);
             RunBoth(1f);
             Release(keyboard.spaceKey);
@@ -355,6 +546,7 @@ namespace DroneFlightModule.Composition.Tests
             AssertFlownBy(grounded, Ace);
             AssertFlownBy(airborne, Guest);
 
+            Tap(first.buttonWest);
             Set(first.leftStick, new Vector2(0f, 1f));
             RunBoth(1f);
 

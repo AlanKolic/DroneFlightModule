@@ -30,6 +30,8 @@ The full design is in
 | Request any drone | R | South button |
 | Request drone 1, 2 or 3 | 1 / 2 / 3 | D-pad left / up / right |
 | Release the drone | X | East button |
+| Arm or disarm a grounded drone | F | West button |
+| Swap this desk between its device and the autopilot | T | D-pad down |
 | Seat the next free pilot here (the pilot here leaves and lets go of their drone) | P | Start |
 | Make the server revoke your grant | V | North button |
 | Cut or restore the station's link | L | Select |
@@ -51,8 +53,8 @@ with no drone loses its station. Adding and removing drones and the dashboard st
 keyboard, since they act on the whole fleet. The HUD lists the stations.
 
 **The screen panel** is one more input device: pick "Screen panel" in the control panel's station
-dropdown and on-screen flight buttons appear at the bottom left. Pick a pilot, Request a drone, then
-hold the buttons to fly. They drive a virtual gamepad, so the panel has its own station like any other
+dropdown and on-screen flight buttons appear at the bottom left. Pick a pilot, Request a drone, press
+Arm, then hold the buttons to fly. They drive a virtual gamepad, so the panel has its own station like any other
 device, once you pick a pilot for it, and pressing a key or pad button elsewhere doesn't affect
 it. A mouse holds one button at a time, so moves can't be combined.
 
@@ -78,7 +80,8 @@ where the latest outcome shows: what you asked for, a denial, or that someone to
 ## What to try
 
 1. Press **R**: the guest gets a free drone, grounded ones first. The camera follows it.
-2. Take off with Space, fly around, let go: the drone stops and hovers.
+2. Press **F** to arm it, then take off with Space, fly around, let go: the drone stops and
+   hovers. Until you arm, a grounded drone ignores the sticks, and touchdown disarms it again.
 3. Press **2** or **3** to switch drones. You get the new one first, then the old one is
    released, so an airborne drone you leave holds for 10 s and lands by itself.
 4. Press **L** to simulate losing the pilot's link. The dashboard shows **Holding** and counts
@@ -92,20 +95,28 @@ where the latest outcome shows: what you asked for, a denial, or that someone to
 7. Press **N** to add a drone next to the others. It joins the fleet at once and is free, so
    **R** can give it to you. **M** removes the newest drone; if you were flying it, it's
    released first and the control panel tells you.
-8. Press **P** twice, then **R**, to fly as John through the server. **V** makes the server revoke
+8. Press **P** twice, then **R** and **F**, to fly as John through the server. **V** makes the server revoke
    John's grant: the drone is released at once and the failsafe takes over.
 9. Take a drone over: press **P** twice to get back to the guest, then press **1**. In the control panel choose the Screen panel
    station, pick John, choose drone-1 and press **Request**. John outranks the guest, so he takes
    it, the guest is preempted, and the dashboard counts one takeover for John and one preemption
    for the guest.
 10. Plug in a gamepad: it appears in the HUD as `Gamepad`, empty. Press Start to seat a pilot,
-    then **R** on the keyboard and **South** on the pad, and the two fly separate drones at once.
+    then **R** and **F** on the keyboard and **South** and **West** on the pad, and the two fly
+    separate drones at once.
     Unplug the pad and its drone holds, then lands; plug it back in within the hold to take over
     again.
 11. Watch the fleet dashboard on the right: every drone's pilot, authorization state, mode,
    measured and true height, speed, position and heading; each pilot's authorization state
    and stats; and the latest events, denials included. **Tab** hides it.
-12. Or skip the keys: in the control panel, pick a pilot and a drone and press **Request**.
+12. Or skip the keys: in the control panel, pick a pilot and a drone and press **Request**, then
+    **Arm**.
+13. See the gate refuse: release your drone with **X** and press **F**. Nothing arms, the desk says
+    why, and the dashboard's events show the refusal.
+14. Swap the input in mid-flight: while flying, press **T**. The same pilot and drone now fly a
+    climbing square from the autopilot, with nothing rebuilt. **T** gives you back your device,
+    **L** still cuts the link, and unplugging the device turns the autopilot off, so the failsafe
+    lands the drone. The autopilot can't arm: on the ground it waits for **F**, then takes off.
 
 ## How it fits together
 
@@ -124,13 +135,13 @@ share: the coordinator, pilots and stats, the providers, and a pilot station per
 | Assembly | Depends on | Role |
 |---|---|---|
 | `Core` | nothing (`noEngineReferences`) | Math, state, input routing, controllers, gates, failsafe supervisor, rangefinder, integrator, `FlightLoop` |
-| `Unity` | Core, Input System | Input-actions provider, drone view with interpolation, debug HUD (stations and controls), follow camera |
+| `Unity` | Core, Input System | Input-actions provider, drone view with interpolation, follow camera |
 | `Pilots` | Core | Pilot profiles and priorities, registry with a built-in guest, stats and their recorder |
 | `Authorization` | Core | Providers (local guest, simulated server that can revoke), revocable grants, per-drone grant holder gate |
 | `Telemetry` | Core | A recorder per drone sampling its flight at 10 Hz, sinks (a fleet-wide in-memory sink of the latest samples) |
 | `Coordination` | Core, Pilots, Authorization | `FlightCoordinator`: pilot sessions, drone registry, request pipeline, priority assignment policy, takeover and release, stats from its events |
 | `Composition` | everything above, VContainer, Input System | Fleet scope and installer, config assets mapped to `FleetSettings`, `DroneInstantiator` (adds and removes drones, one child scope each), a pilot station per input device, `FleetKeys` (fleet-wide keys), the `IFleetConsole` a panel drives, runners (the only places Unity's clock reaches the sim) |
-| `UI` | Core, Unity, Pilots, Coordination, Telemetry, Composition, VContainer, Input System | Fleet dashboard, control panel and on-screen flight buttons in their own child scope; nothing references it, so it can be deleted |
+| `UI` | Core, Unity, Pilots, Coordination, Telemetry, Composition, VContainer, Input System | Fleet dashboard, debug HUD, control panel and on-screen flight buttons in their own child scope; nothing references it, so it can be deleted |
 | `Editor` | the above | Menu item that builds the prototype scene |
 | `*.Tests` | their target | EditMode tests |
 
@@ -200,20 +211,20 @@ Three others are added elsewhere:
 
 ## Tests
 
-- **Core**: 126 tests run headless in milliseconds. Unit tests for every class, plus
+- **Core**: 143 tests run headless in milliseconds. Unit tests for every class, plus
   closed-loop flights: hover, climb rate, top speed, hold for exactly 10 s, braking to a stop
   when the link drops at full speed, flared landing below 0.3 m/s, a closed gate on the ground
   blocking takeoff, sampling that averages its rate on any tick step, and a loop that starts
   at the fleet's time.
 - **Unity**: input bindings through `InputTestFixture` (keyboard and gamepad, the shipped
-  asset), the interpolator, the chase camera and the HUD's text.
+  asset), the interpolator and the chase camera.
 - **Pilots**: 24 tests for profiles, the registry's guest and priority rules, and stats
   recording across flights and takeovers.
 - **Authorization**: 38 tests for grants and revocation, the grant holder (a grant for one pilot
   never opens the gate for another), guest mode, and the server's latency, policy changes,
   cancellation and disposal. Async code runs with no synchronization context and a hand-completed
   delay, so the tests are synchronous and never sleep.
-- **Coordination**: 78 tests on real flight loops: assignment preferring grounded drones, priority
+- **Coordination**: 90 tests on real flight loops: assignment preferring grounded drones, priority
   takeover with the gate open on every tick, equal priority never taking over, switching drones,
   denied switches, keeping your drone on "any drone", a second session for the same pilot, ending
   and re-routing sessions, a throwing listener that can't interrupt a switch or reach a revoker,
@@ -221,10 +232,10 @@ Three others are added elsewhere:
   landed drone released, cancelled and superseded requests, decisions on the fleet as it is once
   authorization completes, the drones joining and leaving at any time, the policy on its own, and
   stats timed by the simulation clock.
-- **Dashboard**: 37 tests for the event log, the readout's text (run in a comma-decimal culture to
+- **Dashboard**: 42 tests for the event log, the readout's text (run in a comma-decimal culture to
   keep the formatting invariant), Tab toggling the dashboard, and the control panel's pilot and
-  drone choices, labels that follow a takeover, the status line, and the screen panel's virtual
-  gamepad.
+  drone choices, labels that follow a takeover, the status line, the screen panel's virtual
+  gamepad, and the HUD's text.
 - **Telemetry**: 14 tests for sampling on simulation time, sink fan-out, a failing sink never
   breaking the flight, streams ending with the drone, and the in-memory sink.
 - **Composition**: the real fleet container with two drone scopes, driven by key presses: each

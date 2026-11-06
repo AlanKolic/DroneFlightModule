@@ -15,16 +15,20 @@ namespace DroneFlightModule.Composition
     /// keys. Who sits here is <see cref="PilotSeating"/>'s to decide, and while nobody does there
     /// is no session and the flying actions only say so. It knows nothing of other stations; they
     /// meet only in the coordinator. Its link can be cut, and it reports no pilot while its device
-    /// is unplugged or silent. It keeps the latest outcome for display, including the pilot here
-    /// losing their drone. Disposing stops listening and destroys its controls.
+    /// is unplugged or silent. Its pilot can swap the device for the autopilot under the same link,
+    /// so the link still cuts it; any change of pilot turns the autopilot off. It keeps the latest
+    /// outcome for display, including the pilot here losing their drone. Disposing stops listening
+    /// and destroys its controls.
     /// </summary>
-    public sealed class PilotStation : IStationStatus, IDisposable
+    public sealed class PilotStation : IDisposable
     {
         private const string NobodyHere = "Nobody is at this desk.";
 
         private readonly FlightCoordinator coordinator;
         private readonly InputActionAsset controls;
         private readonly InputActionInputProvider input;
+        private readonly SwitchableInputProvider source;
+        private readonly PatrolAutopilot autopilot;
         private readonly StationKeys keys;
         private readonly ObjectDestroyer destroyer = new ObjectDestroyer();
         private readonly PilotSeating seating;
@@ -35,6 +39,7 @@ namespace DroneFlightModule.Composition
             InputDevice device,
             InputActionAsset controls,
             float silenceTimeout,
+            PatrolAutopilot autopilot,
             FlightCoordinator coordinator,
             PilotSeating seating,
             CancellationToken lifetime)
@@ -46,13 +51,15 @@ namespace DroneFlightModule.Composition
             Name = name;
             Device = device ?? throw new ArgumentNullException(nameof(device));
             this.controls = controls ?? throw new ArgumentNullException(nameof(controls));
+            this.autopilot = autopilot ?? throw new ArgumentNullException(nameof(autopilot));
             this.coordinator = coordinator ?? throw new ArgumentNullException(nameof(coordinator));
             this.seating = seating ?? throw new ArgumentNullException(nameof(seating));
             this.lifetime = lifetime;
 
             input = new InputActionInputProvider(controls, silenceTimeout);
             input.Attach(device);
-            Link = new DisconnectableInputProvider(input);
+            source = new SwitchableInputProvider(input);
+            Link = new DisconnectableInputProvider(source);
             keys = new StationKeys(controls, this);
 
             coordinator.Released += OnReleased;
@@ -63,6 +70,7 @@ namespace DroneFlightModule.Composition
         public InputDevice Device { get; private set; }
         public DisconnectableInputProvider Link { get; }
         public PilotSession Session { get; private set; }
+        public bool IsOnAutopilot { get; private set; }
         public string LastMessage { get; private set; } = "Pick a pilot for this desk.";
         public string LinkStatus => Link.IsLinkCut ? "link cut" : Link.IsConnected ? "connected" : "disconnected";
 
@@ -74,6 +82,7 @@ namespace DroneFlightModule.Composition
 
         internal void Occupy(PilotSession session)
         {
+            StopAutopilot();
             Session = session;
             // A pilot sitting down hasn't touched the device yet, and an idle pad would count as silent.
             if (session != null)
@@ -94,7 +103,8 @@ namespace DroneFlightModule.Composition
                 return $"{Name}: empty, {LinkStatus}";
             }
             string flying = TryGetDrone(out var drone) ? $"flying {drone}" : "no drone";
-            return $"{Name}: {Session.PilotId}, {coordinator.AuthorizationOf(Session.PilotId)}, {flying}, {LinkStatus}";
+            string steering = IsOnAutopilot ? "autopilot, " : string.Empty;
+            return $"{Name}: {Session.PilotId}, {coordinator.AuthorizationOf(Session.PilotId)}, {steering}{flying}, {LinkStatus}";
         }
 
         public bool HoldsADrone => TryGetDrone(out _);
@@ -145,6 +155,59 @@ namespace DroneFlightModule.Composition
             bool released = coordinator.Release(Session);
             LastMessage = released ? "Released the drone." : "Not flying a drone.";
             return released;
+        }
+
+        public void ToggleArm()
+        {
+            if (Session == null)
+            {
+                LastMessage = NobodyHere;
+                return;
+            }
+            var result = coordinator.ToggleArm(Session);
+            LastMessage = result.Message;
+            // A resting drone only leaves the ground on the routine's climb.
+            if (result.IsArmed && IsOnAutopilot)
+            {
+                autopilot.Restart();
+            }
+        }
+
+        public void ToggleAutopilot()
+        {
+            if (Session == null)
+            {
+                LastMessage = NobodyHere;
+                return;
+            }
+            if (IsOnAutopilot)
+            {
+                StopAutopilot();
+                LastMessage = "Autopilot off.";
+                return;
+            }
+            // A lost device must not keep its drone: the failsafe lands it and it is released.
+            if (!Device.added)
+            {
+                LastMessage = "The device is gone, so the autopilot can't start.";
+                return;
+            }
+            autopilot.Restart();
+            source.Use(autopilot);
+            IsOnAutopilot = true;
+            LastMessage = "Autopilot on.";
+        }
+
+        public void StopAutopilot()
+        {
+            if (!IsOnAutopilot)
+            {
+                return;
+            }
+            source.Use(input);
+            IsOnAutopilot = false;
+            // The device sat idle under the routine, and would count as silent.
+            input.ResetSilence();
         }
 
         public void SwitchPilot()

@@ -16,7 +16,9 @@ namespace DroneFlightModule.Coordination
     /// not connected when the answer arrives is refused, so a drone never goes to a pilot who
     /// cannot fly it. A drone that has landed with no connected pilot is released, so a lost
     /// device does not hold it forever. It keeps each pilot's <see cref="AuthorizationState"/> for
-    /// display; a pilot flying a drone stays Granted whatever becomes of a further request. Each
+    /// display; a pilot flying a drone stays Granted whatever becomes of a further request. A drone
+    /// is armed only through <see cref="ToggleArm"/>, which refuses a pilot with no drone, and its
+    /// switch clears whenever it changes hands. Each
     /// change of who flies what, and each denial, is raised as an event once the change is complete;
     /// a listener that throws is reported through ListenerFailed and cannot undo or interrupt it.
     /// </summary>
@@ -142,6 +144,33 @@ namespace DroneFlightModule.Coordination
         {
             ReleaseDrone(drone, ReleaseReason.Removed);
             return drones.Remove(drone);
+        }
+
+        // Only on the ground: a drone in the air needs no arming, and disarming it would drop it.
+        public ArmingResult ToggleArm(PilotSession session)
+        {
+            if (session == null)
+            {
+                throw new ArgumentNullException(nameof(session));
+            }
+            if (!TryGetDrone(session, out var droneId))
+            {
+                string refusal = $"{session.PilotId} can't arm: {AuthorizationOf(session.PilotId)}.";
+                Raise(Denied, new FlightDenied(session.PilotId, null, FlightDenial.NotArmed, refusal));
+                return new ArmingResult(false, refusal);
+            }
+            var drone = assignments[droneId].Drone;
+            if (!drone.Status.IsGrounded)
+            {
+                return new ArmingResult(false, $"{droneId} is in the air, so arming doesn't apply.");
+            }
+            if (drone.Arming.IsArmed)
+            {
+                drone.Arming.Disarm();
+                return new ArmingResult(false, $"{droneId} is disarmed.");
+            }
+            drone.Arming.Arm();
+            return new ArmingResult(true, $"{droneId} is armed.");
         }
 
         // The request ends with an OperationCanceledException and raises no event.
@@ -285,6 +314,10 @@ namespace DroneFlightModule.Coordination
             if (assignments.TryGetValue(drone.Id, out var replaced))
             {
                 replaced.Revocation.Dispose();
+                if (replaced.Session != session)
+                {
+                    drone.Arming.Disarm();
+                }
             }
             drone.Holder.Install(grant);
             drone.Router.Assign(session.PilotId, session.Input);
@@ -316,6 +349,7 @@ namespace DroneFlightModule.Coordination
             assignment.Revocation.Dispose();
             assignment.Drone.Holder.Clear();
             assignment.Drone.Router.Clear();
+            assignment.Drone.Arming.Disarm();
             return assignment;
         }
 

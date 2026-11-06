@@ -839,6 +839,154 @@ namespace DroneFlightModule.Coordination.Tests
             Assert.That(coordinator.AuthorizationOf(Alice), Is.EqualTo(AuthorizationState.Unauthorized));
         }
 
+        [Test]
+        public void ToggleArm_WithAGrant_ArmsTheDrone()
+        {
+            var session = Session(Alice);
+            Request(session, grounded.Id);
+
+            var result = coordinator.ToggleArm(session);
+
+            Assert.That(result.IsArmed, Is.True);
+            Assert.That(grounded.Arming.IsArmed, Is.True);
+        }
+
+        [Test]
+        public void ToggleArm_WithNoDrone_IsRefused_AndRaisesDenied()
+        {
+            var result = coordinator.ToggleArm(Session(Alice));
+
+            Assert.That(result.IsArmed, Is.False);
+            StringAssert.Contains("can't arm: Unauthorized", result.Message);
+            Assert.That(denied[0].Denial, Is.EqualTo(FlightDenial.NotArmed));
+            Assert.That(denied[0].Preferred, Is.Null);
+        }
+
+        [Test]
+        public void ToggleArm_WhileARequestIsPending_SaysPending()
+        {
+            provider.AnswersAtOnce = false;
+            var session = Session(Alice);
+            Start(session, grounded.Id);
+
+            var result = coordinator.ToggleArm(session);
+
+            StringAssert.Contains("can't arm: Pending", result.Message);
+            Assert.That(grounded.Arming.IsArmed, Is.False);
+        }
+
+        [Test]
+        public void ToggleArm_AfterRevocation_SaysRevoked()
+        {
+            var session = Session(Alice);
+            Request(session, grounded.Id);
+            provider.Revoke(Alice);
+
+            StringAssert.Contains("can't arm: Revoked", coordinator.ToggleArm(session).Message);
+        }
+
+        [Test]
+        public void ToggleArm_OnTheGround_Disarms()
+        {
+            var session = Session(Alice);
+            Request(session, grounded.Id);
+            coordinator.ToggleArm(session);
+
+            var result = coordinator.ToggleArm(session);
+
+            Assert.That(result.IsArmed, Is.False);
+            Assert.That(grounded.Arming.IsArmed, Is.False);
+        }
+
+        [Test]
+        public void ToggleArm_InTheAir_IsRefused()
+        {
+            var session = Session(Alice);
+            Request(session, airborne.Id);
+            airborne.Tick();
+
+            var result = coordinator.ToggleArm(session);
+
+            StringAssert.Contains("in the air", result.Message);
+            AssertFlying(Alice, airborne);
+            Assert.That(airborne.Gate.IsFlightAllowed, Is.True);
+        }
+
+        [Test]
+        public void Releasing_ClearsTheSwitch()
+        {
+            var session = Session(Alice);
+            Request(session, grounded.Id);
+            coordinator.ToggleArm(session);
+
+            coordinator.Release(session);
+
+            Assert.That(grounded.Arming.IsArmed, Is.False);
+        }
+
+        [Test]
+        public void AGroundedTakeover_LeavesTheDroneDisarmed()
+        {
+            var alice = Session(Alice);
+            Request(alice, grounded.Id);
+            coordinator.ToggleArm(alice);
+
+            Request(Session(Bob), grounded.Id);
+
+            Assert.That(grounded.Arming.IsArmed, Is.False);
+        }
+
+        [Test]
+        public void RevokedOnTheGround_ThenGrantedAgain_StaysDisarmed()
+        {
+            var session = Session(Alice);
+            Request(session, grounded.Id);
+            coordinator.ToggleArm(session);
+            provider.Revoke(Alice);
+
+            Request(session, grounded.Id);
+
+            Assert.That(grounded.Arming.IsArmed, Is.False);
+        }
+
+        [Test]
+        public void RequestingYourOwnDrone_KeepsItArmed()
+        {
+            var session = Session(Alice);
+            Request(session, grounded.Id);
+            coordinator.ToggleArm(session);
+
+            Request(session, grounded.Id);
+
+            Assert.That(grounded.Arming.IsArmed, Is.True);
+        }
+
+        [Test]
+        public void Reroute_KeepsItArmed()
+        {
+            var session = Session(Alice);
+            Request(session, grounded.Id);
+            coordinator.ToggleArm(session);
+            session.MoveTo(new ScriptedInput());
+
+            coordinator.Reroute(session);
+
+            Assert.That(grounded.Arming.IsArmed, Is.True);
+        }
+
+        [Test]
+        public void AnAirborneTakeover_KeepsFlying()
+        {
+            Request(Session(Alice), airborne.Id);
+            airborne.Tick();
+
+            Request(Session(Bob), airborne.Id);
+            airborne.Tick();
+
+            Assert.That(airborne.Gate.IsFlightAllowed, Is.True);
+            Assert.That(airborne.Loop.Mode, Is.EqualTo(FlightMode.Piloted));
+        }
+
         private sealed class RevokedGrantProvider : IAuthorizationProvider
         {
             private readonly GrantLedger grants = new GrantLedger("revoking-provider");

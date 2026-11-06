@@ -19,7 +19,7 @@ namespace DroneFlightModule.Telemetry.Tests
         private FlightFrame Sample(DroneId drone, double time)
         {
             return new FlightFrame(drone, time, ControlInput.Zero, ForceCommand.None, new DroneState(Vec3.Zero),
-                AltitudeReading.Invalid, FlightMode.Grounded, 0.0);
+                AltitudeReading.Invalid, FlightMode.Disarmed, 0.0);
         }
 
         [Test]

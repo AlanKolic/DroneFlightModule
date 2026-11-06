@@ -24,10 +24,10 @@ extensibility, boundary separation and testability.
 flowchart TB
     subgraph Roots["Composition roots and UI (Unity)"]
         Comp["Composition<br/>fleet scope, drone scopes, runner"]
-        UI["UI<br/>Fleet dashboard, child scope"]
+        UI["UI<br/>Fleet dashboard, HUD, child scope"]
     end
     subgraph Adapters["Unity adapters"]
-        Unity["Unity<br/>Input actions, devices, view, HUD"]
+        Unity["Unity<br/>Input actions, devices, view"]
     end
     subgraph Services["Services (pure C#)"]
         Coord["Coordination"]
@@ -53,9 +53,9 @@ flowchart TB
 | `DroneFlightModule.Authorization` | Core | Providers, revocable grants, per-drone grant holder and gate |
 | `DroneFlightModule.Coordination` | Core, Pilots, Authorization | `FlightCoordinator`, pilot sessions, drone registry, assignment policy, stats recording |
 | `DroneFlightModule.Telemetry` | Core | Recorder per drone sampling `FlightLoop.Ticked`, `ITelemetrySink` and the in-memory sink of the latest samples |
-| `DroneFlightModule.Unity` | Core, Input System | Input-actions provider (keyboard and gamepad), smoothed drone view, debug HUD, follow camera, Core-to-Unity conversions |
+| `DroneFlightModule.Unity` | Core, Input System | Input-actions provider (keyboard and gamepad), smoothed drone view, follow camera, Core-to-Unity conversions |
 | `DroneFlightModule.Composition` | everything except UI, plus VContainer and Input System | Fleet `LifetimeScope`, one child scope per drone, installers, the config assets and the `FleetSettings` they map to, a `PilotStation` per input device and the `InputDeviceStations` that makes them, `FleetKeys` (the fleet-wide keys), the `IFleetConsole` contract a control panel drives, `FlightLoopRunner` and `FleetRunner` (the only places Unity's clock reaches the simulation) |
-| `DroneFlightModule.UI` | Core, Unity, Coordination, Pilots, Telemetry, Composition, VContainer, Input System | Fleet dashboard, control panel and on-screen flight buttons (IMGUI) in their own child scope |
+| `DroneFlightModule.UI` | Core, Unity, Coordination, Pilots, Telemetry, Composition, VContainer, Input System | Fleet dashboard, debug HUD, control panel and on-screen flight buttons (IMGUI) in their own child scope |
 | `DroneFlightModule.Editor` | Core, Unity, Composition, VContainer | Editor-only tools, such as the menu item that builds the prototype scene |
 | `*.Tests` (one per assembly) | Its target + NUnit | Edit-mode tests, in `Tests/`; the UI's are in `UI/Tests` |
 
@@ -136,13 +136,16 @@ directly. Flight logic (supervisor, telemetry, dashboard) only sees sensor readi
 
 ```mermaid
 stateDiagram-v2
-    [*] --> Grounded
-    Grounded --> Piloted: gate opens and pilot gives input
+    [*] --> Disarmed
+    Disarmed --> Armed: pilot with a grant arms
+    Armed --> Disarmed: pilot disarms, or gate closes
+    Armed --> Piloted: pilot takes off
+    Piloted --> Disarmed: touchdown
     Piloted --> Holding: gate closes while airborne
     Holding --> Piloted: gate reopens (countdown paused)
     Holding --> Descending: 10 s countdown reaches 0
     Descending --> Piloted: gate reopens
-    Descending --> Grounded: contact flag set (motors off)
+    Descending --> Disarmed: contact flag set (motors off)
 ```
 
 - `FlightSupervisor` (Core) owns the mode, the countdown and the hold/descent command. Each tick
@@ -158,7 +161,15 @@ stateDiagram-v2
 - **Invalid altitude reading** (out of range or failed): the drone keeps descending at a constant
   safe rate of 0.5 m/s. Touchdown is still detected by the contact flag, so a broken sensor
   can't keep the drone in the air.
-- **Touchdown:** when `IsGrounded` becomes true, the motors cut and the mode becomes Grounded.
+- **Touchdown:** when `IsGrounded` becomes true, the motors cut, the drone disarms and the mode
+  becomes Disarmed.
+- **Arming:** `ArmingSwitch` (Core, one per drone) holds whether the pilot wants the motors on. The
+  supervisor reads it only on the ground, so a drone in the air needs no arming and a takeover
+  never closes the gate. It disarms at touchdown and when the gate closes on the ground, so motors
+  never restart by themselves. `FlightCoordinator.ToggleArm(session)` is the only outside way to
+  set it: with no drone it refuses, naming the pilot's `AuthorizationState`, and raises `Denied`
+  with `FlightDenial.NotArmed`, so the event log shows the gate refusing; in the air it changes
+  nothing. The switch clears whenever a drone is released or changes hands.
 - **Vertical speed** comes from the true velocity for now, as a placeholder until there is a
   velocity or IMU sensor.
 - The countdown runs on **simulation time** (it decrements by `deltaTime`), so it pauses with the
@@ -438,6 +449,8 @@ break the Core boundary. All async code uses `Task` and `CancellationToken`.
   - R, South: request any drone
   - 1–3, D-pad left, up and right: request `drone-1` to `drone-3`, by id
   - X, East: release
+  - F, West: arm or disarm the drone on the ground
+  - T, D-pad down: swap the desk between its device and the autopilot
   - P, Start: seat the next free pilot here, then nobody, then round again; the pilot here leaves
     and lets go of their drone, and a pilot at another desk is skipped, because moving them is
     the control panel's explicit choice
@@ -445,6 +458,12 @@ break the Core boundary. All async code uses `Task` and `CancellationToken`.
   - L, Select: cut or restore the station's link
   - N: add a drone (keyboard only, fleet-wide)
   - M: remove the newest drone (keyboard only, fleet-wide)
+- **Autopilot:** a desk reads its device through a `SwitchableInputProvider` under its `Link`, so
+  it can swap to its `PatrolAutopilot` under a flying drone with the pilot, grant and drone
+  unchanged, and the link still cuts it. The routine is plain stick values from the simulation
+  clock, which is why `ISimulationClock` lives in Core. It climbs, then flies a square, and it
+  restarts on switching on and on arming, because only a climb leaves the ground. A change of pilot
+  or a removed device turns it off; an idle device doesn't.
 - **View:** each drone's cube follows its own loop; the HUD has a line per station and one box for
   the controls; `StationFollowCamera` checks each frame and follows the drone of the station the
   console has chosen. A station's full status shows in the control panel.
@@ -585,7 +604,8 @@ matters only to the composition root that built it.
   on the keyboard. Gamepad bindings: sticks as today, South to request any drone, D-pad left, up
   and right for drones 1 to 3, East to release, Start to switch pilot, North to revoke the grant,
   Select to cut the link.
-- **UI:** the HUD shows a line per station (`IStationStatus`: name, pilot, drone, link), the
+- **UI:** the HUD, in the `UI` assembly so it goes with the rest, shows a line per station (name,
+  pilot, authorization, autopilot, drone, link), the
   control panel adds a station dropdown and drives the chosen one, and the camera follows that
   station's drone.
 - **The screen panel** (`ScreenFlightPanel`, in UI) is a virtual gamepad of its own layout,
@@ -594,8 +614,8 @@ matters only to the composition root that built it.
   and placed before the Gamepad entry, because its layout is based on Gamepad and the first match
   wins. The panel adds the device when bound and removes it when destroyed, and a held button
   becomes a stick value through `QueueStateEvent`. The buttons show only while the console's chosen
-  station is on that device, and hide with the sticks centred. Requesting and releasing go through
-  the control panel. The layout lives in the Unity assembly, so the asset entry stays valid with
+  station is on that device, and hide with the sticks centred. Requesting, arming and releasing go
+  through the control panel. The layout lives in the Unity assembly, so the asset entry stays valid with
   the UI deleted; no such device is then made.
 - **A new device type** is a control scheme with its bindings in the controls asset and one
   more entry in `InputDevicesAsset`. No code changes at all.

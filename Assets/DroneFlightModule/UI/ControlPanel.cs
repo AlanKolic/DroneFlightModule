@@ -32,7 +32,7 @@ namespace DroneFlightModule.UI
         private const float RowHeight = 24f;
         private const float Padding = 16f;
         // Three dropdowns, two rows of buttons, and one row of slack for the skin's spacing.
-        private const int FixedRows = 6;
+        private const int FixedRows = 7;
 
         [SerializeField] private float width = 340f;
         [SerializeField] private float margin = 15f;
@@ -180,6 +180,17 @@ namespace DroneFlightModule.UI
             if (GUILayout.Button("Revoke grant"))
             {
                 console.RevokeGrant();
+            }
+            GUILayout.EndHorizontal();
+
+            GUILayout.BeginHorizontal();
+            if (GUILayout.Button("Arm"))
+            {
+                console.ToggleArm();
+            }
+            if (GUILayout.Button("Autopilot"))
+            {
+                console.ToggleAutopilot();
             }
             GUILayout.EndHorizontal();
 

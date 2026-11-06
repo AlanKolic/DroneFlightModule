@@ -86,6 +86,16 @@ namespace DroneFlightModule.Composition
             Selected?.Release();
         }
 
+        public void ToggleArm()
+        {
+            Selected?.ToggleArm();
+        }
+
+        public void ToggleAutopilot()
+        {
+            Selected?.ToggleAutopilot();
+        }
+
         public void RevokeGrant()
         {
             Selected?.RevokeServerGrant();

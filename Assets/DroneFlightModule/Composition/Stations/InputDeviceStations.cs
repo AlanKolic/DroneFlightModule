@@ -14,7 +14,7 @@ namespace DroneFlightModule.Composition
     /// device object: the Editor can keep a stale entry of a pad that disconnected unseen, and the
     /// pad then connects as a second device, which takes over the stale entry's station. Unplugging
     /// a device, or its going silent past its group's timeout, is link loss, and the failsafe takes
-    /// over. While a gone device's pilot still holds a drone its station waits, and the pad resumes
+    /// over; unplugging also turns the station's autopilot off, so a lost device can't fly on. While a gone device's pilot still holds a drone its station waits, and the pad resumes
     /// it on returning. Once a gone device holds no drone its pilot leaves and its station is
     /// removed. A new station takes the guest if nobody has them, and otherwise starts empty.
     /// Disposing disposes every station.
@@ -86,11 +86,14 @@ namespace DroneFlightModule.Composition
         // The Input System raises Added for a device that comes back too, before Reconnected.
         private void OnDeviceChange(InputDevice device, InputDeviceChange change)
         {
-            if (change != InputDeviceChange.Added)
+            if (change == InputDeviceChange.Added)
             {
-                return;
+                Connect(device);
             }
-            Connect(device);
+            else if (change == InputDeviceChange.Removed)
+            {
+                stations.Find(station => station.Device == device)?.StopAutopilot();
+            }
         }
 
         private void Connect(InputDevice device)

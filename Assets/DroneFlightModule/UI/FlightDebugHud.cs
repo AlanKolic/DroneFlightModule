@@ -1,9 +1,10 @@
 using System;
 using System.Collections.Generic;
+using DroneFlightModule.Composition;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
-namespace DroneFlightModule.Unity
+namespace DroneFlightModule.UI
 {
     /// <summary>
     /// On-screen debug readout at the top left: a box per pilot station, and below them the
@@ -20,7 +21,7 @@ namespace DroneFlightModule.Unity
         [SerializeField] private Vector2 stationBoxSize = new Vector2(400f, 26f);
         [SerializeField] private float spacing = 10f;
 
-        private readonly List<IStationStatus> stations = new List<IStationStatus>();
+        private readonly List<PilotStation> stations = new List<PilotStation>();
         private readonly List<string> stationTexts = new List<string>();
         private Vector2 controlsBoxSize;
         private GUIStyle boxText;
@@ -45,6 +46,8 @@ namespace DroneFlightModule.Unity
                 Describe(controls, "Fleet/RequestDrone2", "request drone 2"),
                 Describe(controls, "Fleet/RequestDrone3", "request drone 3"),
                 Describe(controls, "Fleet/Release", "release the drone"),
+                Describe(controls, "Fleet/Arm", "arm or disarm the drone"),
+                Describe(controls, "Fleet/ToggleAutopilot", "autopilot on or off"),
                 Describe(controls, "Fleet/SwitchPilot", "switch to the next pilot"),
                 Describe(controls, "Fleet/RevokeGrant", "the server revokes your grant"),
                 Describe(controls, "Debug/ToggleLink", "cut or restore the link"),
@@ -52,13 +55,13 @@ namespace DroneFlightModule.Unity
                 Describe(controls, "Debug/RemoveDrone", "remove the newest drone"));
         }
 
-        public void AddStation(IStationStatus station)
+        public void AddStation(PilotStation station)
         {
             stations.Add(station ?? throw new ArgumentNullException(nameof(station)));
             stationTexts.Add(station.Describe());
         }
 
-        public void RemoveStation(IStationStatus station)
+        public void RemoveStation(PilotStation station)
         {
             int index = stations.IndexOf(station);
             if (index >= 0)

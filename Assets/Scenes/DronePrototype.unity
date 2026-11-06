@@ -128,7 +128,6 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 145383828}
-  - component: {fileID: 145383827}
   - component: {fileID: 145383826}
   m_Layer: 0
   m_Name: Fleet Scope
@@ -156,7 +155,6 @@ MonoBehaviour:
   settings: {fileID: 11400000, guid: 52f0f5b1faaa4aaa8dec0753be0d38ea, type: 2}
   controls: {fileID: -944628639613478452, guid: 8e5abd5b862e54199a7f52d01f88c40e, type: 3}
   dronePrefab: {fileID: 8669992714969344846, guid: 9ffa04c47d26e4ac59e11c598a8aaef5, type: 3}
-  debugHud: {fileID: 145383827}
   followCamera: {fileID: 339353830}
   groundPlane: {fileID: 522335637}
 --- !u!114 &145383827
@@ -165,12 +163,12 @@ MonoBehaviour:
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 145383825}
+  m_GameObject: {fileID: 481230334}
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 306b9a43b1158445ab35db7b9d790819, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: DroneFlightModule.Unity::DroneFlightModule.Unity.FlightDebugHud
+  m_EditorClassIdentifier: DroneFlightModule.UI::DroneFlightModule.UI.FlightDebugHud
   origin: {x: 12, y: 12}
   stationBoxSize: {x: 400, y: 26}
   spacing: 10
@@ -311,6 +309,7 @@ GameObject:
   - component: {fileID: 481230337}
   - component: {fileID: 481230336}
   - component: {fileID: 481230335}
+  - component: {fileID: 145383827}
   m_Layer: 0
   m_Name: Dashboard
   m_TagString: Untagged

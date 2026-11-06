@@ -5,7 +5,7 @@ namespace DroneFlightModule.Composition
 {
     /// <summary>
     /// A station's own buttons, on its own copy of the controls: the Fleet map's request, release,
-    /// switch and revoke, and the Debug link toggle. Disposing unbinds them.
+    /// arm, autopilot, switch and revoke, and the Debug link toggle. Disposing unbinds them.
     /// </summary>
     public sealed class StationKeys : IDisposable
     {
@@ -23,6 +23,8 @@ namespace DroneFlightModule.Composition
             bindings.OnRequest("Fleet/RequestDrone2", () => station.RequestDroneAsync(2));
             bindings.OnRequest("Fleet/RequestDrone3", () => station.RequestDroneAsync(3));
             bindings.OnPress("Fleet/Release", () => station.Release());
+            bindings.OnPress("Fleet/Arm", station.ToggleArm);
+            bindings.OnPress("Fleet/ToggleAutopilot", station.ToggleAutopilot);
             bindings.OnPress("Fleet/SwitchPilot", station.SwitchPilot);
             bindings.OnPress("Fleet/RevokeGrant", () => station.RevokeServerGrant());
             bindings.OnPress("Debug/ToggleLink", station.ToggleLink);

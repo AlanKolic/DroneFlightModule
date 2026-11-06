@@ -24,7 +24,6 @@ namespace DroneFlightModule.Composition
         [SerializeField] private FleetSettingsAsset settings;
         [SerializeField] private InputActionAsset controls;
         [SerializeField] private DroneView dronePrefab;
-        [SerializeField] private FlightDebugHud debugHud;
         [SerializeField] private FollowCamera followCamera;
         [SerializeField] private Transform groundPlane;
 
@@ -58,7 +57,6 @@ namespace DroneFlightModule.Composition
             builder.RegisterBuildCallback(container =>
             {
                 PlaceGround(fleetSettings.GroundHeight);
-                BindHud(container.Resolve<InputDeviceStations>());
 
                 var drones = container.Resolve<DroneInstantiator>();
                 foreach (var entry in fleetSettings.Drones)
@@ -82,21 +80,6 @@ namespace DroneFlightModule.Composition
                 Destroy(ownControls);
                 ownControls = null;
             }
-        }
-
-        private void BindHud(InputDeviceStations stations)
-        {
-            if (debugHud == null)
-            {
-                return;
-            }
-            debugHud.Bind(ownControls);
-            foreach (var station in stations.Stations)
-            {
-                debugHud.AddStation(station);
-            }
-            stations.StationAdded += debugHud.AddStation;
-            stations.StationRemoved += debugHud.RemoveStation;
         }
 
         private void PlaceGround(float groundHeight)

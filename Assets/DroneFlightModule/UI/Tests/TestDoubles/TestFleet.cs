@@ -61,10 +61,15 @@ namespace DroneFlightModule.UI.Tests
             return Coordinator.RequestFlightAsync(session, drone, CancellationToken.None).Result;
         }
 
+        public ArmingResult Arm(PilotId pilot)
+        {
+            return Coordinator.ToggleArm(new PilotSession(pilot, guest, new CentredSticks()));
+        }
+
         private FleetDrone Drone(DroneId id)
         {
             var router = new InputRouter();
-            return new FleetDrone(id, router, new DroneGrantHolder(router), new Status());
+            return new FleetDrone(id, router, new DroneGrantHolder(router), new ArmingSwitch(), new Status());
         }
     }
 }

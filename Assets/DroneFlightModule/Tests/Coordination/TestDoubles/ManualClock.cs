@@ -1,3 +1,5 @@
+using DroneFlightModule.Core;
+
 namespace DroneFlightModule.Coordination.Tests
 {
     /// <summary>

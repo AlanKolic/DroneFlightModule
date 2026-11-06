@@ -12,12 +12,20 @@ namespace DroneFlightModule.Core.Tests
 
         private ScriptedInputProvider input;
         private ScriptedFlightGate gate;
+        private ArmingSwitch arming;
 
         [SetUp]
         public void SetUp()
         {
             input = new ScriptedInputProvider();
             gate = new ScriptedFlightGate();
+        }
+
+        private ArmingSwitch Armed()
+        {
+            var armed = new ArmingSwitch();
+            armed.Arm();
+            return armed;
         }
 
         private FlightLoop CreateLoop(
@@ -28,14 +36,47 @@ namespace DroneFlightModule.Core.Tests
         {
             var config = DroneConfig.Default;
             var terrain = new FlatTerrain();
+            arming = Armed();
             return new FlightLoop(
                 TestDrone,
                 inputProvider ?? input,
                 new ForceFlightController(config),
-                new FlightSupervisor(flightGate ?? gate, config, FailsafeConfig.Default, gravity),
+                new FlightSupervisor(flightGate ?? gate, arming, config, FailsafeConfig.Default, gravity),
                 new DroneIntegrator(config, terrain, gravity),
                 new RangefinderAltitudeSensor(terrain, new RangefinderConfig(maxRange: 20f, updateRate: 1f / DeltaTime)),
                 initial);
+        }
+
+        [Test]
+        public void SwappingTheSource_InFlight_KeepsTheSameLoop()
+        {
+            var autopilot = new ScriptedInputProvider { Current = new ControlInput(Vec3.Up, 0f) };
+            var switchable = new SwitchableInputProvider(input);
+            var loop = CreateLoop(new DroneState(new Vec3(0f, 5f, 0f)), inputProvider: switchable);
+            var frames = new List<FlightFrame>();
+            loop.Ticked += frames.Add;
+            loop.Tick(DeltaTime);
+
+            switchable.Use(autopilot);
+            loop.Tick(DeltaTime);
+
+            Assert.That(frames[0].Input.Move, Is.EqualTo(Vec3.Zero));
+            Assert.That(frames[1].Input.Move, Is.EqualTo(Vec3.Up));
+            Assert.That(loop.Mode, Is.EqualTo(FlightMode.Piloted));
+        }
+
+        [Test]
+        public void ClimbHeldThroughTouchdown_StaysDown()
+        {
+            var loop = CreateLoop(new DroneState(new Vec3(0f, 1f, 0f)));
+            Run(loop, 2f);
+            Assert.That(loop.State.IsGrounded, Is.True);
+
+            input.Current = new ControlInput(Vec3.Up, 0f);
+            Run(loop, 0.5f);
+
+            Assert.That(loop.State.IsGrounded, Is.True);
+            Assert.That(loop.Mode, Is.EqualTo(FlightMode.Disarmed));
         }
 
         private void Run(FlightLoop loop, float seconds)
@@ -67,7 +108,7 @@ namespace DroneFlightModule.Core.Tests
                 TestDrone,
                 input,
                 new ForceFlightController(config),
-                new FlightSupervisor(gate, config, FailsafeConfig.Default),
+                new FlightSupervisor(gate, Armed(), config, FailsafeConfig.Default),
                 new DroneIntegrator(config, terrain),
                 new RangefinderAltitudeSensor(terrain, RangefinderConfig.Default),
                 new DroneState(Vec3.Zero),
@@ -93,7 +134,7 @@ namespace DroneFlightModule.Core.Tests
                 TestDrone,
                 input,
                 new ForceFlightController(config),
-                new FlightSupervisor(gate, config, FailsafeConfig.Default),
+                new FlightSupervisor(gate, Armed(), config, FailsafeConfig.Default),
                 new DroneIntegrator(config, terrain),
                 new RangefinderAltitudeSensor(terrain, RangefinderConfig.Default),
                 new DroneState(Vec3.Zero),
@@ -110,7 +151,7 @@ namespace DroneFlightModule.Core.Tests
                 default,
                 input,
                 new ForceFlightController(config),
-                new FlightSupervisor(gate, config, FailsafeConfig.Default),
+                new FlightSupervisor(gate, Armed(), config, FailsafeConfig.Default),
                 new DroneIntegrator(config, terrain),
                 new RangefinderAltitudeSensor(terrain, RangefinderConfig.Default),
                 new DroneState(Vec3.Zero)));
@@ -125,7 +166,7 @@ namespace DroneFlightModule.Core.Tests
                 TestDrone,
                 input,
                 new ForceFlightController(config),
-                new FlightSupervisor(gate, config, FailsafeConfig.Default),
+                new FlightSupervisor(gate, Armed(), config, FailsafeConfig.Default),
                 new DroneIntegrator(config, new FlatTerrain()),
                 null,
                 new DroneState(Vec3.Zero)));
@@ -201,7 +242,7 @@ namespace DroneFlightModule.Core.Tests
         [Test]
         public void InputChange_TakesEffectOnNextTick()
         {
-            var loop = CreateLoop(new DroneState(Vec3.Zero));
+            var loop = CreateLoop(new DroneState(Vec3.Zero, Vec3.Zero, 0f, 0f, isGrounded: true));
             var frames = new List<FlightFrame>();
             loop.Ticked += frames.Add;
 
@@ -227,6 +268,7 @@ namespace DroneFlightModule.Core.Tests
             Assert.That(loop.State.IsGrounded, Is.True);
 
             router.Assign(new PilotId("pilot1"), input);
+            arming.Arm();
             Run(loop, 0.5f);
             Assert.That(loop.State.IsGrounded, Is.False);
         }
@@ -255,7 +297,7 @@ namespace DroneFlightModule.Core.Tests
             Run(loop, 2f);
 
             Assert.That(loop.State.IsGrounded, Is.True);
-            Assert.That(loop.Mode, Is.EqualTo(FlightMode.Grounded));
+            Assert.That(loop.Mode, Is.EqualTo(FlightMode.Disarmed));
         }
 
         [Test]
@@ -283,7 +325,7 @@ namespace DroneFlightModule.Core.Tests
 
             Run(loop, 30f);
             Assert.That(loop.State.IsGrounded, Is.True);
-            Assert.That(loop.Mode, Is.EqualTo(FlightMode.Grounded));
+            Assert.That(loop.Mode, Is.EqualTo(FlightMode.Disarmed));
 
             var lastAirborne = frames.FindLast(frame => !frame.State.IsGrounded);
             Assert.That(lastAirborne.State.Velocity.Y, Is.GreaterThan(-FailsafeConfig.Default.TouchdownSinkRate - 0.05f));
