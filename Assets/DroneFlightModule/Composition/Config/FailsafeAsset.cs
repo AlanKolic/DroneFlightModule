@@ -11,6 +11,7 @@ namespace DroneFlightModule.Composition
     public sealed class FailsafeAsset : ScriptableObject
     {
         [SerializeField] private float holdDuration = FailsafeConfig.Default.HoldDuration;
+        [SerializeField] private float holdRecoveryRate = FailsafeConfig.Default.HoldRecoveryRate;
         [SerializeField] private float descentSinkRate = FailsafeConfig.Default.DescentSinkRate;
         [SerializeField] private float touchdownSinkRate = FailsafeConfig.Default.TouchdownSinkRate;
         [SerializeField] private float flareHeight = FailsafeConfig.Default.FlareHeight;
@@ -19,7 +20,7 @@ namespace DroneFlightModule.Composition
 
         public FailsafeConfig ToConfig()
         {
-            return new FailsafeConfig(holdDuration, descentSinkRate, touchdownSinkRate, flareHeight, fallbackSinkRate, speedGain);
+            return new FailsafeConfig(holdDuration, holdRecoveryRate, descentSinkRate, touchdownSinkRate, flareHeight, fallbackSinkRate, speedGain);
         }
     }
 }

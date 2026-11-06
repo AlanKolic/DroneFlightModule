@@ -13,6 +13,7 @@ MonoBehaviour:
   m_Name: Failsafe
   m_EditorClassIdentifier: 
   holdDuration: 10
+  holdRecoveryRate: 0.25
   descentSinkRate: 1
   touchdownSinkRate: 0.3
   flareHeight: 2

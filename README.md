@@ -162,13 +162,15 @@ device.
 | `*.Tests` | their target | EditMode tests |
 
 **Extension points.** Each is an interface with a constructor-injected implementation, so a new
-variant is a new class plus one registration in `DroneInstaller`:
+variant is a new class plus a registration:
 
-- `IFlightController`: flight models (`VelocityFlightController`)
-- `IFlightGate`: conditions for flight (`PilotInControlGate`, combined with `AllOfFlightGate`)
-- `IAltitudeSensor`, `ITerrain`: sensors and ground
+- `IFlightController`, `IAltitudeSensor`: flight models (`VelocityFlightController`) and sensors,
+  registered in `DroneInstaller`
+- `IFlightGate`: conditions for flight (`PilotInControlGate`), registered in `DroneInstaller` and
+  added to the list it hands to `AllOfFlightGate`
+- `ITerrain`: the ground, shared by the fleet, so registered in `FleetInstaller`
 
-Three others are added elsewhere:
+Three others take more than that:
 
 - A new Input System device type is data only: a control scheme in the controls asset and one
   entry in `Config/InputDevices.asset`. An input source that isn't an Input System device, such
@@ -193,7 +195,8 @@ Three others are added elsewhere:
 - **The failsafe is not a special case.** The supervisor only asks `IFlightGate` whether flight
   is allowed. Losing the pilot and losing authorization both close the gate and get the
   same hold-then-descend behaviour. The countdown runs on simulation time, and flying earns it
-  back at the same rate, so a flapping link can't keep the drone hovering forever. Holding and
+  back at a quarter of the rate, so a link that is down more than a fifth of the time runs it out
+  and the drone comes down. Holding and
   descending brake horizontal drift actively, so a drone that loses its link at full speed
   stops within a few metres.
 - **VContainer, plain `Task`.** VContainer composes the scene; Core never references it.

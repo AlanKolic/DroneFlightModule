@@ -274,19 +274,34 @@ namespace DroneFlightModule.Core.Tests
             Assert.That(supervisor.HoldTimeRemaining, Is.EqualTo(0.0));
             Assert.That(command.Force, Is.EqualTo(pilotCommand.Force));
 
-            // Two ticks held, one earned back flying, one spent now.
+            // Two ticks held, part of one earned back flying, one spent now.
             gate.IsFlightAllowed = false;
             Supervise(airborne);
-            Assert.That(supervisor.HoldTimeRemaining, Is.EqualTo(config.HoldDuration - 2 * DeltaTime).Within(1e-6));
+            double expected = config.HoldDuration - (3.0 - config.HoldRecoveryRate) * DeltaTime;
+            Assert.That(supervisor.HoldTimeRemaining, Is.EqualTo(expected).Within(1e-6));
         }
 
         [Test]
-        public void FlyingForTheHoldDuration_EarnsBackTheFullHold()
+        public void FlyingForTheHoldDuration_EarnsBackOnlyPartOfTheHold()
         {
             HoldUntilDescending();
 
             gate.IsFlightAllowed = true;
             supervisor.Supervise(pilotCommand, airborne, Altitude(5f), config.HoldDuration);
+            gate.IsFlightAllowed = false;
+            Supervise(airborne);
+
+            double expected = (double)config.HoldDuration * config.HoldRecoveryRate - DeltaTime;
+            Assert.That(supervisor.HoldTimeRemaining, Is.EqualTo(expected).Within(1e-6));
+        }
+
+        [Test]
+        public void FlyingLongEnough_EarnsBackTheFullHold()
+        {
+            HoldUntilDescending();
+
+            gate.IsFlightAllowed = true;
+            supervisor.Supervise(pilotCommand, airborne, Altitude(5f), config.HoldDuration / config.HoldRecoveryRate);
             gate.IsFlightAllowed = false;
             Supervise(airborne);
 
@@ -307,6 +322,29 @@ namespace DroneFlightModule.Core.Tests
                 Supervise(airborne);
                 Assert.That(supervisor.Mode, Is.EqualTo(FlightMode.Descending));
             }
+        }
+
+        [Test]
+        public void LinkUpAndDownEverySecond_RunsTheHoldOut()
+        {
+            int ticksPerSecond = (int)MathF.Round(1f / DeltaTime);
+
+            // Each cycle spends a second and earns back a quarter, so the ten seconds are gone by the 13th.
+            for (int cycle = 0; cycle < 15; cycle++)
+            {
+                gate.IsFlightAllowed = true;
+                for (int i = 0; i < ticksPerSecond; i++)
+                {
+                    Supervise(airborne);
+                }
+                gate.IsFlightAllowed = false;
+                for (int i = 0; i < ticksPerSecond; i++)
+                {
+                    Supervise(airborne);
+                }
+            }
+
+            Assert.That(supervisor.Mode, Is.EqualTo(FlightMode.Descending));
         }
 
         [Test]

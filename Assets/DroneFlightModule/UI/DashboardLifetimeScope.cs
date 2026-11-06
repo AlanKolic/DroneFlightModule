@@ -18,6 +18,9 @@ namespace DroneFlightModule.UI
     {
         [SerializeField] private int eventCapacity = 50;
 
+        private InputDeviceStations stations;
+        private FlightDebugHud hud;
+
         protected override void Configure(IContainerBuilder builder)
         {
             builder.Register<FleetEventLog>(Lifetime.Singleton)
@@ -38,9 +41,20 @@ namespace DroneFlightModule.UI
             });
         }
 
-        private void BindHud(InputDeviceStations stations, InputActionAsset controls)
+        protected override void OnDestroy()
         {
-            var hud = GetComponent<FlightDebugHud>();
+            if (stations != null)
+            {
+                stations.StationAdded -= hud.AddStation;
+                stations.StationRemoved -= hud.RemoveStation;
+            }
+            base.OnDestroy();
+        }
+
+        private void BindHud(InputDeviceStations fleetStations, InputActionAsset controls)
+        {
+            stations = fleetStations;
+            hud = GetComponent<FlightDebugHud>();
             hud.Bind(controls);
             foreach (var station in stations.Stations)
             {

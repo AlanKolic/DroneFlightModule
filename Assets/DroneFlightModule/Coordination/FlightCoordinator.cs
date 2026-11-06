@@ -257,14 +257,17 @@ namespace DroneFlightModule.Coordination
             var left = current.HasValue ? Free(current.Value) : null;
             var fromSession = decision.Action == AssignmentAction.TakeOver ? assignments[target.Id].Session : null;
             Route(target, session, profile, grant);
+            if (fromSession != null)
+            {
+                LoseGrant(fromSession, AuthorizationState.Unauthorized);
+            }
 
             if (left != null)
             {
                 Raise(Released, new DroneReleased(left.Drone.Id, left.Session, ReleaseReason.Switched));
             }
-            if (decision.Action == AssignmentAction.TakeOver)
+            if (fromSession != null)
             {
-                LoseGrant(fromSession, AuthorizationState.Unauthorized);
                 Raise(TookOver, new DroneTakenOver(target.Id, session.PilotId, fromSession));
                 return new FlightRequestResult(target.Id, fromSession.PilotId);
             }

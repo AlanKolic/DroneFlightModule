@@ -11,11 +11,13 @@ separation and testability.
   and runs headless.
 - **References point inward only.** Outer layers depend on inner ones, never the reverse.
   Deleting the UI (or any outer assembly) never breaks flight logic.
-- **Composition roots are the only place that knows concrete types.** Everything else takes
-  its dependencies through plain constructors, with no `[Inject]` attributes.
-- **Extend by adding, not editing.** A new input source, authorization provider, assignment
-  policy, gate condition or telemetry sink is a new class plus one registration line in a
-  composition root.
+- **Composition roots choose the implementations.** Everything else takes its dependencies
+  through plain constructors, with no `[Inject]` attributes. Interfaces sit at the seams meant to
+  vary; a class with one implementation, such as `FlightCoordinator`, is used directly.
+- **Extend by adding, not editing.** A new authorization provider, assignment policy, gate
+  condition or telemetry sink is a new class plus its registration in a composition root. A gate
+  also joins the list `DroneInstaller` hands to `AllOfFlightGate`, and a provider needs a rule in
+  the selector. A new kind of input source is a new `IPilotDesk`.
 
 ## Assembly layers
 
@@ -171,15 +173,18 @@ stateDiagram-v2
 - **Vertical speed** comes from the true velocity, standing in for a velocity or IMU sensor.
 - The countdown runs on **simulation time** (it decrements by `deltaTime`), so it pauses with the
   simulation and tests can check it without waiting.
-- **Hold budget.** The countdown spends a budget of up to the hold duration. Flying earns it
-  back at the same rate and landing refills it. A pilot who reconnects and flies on for the hold
-  duration gets the full 10 s again, but a link that comes back for a moment resumes the hold
-  where it left off, and during a descent it barely delays it. A flapping link can't keep the
-  drone in the air.
+- **Hold budget.** The countdown spends a budget of up to the hold duration. Each second of
+  flying earns back a quarter of a second (`HoldRecoveryRate`, which must stay below 1), and
+  landing refills it. A pilot who reconnects needs 40 s of flying to get the full 10 s again, and
+  a link that comes back for a moment resumes the hold where it left off. A link that is down
+  more than a fifth of the time runs the budget out, so one up for a second and down for a second
+  starts descending within 13 cycles. Above that the pilot has the drone at least four fifths of
+  the time, so holding on is the right call. While the link is up the pilot's sticks apply, so a
+  pilot can still climb between drops; the budget limits the failsafe, not the pilot.
 - If the gate closes while grounded, there is no countdown. The drone disarms and can't take off.
 - A takeover by a higher-priority pilot never closes the gate (see below), so it never starts
   the countdown.
-- Hold duration, sink rates, flare height and gain are in `FailsafeConfig`. The supervisor
+- Hold duration, recovery rate, sink rates, flare height and gain are in `FailsafeConfig`. The supervisor
   rejects a drone whose max thrust doesn't exceed its weight, since it couldn't hold or descend
   slowly.
 - `FlightFrame` carries the mode and the remaining countdown for telemetry and UI.

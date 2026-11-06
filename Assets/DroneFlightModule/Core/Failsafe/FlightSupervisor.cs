@@ -6,8 +6,8 @@ namespace DroneFlightModule.Core
     /// Decides each tick whether the pilot's command reaches the actuators. While the gate is open the
     /// pilot flies, though on the ground only once armed; touchdown disarms, and so does the gate closing
     /// on the ground. When it closes in the air the drone brakes and holds, then descends until
-    /// touchdown cuts the motors. Holding spends a budget that flying earns back, so a flapping link
-    /// can't keep the drone in the air forever.
+    /// touchdown cuts the motors. Holding spends a budget that flying earns back more slowly, so a
+    /// link that keeps dropping runs it out and the drone comes down.
     /// </summary>
     public sealed class FlightSupervisor
     {
@@ -53,7 +53,7 @@ namespace DroneFlightModule.Core
 
             if (gate.IsFlightAllowed)
             {
-                holdBudget = state.IsGrounded ? config.HoldDuration : Math.Min(config.HoldDuration, holdBudget + deltaTime);
+                holdBudget = state.IsGrounded ? config.HoldDuration : Math.Min(config.HoldDuration, holdBudget + deltaTime * config.HoldRecoveryRate);
                 HoldTimeRemaining = 0;
                 if (state.IsGrounded && !arming.IsArmed)
                 {

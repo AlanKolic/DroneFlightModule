@@ -415,6 +415,20 @@ namespace DroneFlightModule.Coordination.Tests
         }
 
         [Test]
+        public void TheEventsOfASwitchByTakeover_SeeThePreemptedPilotLoseTheirGrant()
+        {
+            var session = Session(Bob);
+            Request(session, grounded.Id);
+            Request(Session(Alice), airborne.Id);
+            var seenByTheListener = AuthorizationState.Granted;
+            coordinator.Released += _ => seenByTheListener = coordinator.AuthorizationOf(Alice);
+
+            Request(session, airborne.Id);
+
+            Assert.That(seenByTheListener, Is.EqualTo(AuthorizationState.Unauthorized));
+        }
+
+        [Test]
         public void CancelRequest_EndsThePendingRequestQuietly()
         {
             provider.AnswersAtOnce = false;
