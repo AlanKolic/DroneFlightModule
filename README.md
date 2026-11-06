@@ -8,6 +8,20 @@ on a plane); the work is in the boundaries, the failsafe and the tests.
 The full design is in
 [Docs/Architecture.md](Docs/Architecture.md).
 
+## Scope
+
+The brief asked for a minimal core flight loop, and this goes a bit past that on purpose.
+
+- **The core loop** is what the brief asked for: `Core` (the flight loop, gates, arming and
+  failsafe), `Authorization` (the two providers and grants), the input providers and a display.
+- **Beyond the brief** are the fleet, pilots with priorities and stats, takeovers, and desks that
+  pilots move between. They mostly live in `Coordination`, and `Core` knows nothing about them.
+
+They were added to test the boundaries under real pressure: several drones, pilots and input
+devices changing at runtime, with no change to the flight code. The cost is more code to read than
+a prototype needs, and today even one pilot on one drone goes through the coordinator. To review
+only what was asked for, start with `Core` and `Authorization`.
+
 ## Getting started
 
 - **Unity 6000.3.8f1** (Unity 6.3) with URP. Packages restore on first open; VContainer comes

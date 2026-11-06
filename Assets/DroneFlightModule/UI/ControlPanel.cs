@@ -7,17 +7,11 @@ using UnityEngine;
 namespace DroneFlightModule.UI
 {
     /// <summary>
-    /// The control panel, docked bottom right, and the one place a station's full status shows: the
-    /// station, who flies from it, their drone, the link, their takeovers and preemptions and the
-    /// latest outcome. Below it a station dropdown (one per input device), a pilot dropdown, a drone
-    /// dropdown and buttons for what the keys do; everything but the drone buttons acts on the
-    /// chosen station. Picking a pilot seats them at the chosen station, and the pilot there leaves
-    /// and lets go of their drone; both dropdowns say who flies what.
-    /// The drone dropdown chooses what Request and Remove act on. It drives the fleet only through
-    /// <see cref="IFleetConsole"/>. Text is built a few times a second in Update, and at once after
-    /// a click; OnGUI only draws. IMGUI has no dropdown, so one at a time opens as a list in place,
-    /// and the panel scrolls when it would not fit the screen. The dashboard reads its height to
-    /// stay clear of it.
+    /// The control panel, docked bottom right, and the one place a station's full status shows. Below
+    /// it are station, pilot and drone dropdowns and buttons for what the keys do, all acting through
+    /// <see cref="IFleetConsole"/>. Text is built a few times a second in Update and at once after a
+    /// click; OnGUI only draws. IMGUI has no dropdown, so one at a time opens as a list in place, and the
+    /// dashboard reads the panel's height to stay clear of it.
     /// </summary>
     public sealed class ControlPanel : MonoBehaviour
     {

@@ -16,14 +16,10 @@ using VContainer.Unity;
 namespace DroneFlightModule.Composition
 {
     /// <summary>
-    /// Registers what the whole fleet shares: the configs from the <see cref="FleetSettings"/>,
-    /// the ground, pilots and their stats, both authorization providers, the coordinator, the
-    /// simulation clock, the fleet-wide telemetry sinks, a pilot station per input device, the
-    /// fleet-wide keys, the console a control panel drives, and the instantiator that adds and
-    /// removes drones. Every registered pilot signs in through the simulated server. The fleet
-    /// starts empty: each drone's child scope adds its own objects with
-    /// <see cref="DroneInstaller"/> and joins it, at startup or later. Kept apart from the scope so
-    /// tests can build the fleet without a scene; they pass no prefab.
+    /// Registers what the whole fleet shares: configs, ground, pilots and stats, authorization
+    /// providers, the coordinator, the clock, telemetry sinks, stations, keys, the console and the
+    /// instantiator. The fleet starts empty: each drone's child scope joins it through
+    /// <see cref="DroneInstaller"/>. Kept apart from the scope so tests can build a fleet without a scene.
     /// </summary>
     public sealed class FleetInstaller : IInstaller
     {

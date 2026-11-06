@@ -4,13 +4,10 @@ using UnityEngine;
 namespace DroneFlightModule.Composition
 {
     /// <summary>
-    /// One kind of input: the name its stations go by, and every device whose Input System layout
-    /// is, or is based on, the given layout (such as "Keyboard" or "Gamepad"), flying with the given
-    /// binding group of the controls. <see cref="InputDeviceStations"/> checks that all three are
-    /// usable. A device that sends nothing for the silence timeout (seconds) counts as disconnected
-    /// until it next sends something; zero never expires, for inputs that can sit idle and always
-    /// report their removal. With its sticks centred it gets the centred timeout instead, if that
-    /// is longer, so a pilot can hover hands-off.
+    /// One kind of input: its station name, an Input System layout (such as "Keyboard" or "Gamepad"),
+    /// and the binding group it flies with. A device that sends nothing for the silence timeout
+    /// (seconds) counts as disconnected until it next sends something; zero never expires. With its
+    /// sticks centred it gets the centred timeout instead, if longer, so a pilot can hover hands-off.
     /// </summary>
     [Serializable]
     public sealed class InputDeviceGroup

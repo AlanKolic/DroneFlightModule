@@ -3,14 +3,11 @@ using System;
 namespace DroneFlightModule.Core
 {
     /// <summary>
-    /// Decides each tick whether the pilot's command reaches the actuators. While the gate is open
-    /// the pilot flies, though on the ground only once armed; touchdown disarms, and so does the
-    /// gate closing on the ground, so motors never restart by themselves. When it closes in the air
-    /// the drone brakes to a stop and holds for the hold duration, then descends straight down,
-    /// flaring near the ground, until touchdown cuts the motors. Holding spends a hold budget that
-    /// flying earns back at the same rate and landing refills, so a link that drops again soon
-    /// after it returns resumes the hold where it left off instead of restarting it, and a flapping
-    /// link cannot keep the drone in the air forever.
+    /// Decides each tick whether the pilot's command reaches the actuators. While the gate is open the
+    /// pilot flies, though on the ground only once armed; touchdown disarms, and so does the gate closing
+    /// on the ground. When it closes in the air the drone brakes and holds, then descends until
+    /// touchdown cuts the motors. Holding spends a budget that flying earns back, so a flapping link
+    /// can't keep the drone in the air forever.
     /// </summary>
     public sealed class FlightSupervisor
     {

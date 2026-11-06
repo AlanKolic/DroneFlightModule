@@ -7,16 +7,11 @@ using UnityEngine.InputSystem.LowLevel;
 namespace DroneFlightModule.Unity
 {
     /// <summary>
-    /// Local pilot driven by the Flight map of an Input System actions asset, so bindings and
-    /// devices (keyboard, gamepad) are data rather than code. Connected while the map is enabled and
-    /// a bound device is present, so a disposed provider reports a lost pilot and the failsafe takes
-    /// over. Attached to one device, it reads only that device, and with a silence timeout it also
-    /// reports that device as lost once it has sent nothing for that long, because macOS can drop a
-    /// Bluetooth pad without telling the Input System. An idle pad looks the same, so any input
-    /// reconnects it at once, and a device gets the full timeout from the moment it is attached or
-    /// someone sits down at it. Centred sticks only hover, so they can have a longer timeout, while a
-    /// deflected stick might be stale input flying the drone away. A centred timeout shorter than the
-    /// silence timeout changes nothing.
+    /// Local pilot driven by the Flight map of an Input System actions asset, so bindings and devices
+    /// are data rather than code. Attached to one device, it reads only that device. macOS can drop a
+    /// Bluetooth pad unreported, so with a silence timeout a device that sends nothing counts as lost
+    /// until it next sends something. Centred sticks only hover, so they can have a longer timeout,
+    /// while a deflected stick might be stale input flying the drone away.
     /// </summary>
     public sealed class InputActionInputProvider : IInputProvider, IDisposable
     {

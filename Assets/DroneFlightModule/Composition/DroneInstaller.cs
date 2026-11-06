@@ -10,13 +10,10 @@ using VContainer.Unity;
 namespace DroneFlightModule.Composition
 {
     /// <summary>
-    /// Registers one drone's flight objects in its own child scope; the configs (frame,
-    /// controller, rangefinder, failsafe, telemetry), the ground and the fleet come from the fleet
-    /// scope. The drone flies whoever the coordinator routes to it, only while that pilot is
-    /// connected and holds a valid grant, and
-    /// joins the fleet's drone registry once its scope is built, whenever that is. Its loop's time
-    /// starts at the fleet's simulation time, so its telemetry lines up with the rest. Its telemetry
-    /// recorder starts then too, writing to the fleet's sinks, and ends with the scope.
+    /// Registers one drone's flight objects in its own child scope; everything shared comes from the
+    /// fleet scope. The drone flies whoever the coordinator routes to it, and joins the registry once
+    /// its scope is built. Its loop and telemetry start at the fleet's simulation time, so its samples
+    /// line up with the rest.
     /// </summary>
     public sealed class DroneInstaller : IInstaller
     {

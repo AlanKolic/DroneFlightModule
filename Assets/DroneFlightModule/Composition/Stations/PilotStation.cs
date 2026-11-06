@@ -11,14 +11,10 @@ using UnityEngine.InputSystem;
 namespace DroneFlightModule.Composition
 {
     /// <summary>
-    /// One desk: an input device and at most one pilot. It owns the device's controls, input and
-    /// keys. Who sits here is <see cref="PilotSeating"/>'s to decide, and while nobody does there
-    /// is no session and the flying actions only say so. It knows nothing of other stations; they
-    /// meet only in the coordinator. Its link can be cut, and it reports no pilot while its device
-    /// is unplugged or silent. Its pilot can swap the device for the autopilot under the same link,
-    /// so the link still cuts it; any change of pilot turns the autopilot off. It keeps the latest
-    /// outcome for display, including the pilot here losing their drone. Disposing stops listening
-    /// and destroys its controls.
+    /// One desk: an input device and at most one pilot. It owns the device's controls, input and keys,
+    /// and <see cref="PilotSeating"/> decides who sits here. It knows nothing of other stations; they
+    /// meet only in the coordinator. Its link can be cut, and sits above the swap between the device and
+    /// the autopilot, so it cuts both. It keeps the latest outcome for display.
     /// </summary>
     public sealed class PilotStation : IPilotDesk, IDisposable
     {

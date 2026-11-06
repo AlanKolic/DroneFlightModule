@@ -9,18 +9,11 @@ using DroneFlightModule.Pilots;
 namespace DroneFlightModule.Coordination
 {
     /// <summary>
-    /// Decides which drone each pilot flies. A pilot flies at most one drone, whichever session
-    /// they use. A request authorizes the session through its provider, asks the policy on a fresh
-    /// snapshot of the fleet, then carries the decision out in one step between ticks: the grant
-    /// and the route change together, so a takeover never closes the gate. A session whose input is
-    /// not connected when the answer arrives is refused, so a drone never goes to a pilot who
-    /// cannot fly it. A drone that has landed with no connected pilot is released, so a lost
-    /// device does not hold it forever. It keeps each pilot's <see cref="AuthorizationState"/> for
-    /// display; a pilot flying a drone stays Granted whatever becomes of a further request. A drone
-    /// is armed only through <see cref="ToggleArm"/>, which refuses a pilot with no drone, and its
-    /// switch clears whenever it changes hands. Each change of who flies what, and each denial, is
-    /// raised as an event once the change is complete; a listener that throws is reported through
-    /// ListenerFailed and cannot undo or interrupt it.
+    /// Decides which drone each pilot flies, at most one each. A request authorizes the session, asks
+    /// the policy on a fresh snapshot, then carries the decision out in one step between ticks, so a
+    /// takeover never closes the gate. It keeps each pilot's <see cref="AuthorizationState"/> and arms
+    /// drones through <see cref="ToggleArm"/>. Each change is raised as an event once complete; a
+    /// listener that throws is reported through ListenerFailed and cannot interrupt it.
     /// </summary>
     public sealed class FlightCoordinator
     {

@@ -7,13 +7,10 @@ using VContainer.Unity;
 namespace DroneFlightModule.UI
 {
     /// <summary>
-    /// The dashboard's own child scope, holding the fleet dashboard, the control panel, the
-    /// on-screen flight buttons and the debug HUD.
-    /// Everything they show or drive comes from the fleet scope, its parent, which the scene names
-    /// by type, so nothing outside this assembly refers to them and deleting the UI folder leaves
-    /// only a missing-script warning. It adds just the event log, the readout and the panel's
-    /// choices; the dashboard is bound to the fleet's Debug/ToggleDashboard action and the panel to
-    /// the fleet's console.
+    /// The dashboard's own child scope, holding the fleet dashboard, the control panel, the on-screen
+    /// flight buttons and the debug HUD. What they show or drive comes from the fleet scope, its parent,
+    /// which the scene names by type, so nothing outside this assembly refers to them and deleting the
+    /// UI folder leaves only a missing-script warning.
     /// </summary>
     [RequireComponent(typeof(FleetDashboard), typeof(ControlPanel), typeof(ScreenFlightPanel))]
     [RequireComponent(typeof(FlightDebugHud))]

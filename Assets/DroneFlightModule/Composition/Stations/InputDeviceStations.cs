@@ -7,19 +7,11 @@ using UnityEngine.InputSystem;
 namespace DroneFlightModule.Composition
 {
     /// <summary>
-    /// Gives every pilot input device its own <see cref="PilotStation"/>: each device of a
-    /// configured <see cref="InputDeviceGroup"/> present at start, in the groups' order, and each
-    /// one plugged in later; a device matching no group, such as a mouse by default, gets none. A
-    /// group's layout must be known to the Input System and its binding group must be one of the
-    /// controls' control schemes. A physical pad is known by its layout and serial, not by its
-    /// device object: the Editor can keep a stale entry of a pad that disconnected unseen, and the
-    /// pad then connects as a second device, which takes over the stale entry's station. Unplugging
-    /// a device, or its going silent past its group's timeout, is link loss, and the failsafe takes
-    /// over; unplugging also turns the station's autopilot off, so a lost device can't fly on. While
-    /// a gone device's pilot still holds a drone its station waits, and the pad resumes it on
-    /// returning. Once a gone device holds no drone its pilot leaves and its station is
-    /// removed. A new station takes the guest if nobody has them, and otherwise starts empty.
-    /// Disposing disposes every station.
+    /// Gives every input device of a configured <see cref="InputDeviceGroup"/> its own
+    /// <see cref="PilotStation"/>, at start and when plugged in later. A pad is known by its layout and
+    /// serial, so one that returns as a new device takes over its old station. Unplugging or going
+    /// silent is link loss, and unplugging also stops the autopilot. A gone device's station waits while
+    /// its pilot holds a drone, then is removed. A new station takes the guest if nobody has them.
     /// </summary>
     public sealed class InputDeviceStations : IDisposable
     {

@@ -10,14 +10,10 @@ using VContainer.Unity;
 namespace DroneFlightModule.Composition
 {
     /// <summary>
-    /// Composition root of the fleet scene. Installs the fleet with the settings its
-    /// <see cref="FleetSettingsAsset"/> maps to, then has the <see cref="DroneInstantiator"/> build
-    /// the layout's drones from the prefab. Each input device gets a pilot station, the keyboard's
-    /// starting as the guest without a drone; the camera starts on the first drone and then
-    /// follows the drone of the station the console has chosen. The scope keeps its own copy of
-    /// the controls asset, for the fleet-wide keys and as the template each station copies, and its
-    /// lifetime token, which pending requests use, is cancelled when it is destroyed or play mode
-    /// exits.
+    /// Composition root of the fleet scene. Installs the fleet from its
+    /// <see cref="FleetSettingsAsset"/>, then builds the layout's drones from the prefab. The scope
+    /// keeps its own copy of the controls, for the fleet-wide keys and as each station's template. Its
+    /// lifetime token, used by pending requests, is cancelled when it is destroyed or play mode exits.
     /// </summary>
     public sealed class FleetLifetimeScope : LifetimeScope
     {

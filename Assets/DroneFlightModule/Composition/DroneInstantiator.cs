@@ -10,14 +10,10 @@ using VContainer.Unity;
 namespace DroneFlightModule.Composition
 {
     /// <summary>
-    /// Adds drones to the running fleet and removes them. Each drone gets its own child scope of
-    /// the fleet's container, ticked every fixed update, and joins the fleet as that scope is
-    /// built; a view is built from the drone prefab, when there is one, and bound. A drone added
-    /// without an id goes one spawn step past the last drone, with the first free drone-N id. Each
-    /// drone's loop starts at the fleet's simulation time, and it starts grounded if it spawns on
-    /// the terrain. Removing a drone has the coordinator remove it, which releases it first, then
-    /// disposes its scope and destroys its view; the next drone added goes one step past the last
-    /// drone it added. Disposing disposes every drone's scope and destroys their views.
+    /// Adds drones to the running fleet and removes them. Each drone gets its own child scope, ticked
+    /// every fixed update, and a view from the prefab when there is one. A drone added without an id
+    /// goes one spawn step past the last, with the first free drone-N id. Removing one has the
+    /// coordinator release it first. Disposing disposes every scope and destroys every view.
     /// </summary>
     public sealed class DroneInstantiator : IDisposable
     {
