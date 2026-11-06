@@ -3,6 +3,7 @@ using System.IO;
 using System.Threading;
 using DroneFlightModule.Authorization;
 using DroneFlightModule.Composition;
+using DroneFlightModule.Coordination;
 using DroneFlightModule.Core;
 using DroneFlightModule.Pilots;
 using NUnit.Framework;

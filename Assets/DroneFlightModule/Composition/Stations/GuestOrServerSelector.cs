@@ -1,5 +1,6 @@
 using System;
 using DroneFlightModule.Authorization;
+using DroneFlightModule.Coordination;
 using DroneFlightModule.Pilots;
 
 namespace DroneFlightModule.Composition

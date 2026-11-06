@@ -1,10 +1,9 @@
 using System;
 using System.Collections.Generic;
-using DroneFlightModule.Coordination;
 using DroneFlightModule.Core;
 using DroneFlightModule.Pilots;
 
-namespace DroneFlightModule.Composition
+namespace DroneFlightModule.Coordination
 {
     /// <summary>
     /// Who sits at which desk, and the only place that changes it, so a pilot is never at two desks.
@@ -18,7 +17,7 @@ namespace DroneFlightModule.Composition
         private readonly FlightCoordinator coordinator;
         private readonly IPilotRegistry pilots;
         private readonly IAuthorizationProviderSelector providers;
-        private readonly Dictionary<PilotId, PilotStation> seats = new Dictionary<PilotId, PilotStation>();
+        private readonly Dictionary<PilotId, IPilotDesk> seats = new Dictionary<PilotId, IPilotDesk>();
 
         public PilotSeating(FlightCoordinator coordinator, IPilotRegistry pilots, IAuthorizationProviderSelector providers)
         {
@@ -35,71 +34,71 @@ namespace DroneFlightModule.Composition
 
         public string SeatOf(PilotId pilot)
         {
-            return seats.TryGetValue(pilot, out var station) ? station.Name : string.Empty;
+            return seats.TryGetValue(pilot, out var desk) ? desk.Name : string.Empty;
         }
 
-        public void Seat(PilotStation station, PilotId pilot)
+        public void Seat(IPilotDesk desk, PilotId pilot)
         {
             if (!pilots.TryGet(pilot, out var profile))
             {
                 throw new ArgumentException($"{pilot} is not in the pilot registry.", nameof(pilot));
             }
-            if (seats.TryGetValue(pilot, out var current) && current == station)
+            if (seats.TryGetValue(pilot, out var current) && current == desk)
             {
                 return;
             }
-            Vacate(station);
+            Vacate(desk);
             if (current != null)
             {
-                Move(current, station);
+                Move(current, desk);
                 return;
             }
-            var session = new PilotSession(pilot, providers.For(profile), station.Link);
-            seats.Add(pilot, station);
-            station.Occupy(session);
-            station.Report($"{pilot} sits here. Request a drone.");
+            var session = new PilotSession(pilot, providers.For(profile), desk.Input);
+            seats.Add(pilot, desk);
+            desk.Occupy(session);
+            desk.Report($"{pilot} sits here. Request a drone.");
         }
 
-        public void Vacate(PilotStation station)
+        public void Vacate(IPilotDesk desk)
         {
-            var session = station.Session;
+            var session = desk.Session;
             if (session == null)
             {
                 return;
             }
             seats.Remove(session.PilotId);
             coordinator.EndSession(session);
-            station.Occupy(null);
-            station.Report($"{session.PilotId} left the desk.");
+            desk.Occupy(null);
+            desk.Report($"{session.PilotId} left the desk.");
         }
 
         // Each free pilot in the registry's order, then empty, then round again. A pilot at another
         // desk is skipped: moving them is a deliberate choice, and a key press must not end their flight.
-        public void SeatNext(PilotStation station)
+        public void SeatNext(IPilotDesk desk)
         {
-            bool isPastSeatedPilot = station.Session == null;
+            bool isPastSeatedPilot = desk.Session == null;
             foreach (var profile in pilots.Profiles)
             {
                 if (isPastSeatedPilot && !seats.ContainsKey(profile.Id))
                 {
-                    Seat(station, profile.Id);
+                    Seat(desk, profile.Id);
                     return;
                 }
-                if (station.Session != null && profile.Id == station.Session.PilotId)
+                if (desk.Session != null && profile.Id == desk.Session.PilotId)
                 {
                     isPastSeatedPilot = true;
                 }
             }
-            Vacate(station);
+            Vacate(desk);
         }
 
-        private void Move(PilotStation from, PilotStation to)
+        private void Move(IPilotDesk from, IPilotDesk to)
         {
             var session = from.Session;
             string cancelled = coordinator.CancelRequest(session) ? $" {session.PilotId}'s request was cancelled." : "";
             from.Occupy(null);
             from.Report($"{session.PilotId} moved to {to.Name}.");
-            session.MoveTo(to.Link);
+            session.MoveTo(to.Input);
             seats[session.PilotId] = to;
             to.Occupy(session);
             coordinator.Reroute(session);

@@ -20,7 +20,7 @@ namespace DroneFlightModule.Composition
     /// outcome for display, including the pilot here losing their drone. Disposing stops listening
     /// and destroys its controls.
     /// </summary>
-    public sealed class PilotStation : IDisposable
+    public sealed class PilotStation : IPilotDesk, IDisposable
     {
         private const string NobodyHere = "Nobody is at this desk.";
 
@@ -72,6 +72,7 @@ namespace DroneFlightModule.Composition
         public PilotSession Session { get; private set; }
         public bool IsOnAutopilot { get; private set; }
         public string LastMessage { get; private set; } = "Pick a pilot for this desk.";
+        IInputProvider IPilotDesk.Input => Link;
         public string LinkStatus => Link.IsLinkCut ? "link cut" : Link.IsConnected ? "connected" : "disconnected";
 
         public bool TryGetDrone(out DroneId drone)
@@ -80,7 +81,7 @@ namespace DroneFlightModule.Composition
             return Session != null && coordinator.TryGetDrone(Session.PilotId, out drone);
         }
 
-        internal void Occupy(PilotSession session)
+        void IPilotDesk.Occupy(PilotSession session)
         {
             StopAutopilot();
             Session = session;
@@ -91,7 +92,7 @@ namespace DroneFlightModule.Composition
             }
         }
 
-        internal void Report(string message)
+        void IPilotDesk.Report(string message)
         {
             LastMessage = message;
         }

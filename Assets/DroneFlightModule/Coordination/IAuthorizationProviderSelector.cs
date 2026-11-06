@@ -1,10 +1,10 @@
 using DroneFlightModule.Authorization;
 using DroneFlightModule.Pilots;
 
-namespace DroneFlightModule.Composition
+namespace DroneFlightModule.Coordination
 {
     /// <summary>
-    /// Chooses which provider authorizes a pilot, so a station never has to know the providers.
+    /// Chooses which provider authorizes a pilot, so seating never has to know the providers.
     /// </summary>
     public interface IAuthorizationProviderSelector
     {

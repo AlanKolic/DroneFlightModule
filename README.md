@@ -74,7 +74,7 @@ their drone is told who took it.
 Every action also has a button in the **control panel** at the bottom right: a station
 dropdown (the panel acts for the chosen station, and the camera follows its drone), a pilot
 dropdown, a drone dropdown ("Any drone" or one of the fleet), and Request, Release, Revoke
-grant, Cut/Restore link, Add drone and Remove drone (for the chosen drone). Its status line is
+grant, Arm, Autopilot, Cut/Restore link, Add drone and Remove drone (for the chosen drone). Its status line is
 where the latest outcome shows: what you asked for, a denial, or that someone took your drone.
 
 ## What to try
@@ -113,8 +113,8 @@ where the latest outcome shows: what you asked for, a denial, or that someone to
     **Arm**.
 13. See the gate refuse: release your drone with **X** and press **F**. Nothing arms, the desk says
     why, and the dashboard's events show the refusal.
-14. Swap the input in mid-flight: while flying, press **T**. The same pilot and drone now fly a
-    climbing square from the autopilot, with nothing rebuilt. **T** gives you back your device,
+14. Swap the input in mid-flight: while flying, press **T**. The same pilot and drone now climb, then fly
+    a level square, on the autopilot, with nothing rebuilt. **T** gives you back your device,
     **L** still cuts the link, and unplugging the device turns the autopilot off, so the failsafe
     lands the drone. The autopilot can't arm: on the ground it waits for **F**, then takes off.
 
@@ -139,7 +139,7 @@ share: the coordinator, pilots and stats, the providers, and a pilot station per
 | `Pilots` | Core | Pilot profiles and priorities, registry with a built-in guest, stats and their recorder |
 | `Authorization` | Core | Providers (local guest, simulated server that can revoke), revocable grants, per-drone grant holder gate |
 | `Telemetry` | Core | A recorder per drone sampling its flight at 10 Hz, sinks (a fleet-wide in-memory sink of the latest samples) |
-| `Coordination` | Core, Pilots, Authorization | `FlightCoordinator`: pilot sessions, drone registry, request pipeline, priority assignment policy, takeover and release, stats from its events |
+| `Coordination` | Core, Pilots, Authorization | `FlightCoordinator`: pilot sessions, drone registry, request pipeline, priority assignment policy, takeover and release, arming, stats from its events; `PilotSeating`: who sits at which desk, behind `IPilotDesk` |
 | `Composition` | everything above, VContainer, Input System | Fleet scope and installer, config assets mapped to `FleetSettings`, `DroneInstantiator` (adds and removes drones, one child scope each), a pilot station per input device, `FleetKeys` (fleet-wide keys), the `IFleetConsole` a panel drives, runners (the only places Unity's clock reaches the sim) |
 | `UI` | Core, Unity, Pilots, Coordination, Telemetry, Composition, VContainer, Input System | Fleet dashboard, debug HUD, control panel and on-screen flight buttons in their own child scope; nothing references it, so it can be deleted |
 | `Editor` | the above | Menu item that builds the prototype scene |
@@ -224,14 +224,15 @@ Three others are added elsewhere:
   never opens the gate for another), guest mode, and the server's latency, policy changes,
   cancellation and disposal. Async code runs with no synchronization context and a hand-completed
   delay, so the tests are synchronous and never sleep.
-- **Coordination**: 90 tests on real flight loops: assignment preferring grounded drones, priority
+- **Coordination**: 104 tests on real flight loops: assignment preferring grounded drones, priority
   takeover with the gate open on every tick, equal priority never taking over, switching drones,
   denied switches, keeping your drone on "any drone", a second session for the same pilot, ending
   and re-routing sessions, a throwing listener that can't interrupt a switch or reach a revoker,
   events that see the change complete, revocation, release, a pilot with no link refused and their
   landed drone released, cancelled and superseded requests, decisions on the fleet as it is once
-  authorization completes, the drones joining and leaving at any time, the policy on its own, and
-  stats timed by the simulation clock.
+  authorization completes, the drones joining and leaving at any time, the policy on its own, stats
+  timed by the simulation clock, authorization state, arming and its refusals, and seating:
+  pilots changing, moving desks with their drone, the switch key skipping other desks.
 - **Dashboard**: 42 tests for the event log, the readout's text (run in a comma-decimal culture to
   keep the formatting invariant), Tab toggling the dashboard, and the control panel's pilot and
   drone choices, labels that follow a takeover, the status line, the screen panel's virtual
@@ -251,8 +252,9 @@ Three others are added elsewhere:
   per device and its starting pilot, the keyboard and pads flying separate drones at once,
   unplugging as link loss and plugging back in, one pilot on two devices, takeovers between
   stations, per-station links, a station with no link refused and its landed drone freed, starting
-  pilots, the console's station choice, the camera following it, and disposal. The control panel's
-  IMGUI drawing itself is not tested; its text and choices are.
+  pilots, the console's station choice, the camera following it, the Arm and autopilot keys, the
+  autopilot's link and device rules, and disposal. The control panel's IMGUI drawing itself is not
+  tested; its text and choices are.
 
 ## Status and roadmap
 
@@ -263,8 +265,10 @@ grants, the grant holder gate), the flight coordinator (sessions, priority assig
 takeover, switching, release, stats), and the fleet scene (a fleet scope with one child scope
 per drone, three drones and more added or removed at runtime), telemetry (a recorder per
 drone, a fleet-wide in-memory sink), the deletable fleet dashboard, ScriptableObject config
-assets for every tuning value, and a pilot station per input device, so the keyboard and each
-gamepad fly as separate pilots.
+assets for every tuning value, a pilot station per input device, so the keyboard and each gamepad
+fly as separate pilots, the Screen panel, one pilot per desk with sessions that move between desks,
+authorization state and speed on the displays, an arm step with visible refusals, the autopilot
+swap at a desk, and a debug HUD that goes with the UI.
 
 Every planned commit is done.
 
@@ -279,6 +283,10 @@ Every planned commit is done.
   released; touching the pad restores the link. Until then a dropped pad's last input stays in
   force, and a stick held perfectly still may count as silence.
 - A pad with no serial that returns as a new device gets a new station.
+- The autopilot is timed stick values with no feedback from the drone. It only leaves the ground
+  on its climb, so it restarts when armed, and it keeps running after its drone is lost. A pad that
+  drops without the system reporting it leaves it flying until someone releases the drone or cuts
+  the link.
 - The drone doesn't pitch or roll; lateral force is applied directly. Good enough to exercise
   the loop, not a multirotor model.
 - Vertical speed for the failsafe comes from the true state, standing in for an IMU.

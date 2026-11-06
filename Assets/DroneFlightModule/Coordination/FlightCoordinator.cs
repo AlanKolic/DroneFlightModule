@@ -18,9 +18,9 @@ namespace DroneFlightModule.Coordination
     /// device does not hold it forever. It keeps each pilot's <see cref="AuthorizationState"/> for
     /// display; a pilot flying a drone stays Granted whatever becomes of a further request. A drone
     /// is armed only through <see cref="ToggleArm"/>, which refuses a pilot with no drone, and its
-    /// switch clears whenever it changes hands. Each
-    /// change of who flies what, and each denial, is raised as an event once the change is complete;
-    /// a listener that throws is reported through ListenerFailed and cannot undo or interrupt it.
+    /// switch clears whenever it changes hands. Each change of who flies what, and each denial, is
+    /// raised as an event once the change is complete; a listener that throws is reported through
+    /// ListenerFailed and cannot undo or interrupt it.
     /// </summary>
     public sealed class FlightCoordinator
     {
@@ -146,7 +146,7 @@ namespace DroneFlightModule.Coordination
             return drones.Remove(drone);
         }
 
-        // Only on the ground: a drone in the air needs no arming, and disarming it would drop it.
+        // Only on the ground: in the air the supervisor ignores the switch, so pressing Arm changes nothing.
         public ArmingResult ToggleArm(PilotSession session)
         {
             if (session == null)

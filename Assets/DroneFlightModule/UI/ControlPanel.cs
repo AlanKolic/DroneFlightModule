@@ -31,7 +31,7 @@ namespace DroneFlightModule.UI
 
         private const float RowHeight = 24f;
         private const float Padding = 16f;
-        // Three dropdowns, two rows of buttons, and one row of slack for the skin's spacing.
+        // Three dropdowns, three rows of buttons, and one row of slack for the skin's spacing.
         private const int FixedRows = 7;
 
         [SerializeField] private float width = 340f;

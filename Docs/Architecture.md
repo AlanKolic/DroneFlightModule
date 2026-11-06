@@ -51,7 +51,7 @@ flowchart TB
 | `DroneFlightModule.Core` | nothing | Math, state, `DroneId`, `PilotId`, terrain, altitude sensor, input contract, router, gates, supervisor, controller, integrator, `FlightLoop` |
 | `DroneFlightModule.Pilots` | Core | Pilot profiles and priorities, pilot registry, pilot stats |
 | `DroneFlightModule.Authorization` | Core | Providers, revocable grants, per-drone grant holder and gate |
-| `DroneFlightModule.Coordination` | Core, Pilots, Authorization | `FlightCoordinator`, pilot sessions, drone registry, assignment policy, stats recording |
+| `DroneFlightModule.Coordination` | Core, Pilots, Authorization | `FlightCoordinator`, pilot sessions, `PilotSeating` and `IPilotDesk`, drone registry, assignment policy, stats recording |
 | `DroneFlightModule.Telemetry` | Core | Recorder per drone sampling `FlightLoop.Ticked`, `ITelemetrySink` and the in-memory sink of the latest samples |
 | `DroneFlightModule.Unity` | Core, Input System | Input-actions provider (keyboard and gamepad), smoothed drone view, follow camera, Core-to-Unity conversions |
 | `DroneFlightModule.Composition` | everything except UI, plus VContainer and Input System | Fleet `LifetimeScope`, one child scope per drone, installers, the config assets and the `FleetSettings` they map to, a `PilotStation` per input device and the `InputDeviceStations` that makes them, `FleetKeys` (the fleet-wide keys), the `IFleetConsole` contract a control panel drives, `FlightLoopRunner` and `FleetRunner` (the only places Unity's clock reaches the simulation) |
@@ -179,7 +179,7 @@ stateDiagram-v2
   duration gets the full 10 s again, but a link that comes back for a moment resumes the hold
   where it left off, and during a descent it barely delays it. A flapping link can't keep the
   drone in the air.
-- If the gate closes while grounded, there is no countdown. The drone simply can't take off.
+- If the gate closes while grounded, there is no countdown. The drone disarms and can't take off.
 - A takeover by a higher-priority pilot never closes the gate (see below), so it never starts
   the countdown.
 - Hold duration, sink rates, flare height and gain are in `FailsafeConfig`. The supervisor
@@ -426,14 +426,15 @@ break the Core boundary. All async code uses `Task` and `CancellationToken`.
 - **Input belongs to a pilot station**, not to a drone: one station per input device (see
   "Input devices" below), each with its own copy of the controls, its device's input and a link
   that can be cut wrapping it.
-- **`PilotStation`** is a desk: it owns its device's controls, input and keys, is built by
+- **`PilotStation`** is a desk, the `IPilotDesk` behind seating: it owns its device's controls, input and keys, is built by
   `PilotStationFactory`, and has at most one session, null while the desk is empty. The session's
   input is the station's link. An empty desk's flying actions only say nobody is there. The pilot
   here is told when they are preempted and by whom, and when their drone is removed or released for
   lost link. Requests never fault: a superseded or cancelled one ends quietly, and anything else
   is logged.
-- **`PilotSeating`** is the only place that decides who sits where, so a pilot is never at two
-  desks. A pilot sitting down gets a new session, authorized through
+- **`PilotSeating`** (Coordination) is the only place that decides who sits where, so a pilot is
+  never at two desks. It sees a desk only as an `IPilotDesk`: a name, an input, a session and a place
+  to report, so its rules run headless with no device behind them. A pilot sitting down gets a new session, authorized through
   `IAuthorizationProviderSelector` when they request. Leaving ends it (`EndSession`), which
   cancels their pending request and releases their drone. Changing the pilot at a desk is the old
   pilot leaving and the new one sitting down; the new pilot requests a drone like anyone else, and
@@ -514,7 +515,7 @@ break the Core boundary. All async code uses `Task` and `CancellationToken`.
   dropdown (any drone or one of the fleet with who flies it, through `ControlPanelChoices`, which
   falls back to any drone when the chosen one leaves), a status line with the station, its current
   pilot, their takeovers and preemptions and the latest outcome, and Request, Release, Revoke
-  grant, Cut/Restore link, Add drone and Remove drone. Its text is built a few times a second and
+  grant, Arm, Autopilot, Cut/Restore link, Add drone and Remove drone. Its text is built a few times a second and
   at once after a click, the status sizes itself to fit, and the panel scrolls when it would not
   fit the screen. The dashboard reads the panel's height to stop above it. It drives the fleet
   only through `IFleetConsole`, a small contract in Composition, next to `FleetConsole`, which
@@ -602,12 +603,11 @@ matters only to the composition root that built it.
 - **Station keys and fleet keys.** Each station binds the Flight and Fleet maps and its link
   toggle to its own device. Adding and removing drones and the dashboard are fleet-wide and stay
   on the keyboard. Gamepad bindings: sticks as today, South to request any drone, D-pad left, up
-  and right for drones 1 to 3, East to release, Start to switch pilot, North to revoke the grant,
-  Select to cut the link.
+  and right for drones 1 to 3, D-pad down for the autopilot, East to release, West to arm, Start to
+  switch pilot, North to revoke the grant, Select to cut the link.
 - **UI:** the HUD, in the `UI` assembly so it goes with the rest, shows a line per station (name,
-  pilot, authorization, autopilot, drone, link), the
-  control panel adds a station dropdown and drives the chosen one, and the camera follows that
-  station's drone.
+  pilot, authorization, autopilot, drone, link), the control panel adds a station dropdown and
+  drives the chosen one, and the camera follows that station's drone.
 - **The screen panel** (`ScreenFlightPanel`, in UI) is a virtual gamepad of its own layout,
   `ScreenPanelGamepad`, so to everything else it is one more device. It has its own entry in
   `InputDevices.asset`: station name "Screen panel", no silence timeout since a panel can sit idle,
@@ -743,11 +743,26 @@ Each commit is small, logically separate and includes its own tests.
 15. **Gamepad pilots:** `PilotStation` per input device, `InputDeviceStations` watching device
     changes, unplugging as link loss, the remaining gamepad bindings, a station box in the HUD
     and a station dropdown in the control panel, tests with virtual gamepads.
+16. **Screen panel:** on-screen flight buttons driving a virtual `ScreenPanelGamepad`, defined as
+    an input in the input devices asset.
+17. **One pilot per desk:** `PilotSeating`, a session only while a pilot is seated, sessions that
+    move between desks with their drone.
+18. **Displays:** authorization state and speed on the dashboard, and the switch key skipping
+    pilots at other desks.
+19. **Arming and autopilot:** `ArmingSwitch` read by the supervisor, `ToggleArm` with visible
+    refusals, the desk's swap to `PatrolAutopilot`, and the debug HUD moved into `UI`.
+20. **Seating in Coordination:** `PilotSeating` behind `IPilotDesk`, tested headless.
 
 ## Decisions
 
 - **Second input:** gamepads, each its own pilot station on the simulator machine, in place of a
   phone remote. There is no network remote.
+- **Arming:** a separate pilot step after the grant, held in the supervisor rather than as a new
+  gate, because touchdown and the mode need it each tick. It only applies on the ground.
+- **Autopilot:** a switch at the pilot's desk, not a desk of its own, so the pilot, grant and drone
+  stay the same. It stops when the device is removed, so a lost device never keeps a drone.
+- **Seating:** in Coordination behind `IPilotDesk`, because who sits where is a rule of the domain,
+  not wiring. Which provider a pilot uses stays a composition choice (`GuestOrServerSelector`).
 - **Altitude sensor:** a rangefinder only, measuring height above ground.
 - **Sensor noise:** zero for now. Noise can be added later as a decorator.
 - **Guest mode:** authorizes only the guest pilot, from any device. It goes through the same
